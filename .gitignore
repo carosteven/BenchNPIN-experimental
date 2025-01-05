@@ -1,0 +1,11 @@
+logs/
+
+bench_mano/ice_environments*
+
+/plots
+
+/model_checkpoints
+
+__pycache__/
+
+*egg-info
