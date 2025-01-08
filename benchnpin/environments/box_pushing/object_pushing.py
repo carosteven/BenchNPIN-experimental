@@ -72,8 +72,8 @@ class ObjectPushing(gym.Env):
         self.low_dim_state = self.cfg.low_dim_state
         if self.low_dim_state:
             self.fixed_trial_idx = self.cfg.fixed_trial_idx
-            if self.cfg.skill_mode:
-                self.observation_space = spaces.Box(low=-10, high=30, shape=(2,), dtype=np.float64)
+            if self.cfg.randomize_obstacles:
+                self.observation_space = spaces.Box(low=-10, high=30, shape=(self.cfg.num_obstacles * 2,), dtype=np.float64)
             else:
                 self.observation_space = spaces.Box(low=-10, high=30, shape=(6,), dtype=np.float64)
 
@@ -93,11 +93,6 @@ class ObjectPushing(gym.Env):
             self.angular_speed_increment = 0.005
             self.linear_speed = 0.0
             self.linear_speed_increment = 0.02
-        
-        if self.cfg.skill_mode:
-            self.obs_idx = 0
-        else:
-            self.obs_idx = None
 
         plt.ion()  # Interactive mode on
         
@@ -214,7 +209,6 @@ class ObjectPushing(gym.Env):
 
     
     def generate_obstacles(self):
-        self.num_completed = 0
         obs_size = self.cfg.obstacle_size
         obstacles = []          # a list storing non-overlappin obstacle centers
 
@@ -275,11 +269,7 @@ class ObjectPushing(gym.Env):
         self.init_ship_ice_env()
 
         self.t = 0
-        if self.cfg.skill_mode:
-            self.obs_idx = 0
-        else:
-            self.obs_idx = None
-
+        
         # close figure before opening new ones
         if self.plot is not None:
             self.plot.close()
@@ -298,10 +288,10 @@ class ObjectPushing(gym.Env):
                                 round(self.ship_body.angle, 2)), 
                 'total_work': self.total_work[0], 
                 'obs': updated_obstacles, 
-                'box_count': self.num_completed}
+                'box_count': 0}
 
         if self.low_dim_state:
-            observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles, obs_idx=self.obs_idx)
+            observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles)
 
         else:
             observation = self.generate_observation()
@@ -369,7 +359,6 @@ class ObjectPushing(gym.Env):
         if self.ship_body.position.x > self.cfg.occ.map_width and abs(self.ship_body.position.x - self.cfg.occ.map_width) >= self.boundary_violation_limit:
             boundary_violation_terminal = True
             
-
         # get updated obstacles
         updated_obstacles = CostMap.get_obs_from_poly(self.polygons)
         num_completed, all_boxes_completed = self.boxes_completed(updated_obstacles=updated_obstacles)
@@ -419,42 +408,24 @@ class ObjectPushing(gym.Env):
         
         # generate observation
         if self.low_dim_state:
-            observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles, obs_idx=self.obs_idx)
-
+            observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles)
         else:
             observation = self.generate_observation()
-
-        # upon a new box completion, update obs_idx and self.num_completed for the next iteration
-        if self.num_completed < num_completed:
-            if self.obs_idx is not None:
-                self.obs_idx += 1
-            self.num_completed = num_completed
         
         return observation, reward, terminated, False, info
 
 
-    def generate_observation_low_dim(self, updated_obstacles, obs_idx=None):
+    def generate_observation_low_dim(self, updated_obstacles):
         """
         The observation is a vector of shape (num_obstacles * 2) specifying the 2d position of the obstacles
         <obs1_x, obs1_y, obs2_x, obs2_y, ..., obsn_x, obsn_y>
-
-        :param obs_idx: if not None, only include the (x, y) location for that obstacle
         """
-
-        if obs_idx is None:
-            observation = np.zeros((len(updated_obstacles) * 2))
-            for i in range(len(updated_obstacles)):
-                obs = updated_obstacles[i]
-                center = np.abs(poly_centroid(obs))
-                observation[i * 2] = center[0]
-                observation[i * 2 + 1] = center[1]
-
-        else:
-            observation = np.zeros((2))
-            obs = updated_obstacles[obs_idx]
+        observation = np.zeros((len(updated_obstacles) * 2))
+        for i in range(len(updated_obstacles)):
+            obs = updated_obstacles[i]
             center = np.abs(poly_centroid(obs))
-            observation[0] = center[0]
-            observation[1] = center[1]
+            observation[i * 2] = center[0]
+            observation[i * 2 + 1] = center[1]
         return observation
 
 
@@ -522,7 +493,7 @@ class ObjectPushing(gym.Env):
                 self.plot.update_path_scatter(full_path=self.path.T)
 
         self.plot.update_ship(self.ship_body, self.ship_shape, move_yaxis_threshold=self.cfg.anim.move_yaxis_threshold)
-        self.plot.update_obstacles(obstacles=CostMap.get_obs_from_poly(self.polygons), obs_idx=self.obs_idx)
+        self.plot.update_obstacles(obstacles=CostMap.get_obs_from_poly(self.polygons))
         # get updated obstacles
         self.plot.animate_sim(save_fig_dir=os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
                         if (self.cfg.anim.save and self.cfg.output_dir) else None, suffix=self.t)

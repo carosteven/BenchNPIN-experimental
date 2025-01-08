@@ -9,7 +9,6 @@ plot:
   show: false       # true will show planner plots
 
 demo_mode: true     # when using demo mode, control both forward and angular speed
-skill_mode: true    # when using skill mode, observation only includes the targeted obstacle for that skill
 
 # obstacles information
 randomize_obstacles: true

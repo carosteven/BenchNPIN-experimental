@@ -1,17 +1,19 @@
-import ship_ice_gym_env
+"""
+A simple script to run a teleoperation pipeline for demonstration dataset collection on box pushing environments
+'A': large left turn; 'D' large right turn
+'Z': small left turn; 'C' small right turn
+'W': start moving
+'X': stop turning (note: this does not stop linear motion)
+'esc': exit teleoperation
+"""
+
+import benchnpin.environments
 import gymnasium as gym
 import numpy as np
-from planners.lattice import LatticePlanner
-from benchnpin.common.controller.dp import DP
-from benchnpin.common.utils.utils import DotDict
 import pickle
 from pynput import keyboard
 
-env = gym.make('ship_ice_gym_env/ObjectPushing-v0')
-
-cfg_file = 'configs/pushing_config.yaml'
-cfg = cfg = DotDict.load_from_file(cfg_file)
-lattice_planner = LatticePlanner(cfg=cfg)
+env = gym.make('object-pushing-v0')
 
 observations = []
 actions = []                # this is actually the states (i.e. 3 dof pose)
