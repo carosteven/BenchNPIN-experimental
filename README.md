@@ -29,3 +29,10 @@ This script runs a straight-line policy. Note that step visualizations will be d
 ```bash
 python tests/plan_ship_ice_nav.py
 ```
+This script runs the lattice planner for ship ice navigation
+
+### Running a simple for box pushing teleoperation
+```bash
+python tests/pushing_data_collection.py
+```
+This script runs a simple demonstration data collection pipeline on the box pushing environment.
