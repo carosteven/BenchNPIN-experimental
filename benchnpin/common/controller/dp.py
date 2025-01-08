@@ -3,7 +3,7 @@ from typing import List
 import numpy as np
 import pandas as pd
 
-from benchnamo.common.evaluation.metrics import euclid_dist, path_length
+from benchnpin.common.evaluation.metrics import euclid_dist, path_length
 
 
 R = lambda theta: np.asarray([

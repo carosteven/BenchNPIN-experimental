@@ -5,8 +5,8 @@ from typing import Tuple, List, Dict
 import matplotlib.pyplot as plt
 import numpy as np
 
-from benchnamo.common.dubins_helpers.control import get_points_on_dubins_path
-from benchnamo.common.utils.utils import rotation_matrix
+from benchnpin.common.dubins_helpers.control import get_points_on_dubins_path
+from benchnpin.common.utils.utils import rotation_matrix
 
 CACHED_PRIM_PATHS = '.prim_paths.pkl'  # save to disk primitive paths so no need to regenerate every time
 

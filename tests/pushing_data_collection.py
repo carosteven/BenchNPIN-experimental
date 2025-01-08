@@ -2,8 +2,8 @@ import ship_ice_gym_env
 import gymnasium as gym
 import numpy as np
 from planners.lattice import LatticePlanner
-from benchnamo.common.controller.dp import DP
-from benchnamo.common.utils.utils import DotDict
+from benchnpin.common.controller.dp import DP
+from benchnpin.common.utils.utils import DotDict
 import pickle
 from pynput import keyboard
 

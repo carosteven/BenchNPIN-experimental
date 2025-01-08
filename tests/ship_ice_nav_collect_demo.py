@@ -1,11 +1,11 @@
-import benchnamo.environments
+import benchnpin.environments
 import gymnasium as gym
 import numpy as np
 
 import numpy as np
-from benchnamo.baselines.ship_ice_nav.lattice import LatticePlanner
-from benchnamo.common.controller.dp import DP
-from benchnamo.common.utils.utils import DotDict
+from benchnpin.baselines.ship_ice_nav.lattice import LatticePlanner
+from benchnpin.common.controller.dp import DP
+from benchnpin.common.utils.utils import DotDict
 import pickle
 
 env = gym.make('ship-ice-v0')

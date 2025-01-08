@@ -9,9 +9,9 @@ import numpy as np
 from matplotlib import patches
 from skimage import draw
 
-from benchnamo.common.geometry.polygon import *
-from benchnamo.common.utils.utils import scale_axis_labels, rotation_matrix
-from benchnamo.common.occupancy_grid.occupancy_map import OccupancyGrid
+from benchnpin.common.geometry.polygon import *
+from benchnpin.common.utils.utils import scale_axis_labels, rotation_matrix
+from benchnpin.common.occupancy_grid.occupancy_map import OccupancyGrid
 
 
 # define an arbitrary max cost applied to a cell in the costmap
@@ -156,7 +156,7 @@ class CostMap_Occupancy:
                             [j + ship_pos[1] for j in y], 'r', linewidth=0.5)
 
             if show_closest_ob:
-                from benchnamo.common.evaluation.metrics import min_obs_dist
+                from benchnpin.common.evaluation.metrics import min_obs_dist
                 # d, ob = Metrics.obs_dist(CostMap.get_ob_vertices(self.obstacles), ship_pos, ship_vertices)
                 # ax.add_patch(patches.Polygon(ob, True, fill=True, fc='r'))
                 min_d = min_obs_dist(self.cost_map, ship_pos, ship_vertices)

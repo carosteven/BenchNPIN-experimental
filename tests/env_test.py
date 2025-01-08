@@ -2,7 +2,7 @@
 An example script for running box pushing or ship ice environment
 """
 
-import benchnamo.environments
+import benchnpin.environments
 import gymnasium as gym
 import numpy as np
 

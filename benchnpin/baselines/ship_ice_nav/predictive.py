@@ -5,16 +5,16 @@ import time
 import numpy as np
 from matplotlib import pyplot as plt
 
-from benchnamo.common.path_evaluator import PredictivePathEvaluator
-from benchnamo.common.primitives import Primitives
-from benchnamo.common.ship import Ship
-from benchnamo.common.swath import generate_swath, view_all_swaths
-from benchnamo.common.utils.plot import Plot
-from benchnamo.common.utils.utils import Path
-from benchnamo.common.occupancy_grid.occupancy_map import OccupancyGrid
-from benchnamo.common.cost_map_occ import CostMap_Occupancy
-from benchnamo.common.a_star_predictive import AStar_Predictive
-from benchnamo.common.utils.utils import DotDict
+from benchnpin.common.path_evaluator import PredictivePathEvaluator
+from benchnpin.common.primitives import Primitives
+from benchnpin.common.ship import Ship
+from benchnpin.common.swath import generate_swath, view_all_swaths
+from benchnpin.common.utils.plot import Plot
+from benchnpin.common.utils.utils import Path
+from benchnpin.common.occupancy_grid.occupancy_map import OccupancyGrid
+from benchnpin.common.cost_map_occ import CostMap_Occupancy
+from benchnpin.common.a_star_predictive import AStar_Predictive
+from benchnpin.common.utils.utils import DotDict
 import threading
 import copy
 

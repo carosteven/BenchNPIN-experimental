@@ -6,8 +6,8 @@ import numpy as np
 from matplotlib import patches
 from skimage.draw import draw
 
-from benchnamo.common.geometry.polygon import poly_area, poly_centroid
-from benchnamo.common.swath import compute_swath_cost
+from benchnpin.common.geometry.polygon import poly_area, poly_centroid
+from benchnpin.common.swath import compute_swath_cost
 
 __all__ = [
     'min_obs_dist',

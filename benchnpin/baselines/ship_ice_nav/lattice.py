@@ -5,13 +5,13 @@ import time
 import numpy as np
 from matplotlib import pyplot as plt
 
-from benchnamo.common.a_star_search import AStar
-from benchnamo.common.cost_map import CostMap
-from benchnamo.common.primitives import Primitives
-from benchnamo.common.ship import Ship
-from benchnamo.common.swath import generate_swath, view_all_swaths
-from benchnamo.common.utils.utils import Path
-from benchnamo.common.utils.utils import DotDict
+from benchnpin.common.a_star_search import AStar
+from benchnpin.common.cost_map import CostMap
+from benchnpin.common.primitives import Primitives
+from benchnpin.common.ship import Ship
+from benchnpin.common.swath import generate_swath, view_all_swaths
+from benchnpin.common.utils.utils import Path
+from benchnpin.common.utils.utils import DotDict
 import copy
 
 

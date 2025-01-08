@@ -3,7 +3,7 @@ from typing import List
 import numpy as np
 import pymunk
 
-from benchnamo.common.ship import Ship
+from benchnpin.common.ship import Ship
 
 
 def create_polygon(space, vertices, x, y, density):

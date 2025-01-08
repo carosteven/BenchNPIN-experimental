@@ -8,18 +8,18 @@ import numba
 import numpy as np
 from numba import jit  # speeds up some computations
 
-from benchnamo.common.cost_map import CostMap
-from benchnamo.common.dubins_helpers.heuristic import dubins_heuristic
-from benchnamo.common.path_smoothing import path_smoothing
-from benchnamo.common.primitives import Primitives
-from benchnamo.common.ship import Ship
-from benchnamo.common.swath import Swath, rotate_swath, compute_swath_cost, view_swath
-from benchnamo.common.utils.hashmap import HashMap
-from benchnamo.common.utils.priority_queue import PriorityQueue
-from benchnamo.common.utils.utils import heading_to_world_frame, rotation_matrix, M__2_PI
+from benchnpin.common.cost_map import CostMap
+from benchnpin.common.dubins_helpers.heuristic import dubins_heuristic
+from benchnpin.common.path_smoothing import path_smoothing
+from benchnpin.common.primitives import Primitives
+from benchnpin.common.ship import Ship
+from benchnpin.common.swath import Swath, rotate_swath, compute_swath_cost, view_swath
+from benchnpin.common.utils.hashmap import HashMap
+from benchnpin.common.utils.priority_queue import PriorityQueue
+from benchnpin.common.utils.utils import heading_to_world_frame, rotation_matrix, M__2_PI
 from networks.network_modules import UNet_Ice
-from benchnamo.common.occupancy_grid.ice_model_utils import crop_window, stitch_window, encode_swath, compute_ship_footprint_planner, view_swath, update_costmap, boundary_cost, get_boundary_map
-from benchnamo.common.occupancy_grid.occupancy_map import OccupancyGrid
+from benchnpin.common.occupancy_grid.ice_model_utils import crop_window, stitch_window, encode_swath, compute_ship_footprint_planner, view_swath, update_costmap, boundary_cost, get_boundary_map
+from benchnpin.common.occupancy_grid.occupancy_map import OccupancyGrid
 import torch
 from matplotlib import pyplot as plt
 from torch import nn

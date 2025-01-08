@@ -2,11 +2,11 @@
 An example script for running baseline planners for ship ice navigation
 """
 
-import benchnamo.environments
+import benchnpin.environments
 import gymnasium as gym
 import numpy as np
-from benchnamo.baselines.ship_ice_nav.lattice import LatticePlanner
-from benchnamo.common.controller.dp import DP
+from benchnpin.baselines.ship_ice_nav.lattice import LatticePlanner
+from benchnpin.common.controller.dp import DP
 
 env = gym.make('ship-ice-v0')
 env = env.unwrapped

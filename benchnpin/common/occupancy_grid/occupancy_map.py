@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from skimage.draw import draw
 
 # from benchnamo.common.image_process.watershed import get_ice_edges_simulated, get_ice_binary_occgrid_simulated
-from benchnamo.common.geometry.polygon import poly_centroid
+from benchnpin.common.geometry.polygon import poly_centroid
 
 class OccupancyGrid:
 

@@ -4,7 +4,7 @@ import dubins
 import numpy as np
 from skimage import draw
 
-from benchnamo.common.evaluation.metrics import euclid_dist
+from benchnpin.common.evaluation.metrics import euclid_dist
 
 
 def path_smoothing(node_path: List, path_lengths: List, full_path, cost_map: np.ndarray,

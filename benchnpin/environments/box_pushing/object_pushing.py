@@ -3,38 +3,46 @@ from gymnasium import spaces
 import numpy as np
 import os
 
-import pickle
 import random
 import pymunk
 from pymunk import Vec2d
 from matplotlib import pyplot as plt
 
 # ship-ice related imports
-from benchnamo.common.cost_map import CostMap
-from benchnamo.common.evaluation.metrics import total_work_done
-from benchnamo.common.geometry.polygon import poly_area
-from benchnamo.common.ship import Ship
-from benchnamo.common.utils.plot import Plot
-from benchnamo.common.utils.sim_utils import generate_sim_obs
-from benchnamo.common.geometry.polygon import poly_centroid
-from benchnamo.common.utils.utils import DotDict
-from benchnamo.common.occupancy_grid.occupancy_map import OccupancyGrid
+from benchnpin.common.cost_map import CostMap
+from benchnpin.common.evaluation.metrics import total_work_done
+from benchnpin.common.geometry.polygon import poly_area
+from benchnpin.common.ship import Ship as Robot
+from benchnpin.common.utils.plot_pushing import Plot
+from benchnpin.common.utils.sim_utils import generate_sim_obs
+from benchnpin.common.geometry.polygon import poly_centroid
+from benchnpin.common.utils.utils import DotDict
+from benchnpin.common.occupancy_grid.occupancy_map import OccupancyGrid
 
 R = lambda theta: np.asarray([
     [np.cos(theta), -np.sin(theta)],
     [np.sin(theta), np.cos(theta)]
 ])
 
-YAW_CONSTRAINT_PENALTY = 0
 BOUNDARY_PENALTY = -50
 TERMINAL_REWARD = 200
 
-class ShipIceEnv(gym.Env):
+FORWARD = 0
+STOP_TURNING = 1
+LEFT = 2
+RIGHT = 3
+STOP = 4
+OTHER = 5
+SMALL_LEFT = 6
+SMALL_RIGHT = 7
+
+
+class ObjectPushing(gym.Env):
     """Custom Environment that follows gym interface"""
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
 
     def __init__(self):
-        super(ShipIceEnv, self).__init__()
+        super(ObjectPushing, self).__init__()
 
         # get current directory of this script
         self.current_dir = os.path.dirname(__file__)
@@ -42,37 +50,32 @@ class ShipIceEnv(gym.Env):
         # construct absolute path to the env_config folder
         cfg_file = os.path.join(self.current_dir, 'config.yaml')
 
-        cfg = cfg = DotDict.load_from_file(cfg_file)
+        cfg = DotDict.load_from_file(cfg_file)
         self.occupancy = OccupancyGrid(grid_width=cfg.occ.grid_size, grid_height=cfg.occ.grid_size, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, ship_body=None)
         self.cfg = cfg
 
+        self.env_max_trial = 4000
+
         self.beta = 500         # amount to scale the collision reward
 
-        self.episode_idx = None     # the increment of this index is handled in reset()
+        self.episode_idx = None
 
         self.path = None
         self.scatter = False
-
-        self.low_dim_state = self.cfg.low_dim_state
 
         # Define action space
         max_yaw_rate_step = (np.pi/2) / 15        # rad/sec
         print("max yaw rate per step: ", max_yaw_rate_step)
         self.action_space = spaces.Box(low=-max_yaw_rate_step, high=max_yaw_rate_step, dtype=np.float64)
-        
-        # load ice field environment
-        ice_file = os.path.join(self.current_dir, 'ice_environments', 'experiments_' + str(int(self.cfg.concentration * 100)) + '_d25x12.pk')
-        ddict = pickle.load(open(ice_file, 'rb'))
 
-        self.experiment = ddict['exp'][self.cfg.concentration]
-        self.env_max_trial = len(self.experiment)
-        
         # Define observation space
+        self.low_dim_state = self.cfg.low_dim_state
         if self.low_dim_state:
             self.fixed_trial_idx = self.cfg.fixed_trial_idx
-            init_queue={**self.experiment[self.fixed_trial_idx]}
-            _, _, self.obs_dicts = init_queue.values()
-            self.observation_space = spaces.Box(low=-10, high=30, shape=(len(self.obs_dicts) * 2,), dtype=np.float64)
+            if self.cfg.skill_mode:
+                self.observation_space = spaces.Box(low=-10, high=30, shape=(2,), dtype=np.float64)
+            else:
+                self.observation_space = spaces.Box(low=-10, high=30, shape=(6,), dtype=np.float64)
 
         else:
             self.observation_shape = (2, self.occupancy.occ_map_height, self.occupancy.occ_map_width)
@@ -83,6 +86,18 @@ class ShipIceEnv(gym.Env):
 
         self.plot = None
         self.con_fig, self.con_ax = plt.subplots(figsize=(10, 10))
+
+
+        if self.cfg.demo_mode:
+            self.angular_speed = 0.0
+            self.angular_speed_increment = 0.005
+            self.linear_speed = 0.0
+            self.linear_speed_increment = 0.02
+        
+        if self.cfg.skill_mode:
+            self.obs_idx = 0
+        else:
+            self.obs_idx = None
 
         plt.ion()  # Interactive mode on
         
@@ -166,25 +181,17 @@ class ShipIceEnv(gym.Env):
         
     def init_ship_ice_env(self):
 
-        trial_idx = self.episode_idx % self.env_max_trial       # this will warp around the environment trial after reaching the last one
-        if self.low_dim_state:
-            trial = self.experiment[self.fixed_trial_idx]  # 0.5 is the concentration, 0 is the trial number
-        else:
-            trial = self.experiment[trial_idx]  # 0.5 is the concentration, 0 is the trial number
-
-        init_queue={
-                    **trial
-                }
-        
-        _, self.start, self.obs_dicts = init_queue.values()
-
         # generate random start point, if specified
         if self.cfg.random_start:
             x_start = 1 + random.random() * (self.cfg.start_x_range - 1)    # [1, start_x_range]
             self.start = (x_start, 1.0, np.pi / 2)
+        else:
+            self.start = (5, 1.0, np.pi / 2)
 
-        if self.cfg.randomize_obstacles:
-            self.randomize_obstacles()
+        # if self.cfg.randomize_obstacles:
+        #     self.randomize_obstacles()
+
+        self.obs_dicts = self.generate_obstacles()
         
         # filter out obstacles that have zero area
         self.obs_dicts[:] = [ob for ob in self.obs_dicts if poly_area(ob['vertices']) != 0]
@@ -197,13 +204,63 @@ class ShipIceEnv(gym.Env):
         for p in self.polygons:
             p.collision_type = 2
 
-        self.ship_body, self.ship_shape = Ship.sim(self.cfg.ship.vertices, self.start)
+        self.ship_body, self.ship_shape = Robot.sim(self.cfg.ship.vertices, self.start)
         self.ship_shape.collision_type = 1
         self.space.add(self.ship_body, self.ship_shape)
         # run initial simulation steps to let environment settle
         for _ in range(1000):
             self.space.step(self.dt / self.steps)
         self.prev_obs = CostMap.get_obs_from_poly(self.polygons)
+
+    
+    def generate_obstacles(self):
+        self.num_completed = 0
+        obs_size = self.cfg.obstacle_size
+        obstacles = []          # a list storing non-overlappin obstacle centers
+
+        if self.cfg.randomize_obstacles:
+            total_obs_required = self.cfg.num_obstacles
+            self.num_box = self.cfg.num_obstacles
+            obs_min_dist = self.cfg.min_obs_dist
+            min_x = self.cfg.min_obs_x
+            max_x = self.cfg.max_obs_x
+            min_y = self.cfg.min_obs_y
+            max_y = self.cfg.max_obs_y
+
+            obs_count = 0
+            while obs_count < total_obs_required:
+                center_x = random.random() * (max_x - min_x) + min_x
+                center_y = random.random() * (max_y - min_y) + min_y
+
+                # loop through previous obstacles to check for overlap
+                overlapped = False
+                for prev_obs_x, pre_obs_y in obstacles:
+                    if ((center_x - prev_obs_x)**2 + (center_y - pre_obs_y)**2)**(0.5) <= obs_min_dist:
+                        overlapped = True
+                        break
+                
+                if not overlapped:
+                    obstacles.append([center_x, center_y])
+                    obs_count += 1
+        
+        else:
+            obstacles.append([8, 5.5])
+            obstacles.append([3, 7])
+            obstacles.append([13, 8])
+            self.num_box = 3
+        
+        # convert to obs dict
+        obs_dict = []
+        for obs_x, obs_y in obstacles:
+            obs_info = {}
+            obs_info['centre'] = np.array([obs_x, obs_y])
+            obs_info['vertices'] = np.array([[obs_x + obs_size, obs_y + obs_size], 
+                                    [obs_x - obs_size, obs_y + obs_size], 
+                                    [obs_x - obs_size, obs_y - obs_size], 
+                                    [obs_x + obs_size, obs_y - obs_size]])
+            obs_dict.append(obs_info)
+        return obs_dict
+
         
 
     def reset(self, seed=None, options=None):
@@ -218,6 +275,10 @@ class ShipIceEnv(gym.Env):
         self.init_ship_ice_env()
 
         self.t = 0
+        if self.cfg.skill_mode:
+            self.obs_idx = 0
+        else:
+            self.obs_idx = None
 
         # close figure before opening new ones
         if self.plot is not None:
@@ -236,54 +297,69 @@ class ShipIceEnv(gym.Env):
                                 round(self.ship_body.position.y, 2),
                                 round(self.ship_body.angle, 2)), 
                 'total_work': self.total_work[0], 
-                'obs': updated_obstacles}
+                'obs': updated_obstacles, 
+                'box_count': self.num_completed}
 
         if self.low_dim_state:
-            observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles)
+            observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles, obs_idx=self.obs_idx)
 
         else:
             observation = self.generate_observation()
         return observation, info
-
-
-    def randomize_obstacles(self):
-        """
-        NOTE this function is called only when using low-dimensional observation
-        """
-        for obs in self.obs_dicts:
-            prev_centre = np.array(obs['centre'])
-
-            rand_x = 0.5 + random.random() * (self.cfg.max_obs_x - 0.5)
-            rand_y = 1 + random.random() * (self.cfg.max_obs_y - 1)
-            new_centre = np.array([rand_x, rand_y])
-
-            # translate vertices and reset center
-            obs['vertices'] = obs['vertices'] - prev_centre + new_centre
-            obs['centre'] = new_centre
     
 
     def step(self, action):
         """Executes one time step in the environment and returns the result."""
         self.t += 1
 
-        # constant forward speed in global frame
-        global_velocity = R(self.ship_body.angle) @ [self.target_speed, 0]
+        if self.cfg.demo_mode:
 
-        # apply velocity controller
-        self.ship_body.angular_velocity = action
-        self.ship_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
+            if action == FORWARD:
+                self.linear_speed = 0.01
+            elif action == STOP_TURNING:
+                self.angular_speed = 0.0
+
+            elif action == LEFT:
+                self.angular_speed = 0.01
+            elif action == RIGHT:
+                self.angular_speed = -0.01
+
+            elif action == SMALL_LEFT:
+                self.angular_speed = 0.005
+            elif action == SMALL_RIGHT:
+                self.angular_speed = -0.005
+
+            elif action == STOP:
+                self.linear_speed = 0.0
+                self.angular_speed = 0.0
+
+            # check speed boundary
+            if self.linear_speed <= 0:
+                self.linear_speed = 0
+            elif self.linear_speed >= self.target_speed:
+                self.linear_speed = self.target_speed
+
+            # apply linear and angular speeds
+            global_velocity = R(self.ship_body.angle) @ [self.linear_speed, 0]
+
+            # apply velocity controller
+            self.ship_body.angular_velocity = self.angular_speed
+            self.ship_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
+
+        else:
+
+            # constant forward speed in global frame
+            global_velocity = R(self.ship_body.angle) @ [self.target_speed, 0]
+
+            # apply velocity controller
+            self.ship_body.angular_velocity = action
+            self.ship_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
 
         # move simulation forward
-        yaw_constraint_violated = False
         boundary_constraint_violated = False
         boundary_violation_terminal = False      # if out of boundary for too much, terminate and truncate the episode
         for _ in range(self.steps):
             self.space.step(self.dt / self.steps)
-
-            # apply yaw constraints
-            if self.ship_body.angle <= self.yaw_lim[0] or self.ship_body.angle >= self.yaw_lim[1]:
-                self.ship_body.angular_velocity = 0.0
-                yaw_constraint_violated = True
 
             # apply boundary constraints
             if self.ship_body.position.x < 0 or self.ship_body.position.x > self.cfg.occ.map_width:
@@ -296,6 +372,7 @@ class ShipIceEnv(gym.Env):
 
         # get updated obstacles
         updated_obstacles = CostMap.get_obs_from_poly(self.polygons)
+        num_completed, all_boxes_completed = self.boxes_completed(updated_obstacles=updated_obstacles)
 
         # compute work done
         work = total_work_done(self.prev_obs, updated_obstacles)
@@ -305,28 +382,23 @@ class ShipIceEnv(gym.Env):
         self.obstacles = updated_obstacles
 
         # check episode terminal condition
-        if self.ship_body.position.y >= self.goal[1]:
+        if all_boxes_completed:
             terminated = True
-        elif self.t >= self.t_max or boundary_violation_terminal:
+        elif boundary_violation_terminal:
             terminated = True
         else:
             terminated = False
 
         # compute reward
         if self.ship_body.position.y < self.goal[1]:
-            # dist_reward = self.goal[1] - self.ship_body.position.y
             dist_reward = -1
         else:
             dist_reward = 0
         collision_reward = -work
 
-        # print("collision reward: ", collision_reward, "; dist reward: ", dist_reward)
-        # collision_reward = 0.0
         reward = self.beta * collision_reward + dist_reward
 
         # apply constraint penalty
-        if yaw_constraint_violated:
-            reward += YAW_CONSTRAINT_PENALTY
         if boundary_constraint_violated:
             reward += BOUNDARY_PENALTY
 
@@ -342,27 +414,47 @@ class ShipIceEnv(gym.Env):
                 'collision reward': collision_reward, 
                 'scaled collision reward': collision_reward * self.beta, 
                 'dist reward': dist_reward, 
-                'obs': updated_obstacles}
+                'obs': updated_obstacles, 
+                'box_count': num_completed}
         
+        # generate observation
         if self.low_dim_state:
-            observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles)
+            observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles, obs_idx=self.obs_idx)
+
         else:
             observation = self.generate_observation()
+
+        # upon a new box completion, update obs_idx and self.num_completed for the next iteration
+        if self.num_completed < num_completed:
+            if self.obs_idx is not None:
+                self.obs_idx += 1
+            self.num_completed = num_completed
+        
         return observation, reward, terminated, False, info
 
 
-    def generate_observation_low_dim(self, updated_obstacles):
+    def generate_observation_low_dim(self, updated_obstacles, obs_idx=None):
         """
         The observation is a vector of shape (num_obstacles * 2) specifying the 2d position of the obstacles
         <obs1_x, obs1_y, obs2_x, obs2_y, ..., obsn_x, obsn_y>
+
+        :param obs_idx: if not None, only include the (x, y) location for that obstacle
         """
-        # print("num obs: ", len(updated_obstacles))
-        observation = np.zeros((len(updated_obstacles) * 2))
-        for i in range(len(updated_obstacles)):
-            obs = updated_obstacles[i]
+
+        if obs_idx is None:
+            observation = np.zeros((len(updated_obstacles) * 2))
+            for i in range(len(updated_obstacles)):
+                obs = updated_obstacles[i]
+                center = np.abs(poly_centroid(obs))
+                observation[i * 2] = center[0]
+                observation[i * 2 + 1] = center[1]
+
+        else:
+            observation = np.zeros((2))
+            obs = updated_obstacles[obs_idx]
             center = np.abs(poly_centroid(obs))
-            observation[i * 2] = center[0]
-            observation[i * 2 + 1] = center[1]
+            observation[0] = center[0]
+            observation[1] = center[1]
         return observation
 
 
@@ -395,13 +487,27 @@ class ShipIceEnv(gym.Env):
         self.occupancy.compute_ship_footprint_planner(ship_state=ship_pose, ship_vertices=self.cfg.ship.vertices)
         footprint = np.copy(self.occupancy.footprint)       # (H, W)
 
-        # compute goal observation
-        # self.occupancy.compute_goal_image(goal_y=self.goal[1])
-        # goal_img = np.copy(self.occupancy.goal_img)               # (H, W)
-        # observation = np.concatenate((np.array([occupancy]), np.array([footprint]), np.array([goal_img])))          # (3, H, W)
-
         observation = np.concatenate((np.array([occupancy]), np.array([footprint])))          # (2, H, W)
         return observation
+
+    
+    def boxes_completed(self, updated_obstacles):
+        """
+        Returns a tuple: (int: number of boxes completed, bool: whether pushing task is complete)
+        """
+        completed_count = 0
+        completed = False
+
+        for obs in updated_obstacles:
+            center = np.abs(poly_centroid(obs))
+            if center[1] - self.cfg.obstacle_size >= self.cfg.goal_y:
+                completed_count += 1
+        
+        if completed_count == self.num_box:
+            completed = True
+        
+        return completed_count, completed
+
 
 
     def render(self, mode='human', close=False, render_obs=False):
@@ -416,13 +522,16 @@ class ShipIceEnv(gym.Env):
                 self.plot.update_path_scatter(full_path=self.path.T)
 
         self.plot.update_ship(self.ship_body, self.ship_shape, move_yaxis_threshold=self.cfg.anim.move_yaxis_threshold)
-        self.plot.update_obstacles(obstacles=CostMap.get_obs_from_poly(self.polygons))
-        if self.t % self.cfg.anim.plot_steps == 0:
-            self.plot.animate_sim(save_fig_dir=os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
-                            if (self.cfg.anim.save and self.cfg.output_dir) else None, suffix=self.t)
-        else:
-            self.plot.animate_sim(suffix=self.t)
+        self.plot.update_obstacles(obstacles=CostMap.get_obs_from_poly(self.polygons), obs_idx=self.obs_idx)
+        # get updated obstacles
+        self.plot.animate_sim(save_fig_dir=os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
+                        if (self.cfg.anim.save and self.cfg.output_dir) else None, suffix=self.t)
         
+        # self.t += 1
+
+        # plt.draw()
+        # plt.pause(0.01)  # Short pause to allow rendering
+
         if render_obs:
 
             # visualize occupancy map

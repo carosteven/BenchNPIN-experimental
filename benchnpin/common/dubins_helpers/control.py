@@ -3,7 +3,7 @@ from typing import Tuple
 import dubins
 import numpy as np
 
-from benchnamo.common.utils.utils import heading_to_world_frame
+from benchnpin.common.utils.utils import heading_to_world_frame
 
 
 def compute_turn_rate_control(path, speed):
