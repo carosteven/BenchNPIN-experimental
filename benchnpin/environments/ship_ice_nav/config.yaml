@@ -5,11 +5,11 @@
 output_dir: "logs/" # 'output/trial0'
 
 plot:
-  y_axis_limit: 25  # limits the y-axis of the plot
+  y_axis_limit: 40  # limits the y-axis of the plot
   show: false       # true will show planner plots
 
 # parameters for low-dim environment
-low_dim_state: true
+low_dim_state: false
 fixed_trial_idx: 4            # 4 for 25x12 (c01) environment; 
 random_start: true
 start_x_range: 11
@@ -20,14 +20,14 @@ max_obs_y: 9
 
 ### PLANNER PARAMS
 #max_replan: 1        # max number of replans
-concentration: 0.1    # options are 0.2, 0.3, 0.4, 0.5
+concentration: 0.2    # options are 0.2, 0.3, 0.4, 0.5
 planner: 'predictive'    # options are 'skeleton', 'straight', or 'lattice'
-goal_y: 24
+goal_y: 39
 threshold_dist: 0.5   # fraction of path length for deciding whether to update planned path
 threshold_cost: 0.95  # fraction of path cost for deciding whether to update planned path
 occ:
   grid_size: 0.2       # occupancy map grid size
-  map_height: 25       # occupancy map height (in meter)
+  map_height: 40       # occupancy map height (in meter)
   map_width: 12        # occupancy map width (in meter)
 a_star:
   horizon: 30  # receding horizon in metres (needs to be an int for it to be enabled)
@@ -71,6 +71,8 @@ ship:
             [0.9, -0.10]]
 
 ### SIMULATION PARAMS
+render:
+  log_obs: true       # whether to log occupancy observation
 sim:
   t_max: 500  # max number of iterations in simulation loop (originally 5000)
   steps: 400    # number of simulation steps per iteration (originally 10)

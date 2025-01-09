@@ -19,7 +19,7 @@ for eps_idx in range(total_episodes):
     obstacles = info['obs']
 
     # open-loop planning
-    path = lattice_planner.plan(ship_pos=info['state'], goal=[0, lattice_planner.cfg.goal_y], obs=obstacles)
+    path = lattice_planner.plan(ship_pos=info['state'], goal=env.goal, obs=obstacles)
     env.update_path(path)
 
     # setup dp controller to track the planned path
