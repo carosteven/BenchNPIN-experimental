@@ -421,30 +421,32 @@ class ShipIceEnv(gym.Env):
         if self.t % self.cfg.anim.plot_steps == 0:
             self.plot.animate_sim(save_fig_dir=os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
                             if (self.cfg.anim.save and self.cfg.output_dir) else None, suffix=self.t)
+
+            # whether to also log occupancy observation
+            if self.cfg.render.log_obs and not self.low_dim_state:
+
+                # visualize occupancy map
+                self.con_ax.clear()
+                occ_map_render = np.copy(self.occupancy.occ_map)
+                occ_map_render = np.flip(occ_map_render, axis=0)
+                self.con_ax.imshow(occ_map_render, cmap='gray')
+                self.con_ax.axis('off')
+                save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
+                fp = os.path.join(save_fig_dir, str(self.t) + '_con.png')
+                self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
+
+                # visualize footprint
+                self.con_ax.clear()
+                occ_map_render = np.copy(self.occupancy.footprint)
+                occ_map_render = np.flip(occ_map_render, axis=0)
+                self.con_ax.imshow(occ_map_render, cmap='gray')
+                self.con_ax.axis('off')
+                save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
+                fp = os.path.join(save_fig_dir, str(self.t) + '_footprint.png')
+                self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
+
         else:
             self.plot.animate_sim(suffix=self.t)
-        
-        if self.cfg.render.log_obs and not self.low_dim_state:
-
-            # visualize occupancy map
-            self.con_ax.clear()
-            occ_map_render = np.copy(self.occupancy.occ_map)
-            occ_map_render = np.flip(occ_map_render, axis=0)
-            self.con_ax.imshow(occ_map_render, cmap='gray')
-            self.con_ax.axis('off')
-            save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
-            fp = os.path.join(save_fig_dir, str(self.t) + '_con.png')
-            self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
-
-            # visualize footprint
-            self.con_ax.clear()
-            occ_map_render = np.copy(self.occupancy.footprint)
-            occ_map_render = np.flip(occ_map_render, axis=0)
-            self.con_ax.imshow(occ_map_render, cmap='gray')
-            self.con_ax.axis('off')
-            save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
-            fp = os.path.join(save_fig_dir, str(self.t) + '_footprint.png')
-            self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
 
 
     def close(self):
