@@ -61,8 +61,7 @@ class ShipIceEnv(gym.Env):
         self.action_space = spaces.Box(low=-max_yaw_rate_step, high=max_yaw_rate_step, dtype=np.float64)
         
         # load ice field environment
-        # ice_file = os.path.join(self.current_dir, 'ice_environments', 'experiments_' + str(int(self.cfg.concentration * 100)) + '_d25x12.pk')
-        ice_file = os.path.join(self.current_dir, 'ice_environments', 'experiments_' + str(int(self.cfg.concentration * 100)) + '_200_r06_d40x12.pk')
+        ice_file = os.path.join(self.current_dir, 'ice_environments', 'experiments_' + str(int(self.cfg.concentration * 100)) + '_100_r06_d40x12.pk')
         ddict = pickle.load(open(ice_file, 'rb'))
 
         self.experiment = ddict['exp'][self.cfg.concentration]
