@@ -5,7 +5,7 @@
 output_dir: "logs/" # 'output/trial0'
 
 plot:
-  y_axis_limit: 25  # limits the y-axis of the plot
+  y_axis_limit: 40  # limits the y-axis of the plot
   show: false       # true will show planner plots
 
 # parameters for low-dim environment
@@ -22,7 +22,7 @@ max_obs_y: 9
 #max_replan: 1        # max number of replans
 concentration: 0.1    # options are 0.2, 0.3, 0.4, 0.5
 planner: 'predictive'    # options are 'skeleton', 'straight', or 'lattice'
-goal_y: 24
+goal_y: 39
 threshold_dist: 0.5   # fraction of path length for deciding whether to update planned path
 threshold_cost: 0.95  # fraction of path cost for deciding whether to update planned path
 occ:

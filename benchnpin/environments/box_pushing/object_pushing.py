@@ -481,7 +481,7 @@ class ObjectPushing(gym.Env):
 
 
 
-    def render(self, mode='human', close=False, render_obs=False):
+    def render(self, mode='human', close=False):
         """Renders the environment."""
 
         # update animation
@@ -497,13 +497,8 @@ class ObjectPushing(gym.Env):
         # get updated obstacles
         self.plot.animate_sim(save_fig_dir=os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
                         if (self.cfg.anim.save and self.cfg.output_dir) else None, suffix=self.t)
-        
-        # self.t += 1
 
-        # plt.draw()
-        # plt.pause(0.01)  # Short pause to allow rendering
-
-        if render_obs:
+        if self.cfg.render.log_obs and not self.low_dim_state:
 
             # visualize occupancy map
             self.con_ax.clear()

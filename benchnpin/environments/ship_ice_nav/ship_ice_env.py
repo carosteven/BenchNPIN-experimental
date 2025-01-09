@@ -61,7 +61,8 @@ class ShipIceEnv(gym.Env):
         self.action_space = spaces.Box(low=-max_yaw_rate_step, high=max_yaw_rate_step, dtype=np.float64)
         
         # load ice field environment
-        ice_file = os.path.join(self.current_dir, 'ice_environments', 'experiments_' + str(int(self.cfg.concentration * 100)) + '_d25x12.pk')
+        # ice_file = os.path.join(self.current_dir, 'ice_environments', 'experiments_' + str(int(self.cfg.concentration * 100)) + '_d25x12.pk')
+        ice_file = os.path.join(self.current_dir, 'ice_environments', 'experiments_' + str(int(self.cfg.concentration * 100)) + '_200_r06_d40x12.pk')
         ddict = pickle.load(open(ice_file, 'rb'))
 
         self.experiment = ddict['exp'][self.cfg.concentration]
@@ -404,7 +405,7 @@ class ShipIceEnv(gym.Env):
         return observation
 
 
-    def render(self, mode='human', close=False, render_obs=False):
+    def render(self, mode='human', close=False):
         """Renders the environment."""
 
         # update animation
@@ -423,7 +424,7 @@ class ShipIceEnv(gym.Env):
         else:
             self.plot.animate_sim(suffix=self.t)
         
-        if render_obs:
+        if self.cfg.render.log_obs and not self.low_dim_state:
 
             # visualize occupancy map
             self.con_ax.clear()

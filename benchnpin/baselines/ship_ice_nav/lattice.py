@@ -1,5 +1,4 @@
-import os, sys
-sys.path.append("/home/ninghan/NAMO/ship-ice-env-dev")
+import os
 import time
 
 import numpy as np
