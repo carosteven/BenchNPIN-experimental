@@ -2,7 +2,7 @@ import logging
 import os
 import pickle
 import random
-from typing import List, Tuple, Any, Union
+from typing import List, Tuple, Any
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,7 +11,6 @@ from skimage import draw
 
 from benchnpin.common.geometry.polygon import *
 from benchnpin.common.utils.utils import scale_axis_labels, rotation_matrix
-from benchnpin.common.occupancy_grid.occupancy_map import OccupancyGrid
 
 
 # define an arbitrary max cost applied to a cell in the costmap
@@ -47,14 +46,6 @@ class CostMap_Occupancy:
 
         # apply a cost to the boundaries of the channel
         self.boundary_cost()
-
-        self.occupancy = OccupancyGrid(grid_width=cfg.occ.grid_size, grid_height=cfg.occ.grid_size, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, ship_body=None)
-        print("occ cost map dimention: ", self.occupancy.map_height, self.occupancy.map_width)
-        self.occ_fig, self.occ_ax = plt.subplots(figsize=(10, 10))
-        self.occ_ax.set_xlabel('')
-        self.occ_ax.set_xticks([])
-        self.occ_ax.set_ylabel('')
-        self.occ_ax.set_yticks([])
         self.update_count = 0
         
     @property

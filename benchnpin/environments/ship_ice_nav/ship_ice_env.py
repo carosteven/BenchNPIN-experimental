@@ -373,20 +373,9 @@ class ShipIceEnv(gym.Env):
     
 
     def generate_observation(self):
-        # compute occupancy map observation  (40, 12)
-        if self.occupancy.map_height == 40:
-            raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, ice_binary_w=235, ice_binary_h=774)
-
-        elif self.occupancy.map_height == 20 and self.occupancy.map_width == 12:
-            raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, ice_binary_w=235, ice_binary_h=387)
-
-        elif self.occupancy.map_height == 20 and self.occupancy.map_width == 6:
-            raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, ice_binary_w=118, ice_binary_h=387)
-
-        elif self.occupancy.map_height == 10 and self.occupancy.map_width == 6:
-            raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, ice_binary_w=118, ice_binary_h=192)
-        else:
-            raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, ice_binary_w=235, ice_binary_h=1355)
+        raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, 
+                        ice_binary_w=int(self.occupancy.map_width * self.cfg.occ.m_to_pix_scale), 
+                        ice_binary_h=int(self.occupancy.map_height * self.cfg.occ.m_to_pix_scale))
         self.occupancy.compute_con_gridmap(raw_ice_binary=raw_ice_binary, save_fig_dir=None)
         occupancy = np.copy(self.occupancy.occ_map)         # (H, W)
 

@@ -1,5 +1,5 @@
 numpy
-matplotlib
+matplotlib==3.7.5
 pyyaml
 tqdm
 scipy
