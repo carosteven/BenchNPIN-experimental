@@ -18,4 +18,5 @@ torch
 torchsummary
 torchvision
 gymnasium
+stable-baselines3
 git+https://github.com/rdesc/pydubins.git
