@@ -6,6 +6,29 @@ import pymunk
 from benchnpin.common.ship import Ship
 
 
+def create_static(space, vertices, density):
+    body = space.static_body
+    # body.position = (x, y)
+    # dummy_shape = pymunk.Poly(None, vertices)
+    # centre_of_g = dummy_shape.center_of_gravity
+    # vs = [(x - centre_of_g[0], y - centre_of_g[1]) for x, y in vertices]
+
+    vs = [(x, y) for x, y in vertices]
+    shape = pymunk.Poly(body, vs, radius=0.02)
+    shape.density = density
+    shape.elasticity = 0.01
+    shape.friction = 1.0
+    space.add(shape)
+    return shape
+
+def generate_sim_bounds(space, bounds: List[dict], density):
+    return [
+        create_static(
+            space, bound['vertices'], density=density
+        )
+        for bound in bounds
+    ]
+
 def create_polygon(space, vertices, x, y, density):
     body = pymunk.Body(body_type=pymunk.Body.DYNAMIC)
     body.position = (x, y)
@@ -19,7 +42,6 @@ def create_polygon(space, vertices, x, y, density):
     shape.friction = 1.0
     space.add(body, shape)
     return shape
-
 
 def generate_sim_obs(space, obstacles: List[dict], density):
     return [

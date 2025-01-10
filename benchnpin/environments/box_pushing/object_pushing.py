@@ -1,3 +1,6 @@
+# TODO rename from ship to robot (can't do it yet - 
+#   TypeError: __init__() got an unexpected keyword argument 'robot_body' was raised from the environment creator for object-pushing-v0 with kwargs ({}))
+
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
@@ -14,7 +17,7 @@ from benchnpin.common.evaluation.metrics import total_work_done
 from benchnpin.common.geometry.polygon import poly_area
 from benchnpin.common.ship import Ship as Robot
 from benchnpin.common.utils.plot_pushing import Plot
-from benchnpin.common.utils.sim_utils import generate_sim_obs
+from benchnpin.common.utils.sim_utils import generate_sim_obs, generate_sim_bounds
 from benchnpin.common.geometry.polygon import poly_centroid
 from benchnpin.common.utils.utils import DotDict
 from benchnpin.common.occupancy_grid.occupancy_map import OccupancyGrid
@@ -32,7 +35,7 @@ STOP_TURNING = 1
 LEFT = 2
 RIGHT = 3
 STOP = 4
-OTHER = 5
+BACKWARD = 5
 SMALL_LEFT = 6
 SMALL_RIGHT = 7
 
@@ -106,6 +109,7 @@ class ObjectPushing(gym.Env):
         self.replan = self.cfg.a_star.replan
         self.dt = self.cfg.controller.dt
         self.target_speed = self.cfg.controller.target_speed
+        self.normal_cancelled_velocity = Vec2d(0, 0)
 
         # setup pymunk environment
         self.space = pymunk.Space()  # threaded=True causes some issues
@@ -166,12 +170,19 @@ class ObjectPushing(gym.Env):
             for i in arbiter.contact_point_set.points:
                 self.contact_pts.append(list(arbiter.shapes[0].body.world_to_local((i.point_b + i.point_a) / 2)))
 
+        def boundary_collision_begin(arbiter, space, data):
+            return True
+
         # handler = space.add_default_collision_handler()
         self.handler = self.space.add_collision_handler(1, 2)
         # from pymunk docs
         # post_solve: two shapes are touching and collision response processed
         self.handler.pre_solve = pre_solve_handler
         self.handler.post_solve = post_solve_handler
+
+        self.boundary_handler = self.space.add_collision_handler(1, 3)
+        self.boundary_handler.begin = boundary_collision_begin
+
         
         
     def init_ship_ice_env(self):
@@ -181,7 +192,10 @@ class ObjectPushing(gym.Env):
             x_start = 1 + random.random() * (self.cfg.start_x_range - 1)    # [1, start_x_range]
             self.start = (x_start, 1.0, np.pi / 2)
         else:
-            self.start = (5, 1.0, np.pi / 2)
+            self.start = (5, 1.5, np.pi*3/2)
+            # self.start = (5, 1.5, np.pi/2)
+
+        self.boundary_dicts = self.generate_boundary()
 
         # if self.cfg.randomize_obstacles:
         #     self.randomize_obstacles()
@@ -196,10 +210,13 @@ class ObjectPushing(gym.Env):
 
         # initialize ship sim objects
         self.polygons = generate_sim_obs(self.space, self.obs_dicts, self.cfg.sim.obstacle_density)
+        self.boundaries = generate_sim_bounds(self.space, self.boundary_dicts, density=1)
         for p in self.polygons:
             p.collision_type = 2
+        for b in self.boundaries:
+            b.collision_type = 3
 
-        self.ship_body, self.ship_shape = Robot.sim(self.cfg.ship.vertices, self.start)
+        self.ship_body, self.ship_shape = Robot.sim(self.cfg.ship.vertices, self.start, body_type=pymunk.Body.DYNAMIC)
         self.ship_shape.collision_type = 1
         self.space.add(self.ship_body, self.ship_shape)
         # run initial simulation steps to let environment settle
@@ -207,7 +224,34 @@ class ObjectPushing(gym.Env):
             self.space.step(self.dt / self.steps)
         self.prev_obs = CostMap.get_obs_from_poly(self.polygons)
 
-    
+    def generate_boundary(self):
+        b_size = 0.5
+        boundaries = []
+        boundaries.append([0, 0, 10, 0])
+        boundaries.append([0, 0, 0, 10])
+        
+        boundary_dicts = []
+        for b_x1, b_y1, b_x2, b_y2 in boundaries:
+            boundary_info = {}
+            if b_x1 == b_x2:  # Vertical line
+                boundary_info['vertices'] = np.array([[b_x1 - b_size, b_y1], 
+                                                      [b_x2 + b_size, b_y1],
+                                                      [b_x2 + b_size, b_y2], 
+                                                      [b_x1 - b_size, b_y2]
+                ])
+            elif b_y1 == b_y2:  # Horizontal line
+                boundary_info['vertices'] = np.array([[b_x1, b_y1 - b_size],
+                                                      [b_x2, b_y2 - b_size],
+                                                      [b_x2, b_y2 + b_size],
+                                                      [b_x1, b_y1 + b_size]
+                ])
+            else:
+                raise ValueError("Only vertical and horizontal lines are supported")
+            
+            # boundary_info['segment'] = [(b_x1, b_y1), (b_x2, b_y2)]
+            boundary_dicts.append(boundary_info)
+        return boundary_dicts
+
     def generate_obstacles(self):
         obs_size = self.cfg.obstacle_size
         obstacles = []          # a list storing non-overlappin obstacle centers
@@ -278,7 +322,7 @@ class ObjectPushing(gym.Env):
                 np.zeros((self.cfg.costmap.m, self.cfg.costmap.n)), self.obs_dicts,
                 ship_pos=self.start, ship_vertices=np.asarray(self.ship_shape.get_vertices()),
                 map_figsize=None, y_axis_limit=self.cfg.plot.y_axis_limit, inf_stream=False, goal=self.goal[1], 
-                path=np.zeros((3, 50))
+                path=np.zeros((3, 50)), boundaries=self.boundary_dicts
             )
 
         # get updated obstacles
@@ -306,6 +350,8 @@ class ObjectPushing(gym.Env):
 
             if action == FORWARD:
                 self.linear_speed = 0.01
+            elif action == BACKWARD:
+                self.linear_speed = -0.01
             elif action == STOP_TURNING:
                 self.angular_speed = 0.0
 
@@ -321,20 +367,24 @@ class ObjectPushing(gym.Env):
 
             elif action == STOP:
                 self.linear_speed = 0.0
-                self.angular_speed = 0.0
+                # self.angular_speed = 0.0
 
             # check speed boundary
-            if self.linear_speed <= 0:
-                self.linear_speed = 0
-            elif self.linear_speed >= self.target_speed:
-                self.linear_speed = self.target_speed
+            # if self.linear_speed <= 0:
+            #     self.linear_speed = 0
+            if abs(self.linear_speed) >= self.target_speed:
+                self.linear_speed = self.target_speed*np.sign(self.linear_speed)
 
             # apply linear and angular speeds
             global_velocity = R(self.ship_body.angle) @ [self.linear_speed, 0]
 
             # apply velocity controller
-            self.ship_body.angular_velocity = self.angular_speed
-            self.ship_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
+            self.ship_body.angular_velocity = self.angular_speed * 200
+            self.ship_body.velocity = Vec2d(global_velocity[0], global_velocity[1]) * 200
+
+            # adjust velocity if collision with boundary is occuring
+            # self.ship_body.velocity -= self.normal_cancelled_velocity
+            # self.normal_cancelled_velocity = Vec2d(0, 0)
 
         else:
 
@@ -344,6 +394,11 @@ class ObjectPushing(gym.Env):
             # apply velocity controller
             self.ship_body.angular_velocity = action
             self.ship_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
+
+            # adjust velocity if collision with boundary is occuring
+            print(self.normal_cancelled_velocity)
+            self.ship_body.velocity -= self.normal_cancelled_velocity
+            self.normal_cancelled_velocity = Vec2d(0, 0)
 
         # move simulation forward
         boundary_constraint_violated = False

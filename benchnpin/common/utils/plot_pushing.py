@@ -37,7 +37,8 @@ class Plot:
             target: Tuple[float, float] = None,
             y_axis_limit=100,
             legend=False,
-            scale: float = 1
+            scale: float = 1,
+            boundaries: List = None
     ):
         R = lambda theta: np.asarray([
             [np.cos(theta), -np.sin(theta)],
@@ -71,6 +72,16 @@ class Plot:
                     *self.sim_ax.plot(self.full_path[0], self.full_path[1], 'r', label='planned path')
                 )
 
+            # add the patches for the boundaries
+            if boundaries:
+                self.sim_bounds_patches = []
+                for bound in boundaries:
+                    self.sim_bounds_patches.append(
+                        self.sim_ax.add_patch(
+                            patches.Polygon(bound['vertices'], True, fill=True, fc='black', ec=None)
+                        )
+                    )
+
             # add the patches for the ice
             self.sim_obs_patches = []
             for obs in obstacles:
@@ -84,7 +95,7 @@ class Plot:
             if ship_vertices is not None:
                 self.ship_patch = self.sim_ax.add_patch(
                     patches.Polygon(ship_vertices @ R(ship_pos[2]).T + ship_pos[:2], True, fill=True,
-                                    edgecolor='black', facecolor='white', linewidth=2)
+                                    edgecolor='black', facecolor='red', linewidth=2)
                 )
 
             if self.horizon:

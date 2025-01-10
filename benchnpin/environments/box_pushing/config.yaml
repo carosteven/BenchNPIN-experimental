@@ -23,14 +23,14 @@ min_obs_y: 4.5
 # parameters for low-dim environment
 low_dim_state: true
 fixed_trial_idx: 1
-random_start: true
+random_start: false
 start_x_range: 15
 
 ### PLANNER PARAMS
 #max_replan: 1        # max number of replans
 concentration: 0.1    # options are 0.2, 0.3, 0.4, 0.5
 planner: 'predictive'    # options are 'skeleton', 'straight', or 'lattice'
-goal_y: 10
+goal_y: 15
 threshold_dist: 0.5   # fraction of path length for deciding whether to update planned path
 threshold_cost: 0.95  # fraction of path cost for deciding whether to update planned path
 occ:
