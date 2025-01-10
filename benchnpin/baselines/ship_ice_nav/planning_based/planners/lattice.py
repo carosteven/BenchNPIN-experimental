@@ -1,17 +1,15 @@
 import os
 import time
-
 import numpy as np
-from matplotlib import pyplot as plt
+import copy
 
-from benchnpin.baselines.ship_ice_nav.utils.a_star_search import AStar
+from benchnpin.baselines.ship_ice_nav.planning_based.utils.a_star_search import AStar
 from benchnpin.common.cost_map import CostMap
 from benchnpin.common.primitives import Primitives
 from benchnpin.common.ship import Ship
 from benchnpin.common.swath import generate_swath, view_all_swaths
 from benchnpin.common.utils.utils import Path
 from benchnpin.common.utils.utils import DotDict
-import copy
 
 
 class LatticePlanner():

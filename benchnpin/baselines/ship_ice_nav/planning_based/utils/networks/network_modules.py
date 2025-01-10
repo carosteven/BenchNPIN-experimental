@@ -12,7 +12,7 @@ import os
 from PIL import Image
 import numpy as np
 
-from benchnpin.baselines.ship_ice_nav.utils.networks.network_utils import conv_out_size, conv_trans_out_size, maxpool_size
+from benchnpin.baselines.ship_ice_nav.planning_based.utils.networks.network_utils import conv_out_size, conv_trans_out_size, maxpool_size
 
 class ResLayer(nn.Module):
     def __init__(self, num_features, hidden_features):

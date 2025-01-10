@@ -3,13 +3,13 @@ import time
 
 import numpy as np
 
-from benchnpin.baselines.ship_ice_nav.utils.path_evaluator import PredictivePathEvaluator
+from benchnpin.baselines.ship_ice_nav.planning_based.utils.path_evaluator import PredictivePathEvaluator
 from benchnpin.common.primitives import Primitives
 from benchnpin.common.ship import Ship
 from benchnpin.common.swath import generate_swath, view_all_swaths
 from benchnpin.common.utils.utils import Path
 from benchnpin.common.cost_map_occ import CostMap_Occupancy
-from benchnpin.baselines.ship_ice_nav.utils.a_star_predictive import AStar_Predictive   
+from benchnpin.baselines.ship_ice_nav.planning_based.utils.a_star_predictive import AStar_Predictive   
 from benchnpin.common.utils.utils import DotDict
 import copy
 
@@ -34,7 +34,7 @@ class PredictivePlanner():
         :param goal: the goal pose for planning. NOTE we only use the goal's y-value
         :param occ_map: occupancy map observation for planning
         :param footprint: footprint observation for planning
-        :param conc: concentration value in decimals (should be among 0.2, 0.3, 0.4, and 0.5)
+        :param conc: concentration value in decimals (should be among 0.1, 0.2, 0.3, 0.4, and 0.5)
         """
 
 

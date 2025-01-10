@@ -17,7 +17,7 @@ from benchnpin.common.swath import Swath, rotate_swath, compute_swath_cost, view
 from benchnpin.common.utils.hashmap import HashMap
 from benchnpin.common.utils.priority_queue import PriorityQueue
 from benchnpin.common.utils.utils import heading_to_world_frame, rotation_matrix, M__2_PI
-from benchnpin.baselines.ship_ice_nav.utils.networks.network_modules import UNet_Ice
+from benchnpin.baselines.ship_ice_nav.planning_based.utils.networks.network_modules import UNet_Ice
 from benchnpin.common.occupancy_grid.ice_model_utils import crop_window, stitch_window, encode_swath, compute_ship_footprint_planner, view_swath, update_costmap, boundary_cost, get_boundary_map
 import torch
 from torch import nn
@@ -68,6 +68,7 @@ class AStar_Predictive:
 
         if use_ice_model:
             self.ice_model = UNet_Ice(input_includes_centroids=False, output_includes_centroids=False).to(self.device)
+            if concentration == 0.1: concentration = 0.2            # use 20% concentration model for 10% concentration ice
             model_path = os.path.join(os.path.dirname(__file__), 'models', 'c' + str(int(concentration * 100)), 'ice_model.pth')
             print("Using device: ", self.device)
             self.ice_model.load_state_dict(torch.load(model_path, weights_only=True))

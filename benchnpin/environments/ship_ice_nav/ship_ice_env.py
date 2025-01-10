@@ -50,6 +50,7 @@ class ShipIceEnv(gym.Env):
 
         self.episode_idx = None     # the increment of this index is handled in reset()
 
+        self.goal = (0, self.cfg.goal_y)
         self.path = None
         self.scatter = False
 
@@ -61,6 +62,7 @@ class ShipIceEnv(gym.Env):
         self.action_space = spaces.Box(low=-max_yaw_rate_step, high=max_yaw_rate_step, dtype=np.float64)
         
         # load ice field environment
+        assert self.cfg.concentration in [0.1, 0.2, 0.3, 0.4, 0.5], print("PLease check environment config. Concentration value should be set to one of the followings: 0.1, 0.2, 0.3, 0.4, 0.5")
         ice_file = os.path.join(self.current_dir, 'ice_environments', 'experiments_' + str(int(self.cfg.concentration * 100)) + '_100_r06_d40x12.pk')
         ddict = pickle.load(open(ice_file, 'rb'))
 
@@ -189,8 +191,6 @@ class ShipIceEnv(gym.Env):
         # filter out obstacles that have zero area
         self.obs_dicts[:] = [ob for ob in self.obs_dicts if poly_area(ob['vertices']) != 0]
         self.obstacles = [ob['vertices'] for ob in self.obs_dicts]
-
-        self.goal = (0, self.cfg.goal_y)
 
         # initialize ship sim objects
         self.polygons = generate_sim_obs(self.space, self.obs_dicts, self.cfg.sim.obstacle_density)
