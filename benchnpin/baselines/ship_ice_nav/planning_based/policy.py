@@ -10,7 +10,7 @@ class PlanningBasedPolicy():
     This policy first plans a path using a ship planner and outputs actions to track the planned path.
     """
 
-    def __init__(self, planner_type, goal, conc) -> None:
+    def __init__(self, planner_type, goal, conc, action_scale) -> None:
 
         if planner_type not in ['predictive', 'lattice']:
             raise Exception("Invalid planner type. Choose a planner between 'lattice' or 'predictive'.")
@@ -22,6 +22,7 @@ class PlanningBasedPolicy():
         self.goal = goal
         self.path = None
         self.conc = conc
+        self.action_scale = action_scale
 
     
     def plan_path(self, ship_pos, goal, observation, obstacles=None):
@@ -55,7 +56,7 @@ class PlanningBasedPolicy():
         x_s, y_s, h_s = self.dp.get_setpoint()
         self.dp.setpoint = np.asarray([x_s, y_s, np.unwrap([self.dp_state.yaw, h_s])[1]])
 
-        return omega
+        return omega / self.action_scale
 
     
     def reset(self):

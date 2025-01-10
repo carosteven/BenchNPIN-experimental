@@ -57,9 +57,8 @@ class ShipIceEnv(gym.Env):
         self.low_dim_state = self.cfg.low_dim_state
 
         # Define action space
-        max_yaw_rate_step = (np.pi/2) / 15        # rad/sec
-        print("max yaw rate per step: ", max_yaw_rate_step)
-        self.action_space = spaces.Box(low=-max_yaw_rate_step, high=max_yaw_rate_step, dtype=np.float64)
+        self.max_yaw_rate_step = (np.pi/2) / 7        # rad/sec
+        self.action_space = spaces.Box(low=-1, high=1, dtype=np.float32)
         
         # load ice field environment
         assert self.cfg.concentration in [0.1, 0.2, 0.3, 0.4, 0.5], print("PLease check environment config. Concentration value should be set to one of the followings: 0.1, 0.2, 0.3, 0.4, 0.5")
@@ -78,7 +77,7 @@ class ShipIceEnv(gym.Env):
 
         else:
             self.observation_shape = (2, self.occupancy.occ_map_height, self.occupancy.occ_map_width)
-            self.observation_space = spaces.Box(low=0, high=1, shape=self.observation_shape, dtype=np.float64)
+            self.observation_space = spaces.Box(low=0, high=255, shape=self.observation_shape, dtype=np.uint8)
 
         self.yaw_lim = (0, np.pi)       # lower and upper limit of ship yaw  
         self.boundary_violation_limit = 0.0       # if the ship is out of boundary more than this limit, terminate and truncate the episode 
@@ -266,6 +265,8 @@ class ShipIceEnv(gym.Env):
         """Executes one time step in the environment and returns the result."""
         self.t += 1
 
+        action = action * self.max_yaw_rate_step
+
         # constant forward speed in global frame
         global_velocity = R(self.ship_body.angle) @ [self.target_speed, 0]
 
@@ -384,12 +385,8 @@ class ShipIceEnv(gym.Env):
         self.occupancy.compute_ship_footprint_planner(ship_state=ship_pose, ship_vertices=self.cfg.ship.vertices)
         footprint = np.copy(self.occupancy.footprint)       # (H, W)
 
-        # compute goal observation
-        # self.occupancy.compute_goal_image(goal_y=self.goal[1])
-        # goal_img = np.copy(self.occupancy.goal_img)               # (H, W)
-        # observation = np.concatenate((np.array([occupancy]), np.array([footprint]), np.array([goal_img])))          # (3, H, W)
-
         observation = np.concatenate((np.array([occupancy]), np.array([footprint])))          # (2, H, W)
+        observation = (observation*255).astype(np.uint8)                                      # NOTE SB3 image format
         return observation
 
 
