@@ -15,10 +15,10 @@ randomize_obstacles: true
 num_obstacles: 3
 obstacle_size: 0.5
 min_obs_dist: 3.5       # minimum obstacle distance during random initialization
-max_obs_x: 14
-min_obs_x: 2.5
-max_obs_y: 8
-min_obs_y: 4.5
+max_obs_x: 4
+min_obs_x: -4
+max_obs_y: 2
+min_obs_y: -2
 
 # parameters for low-dim environment
 low_dim_state: true
@@ -121,3 +121,9 @@ controller:
     - [ 5, 0, 5 ]
     - [ 10, 0, 20 ]
     - [ 10, 0, 20 ]
+
+### ENVIRONMENT PARAMS
+env:
+  obstacle_config: small_empty # options are small_empty, small_columns, large_columns, large_divider
+  room_length: 10
+  room_width: 5

@@ -17,7 +17,7 @@ from benchnpin.common.evaluation.metrics import total_work_done
 from benchnpin.common.geometry.polygon import poly_area
 from benchnpin.common.ship import Ship as Robot
 from benchnpin.common.utils.plot_pushing import Plot
-from benchnpin.common.utils.sim_utils import generate_sim_obs, generate_sim_bounds
+from benchnpin.common.utils.sim_utils import generate_sim_obs, generate_sim_bounds, generate_sim_corners
 from benchnpin.common.geometry.polygon import poly_centroid
 from benchnpin.common.utils.utils import DotDict
 from benchnpin.common.occupancy_grid.occupancy_map import OccupancyGrid
@@ -39,6 +39,11 @@ BACKWARD = 5
 SMALL_LEFT = 6
 SMALL_RIGHT = 7
 
+ROBOT_HALF_WIDTH = 0.03
+CUBE_WIDTH = 0.044*10
+CUBE_MASS = 0.01
+WALL_THICKNESS = 1.4*10
+RECEPTACLE_WIDTH = 0.15*10
 
 class ObjectPushing(gym.Env):
     """Custom Environment that follows gym interface"""
@@ -196,6 +201,7 @@ class ObjectPushing(gym.Env):
             # self.start = (5, 1.5, np.pi/2)
 
         self.boundary_dicts = self.generate_boundary()
+        self.corner_dicts = self.generate_corners()
 
         # if self.cfg.randomize_obstacles:
         #     self.randomize_obstacles()
@@ -211,10 +217,19 @@ class ObjectPushing(gym.Env):
         # initialize ship sim objects
         self.polygons = generate_sim_obs(self.space, self.obs_dicts, self.cfg.sim.obstacle_density)
         self.boundaries = generate_sim_bounds(self.space, self.boundary_dicts, density=1)
+        self.corners = generate_sim_corners(self.space, self.corner_dicts, density=1)
         for p in self.polygons:
             p.collision_type = 2
         for b in self.boundaries:
             b.collision_type = 3
+        # Get vertices of corners (after they have been moved to proper spots)
+        for dict, corner in zip(self.corner_dicts, self.corners):
+            dict['vertices'] = []
+            for poly in corner:
+                vs = poly.get_vertices()
+                transformed_vertices = [poly.body.local_to_world(v) for v in vs]
+                dict['vertices'].append(transformed_vertices)
+
 
         self.ship_body, self.ship_shape = Robot.sim(self.cfg.ship.vertices, self.start, body_type=pymunk.Body.DYNAMIC)
         self.ship_shape.collision_type = 1
@@ -225,6 +240,7 @@ class ObjectPushing(gym.Env):
         self.prev_obs = CostMap.get_obs_from_poly(self.polygons)
 
     def generate_boundary(self):
+        '''
         b_size = 0.5
         boundaries = []
         boundaries.append([0, 0, 10, 0])
@@ -250,11 +266,60 @@ class ObjectPushing(gym.Env):
             
             # boundary_info['segment'] = [(b_x1, b_y1), (b_x2, b_y2)]
             boundary_dicts.append(boundary_info)
+            '''
+        boundary_dicts = []
+        for x, y, length, width in [
+            (-self.cfg.env.room_length / 2 - WALL_THICKNESS / 2, 0, WALL_THICKNESS, self.cfg.env.room_width),
+            (self.cfg.env.room_length / 2 + WALL_THICKNESS / 2, 0, WALL_THICKNESS, self.cfg.env.room_width),
+            (0, -self.cfg.env.room_width / 2 - WALL_THICKNESS / 2, self.cfg.env.room_length + 2 * WALL_THICKNESS, WALL_THICKNESS),
+            (0, self.cfg.env.room_width / 2 + WALL_THICKNESS / 2, self.cfg.env.room_length + 2 * WALL_THICKNESS, WALL_THICKNESS),
+            ]:
+
+            boundary_dicts.append(
+                {'type': 'wall',
+                 'vertices': np.array([
+                    [x - length / 2, y - width / 2],  # Bottom-left
+                    [x + length / 2, y - width / 2],  # Bottom-right
+                    [x + length / 2, y + width / 2],  # Top-right
+                    [x - length / 2, y + width / 2],  # Top-left
+                ])
+            })
+
+        
+        # boundary_dicts.append({
+        #     'vertices': np.array([
+        #         [0, 0],
+        #         [0, -1],
+        #         [0.5*np.sin(22.5*np.pi/180), -1 + 0.5*np.cos(22.5*np.pi/180)],
+        #         [1 - 0.5*np.cos(22.5*np.pi/180), -0.5*np.sin(22.5*np.pi/180)],
+        #         [1, 0],
+        #     ])
+        # })
+        
         return boundary_dicts
+    
+    def generate_corners(self):
+        # Corner
+        corner_dicts = []
+        for i, (x, y) in enumerate([
+            (-self.cfg.env.room_length / 2, self.cfg.env.room_width / 2),
+            (self.cfg.env.room_length / 2, self.cfg.env.room_width / 2),
+            (self.cfg.env.room_length / 2, -self.cfg.env.room_width / 2),
+            (-self.cfg.env.room_length / 2, -self.cfg.env.room_width / 2),
+            ]):
+            if i == 1: # Skip the receptacle corner
+                continue
+            heading = -np.radians(i * 90)
+            corner_dicts.append(
+                {'type': 'corner',
+                 'position': (x, y),
+                 'heading': heading,
+                })
+        return corner_dicts
 
     def generate_obstacles(self):
         obs_size = self.cfg.obstacle_size
-        obstacles = []          # a list storing non-overlappin obstacle centers
+        obstacles = []          # a list storing non-overlapping obstacle centers
 
         if self.cfg.randomize_obstacles:
             total_obs_required = self.cfg.num_obstacles
@@ -282,10 +347,10 @@ class ObjectPushing(gym.Env):
                     obs_count += 1
         
         else:
-            obstacles.append([8, 5.5])
-            obstacles.append([3, 7])
-            obstacles.append([13, 8])
-            self.num_box = 3
+            obstacles.append([-0.5, -0.5])
+            # obstacles.append([3, 7])
+            # obstacles.append([13, 8])
+            self.num_box = 1
         
         # convert to obs dict
         obs_dict = []
@@ -322,7 +387,7 @@ class ObjectPushing(gym.Env):
                 np.zeros((self.cfg.costmap.m, self.cfg.costmap.n)), self.obs_dicts,
                 ship_pos=self.start, ship_vertices=np.asarray(self.ship_shape.get_vertices()),
                 map_figsize=None, y_axis_limit=self.cfg.plot.y_axis_limit, inf_stream=False, goal=self.goal[1], 
-                path=np.zeros((3, 50)), boundaries=self.boundary_dicts
+                path=np.zeros((3, 50)), boundaries=self.boundary_dicts, corners=self.corner_dicts
             )
 
         # get updated obstacles
@@ -382,10 +447,6 @@ class ObjectPushing(gym.Env):
             self.ship_body.angular_velocity = self.angular_speed * 200
             self.ship_body.velocity = Vec2d(global_velocity[0], global_velocity[1]) * 200
 
-            # adjust velocity if collision with boundary is occuring
-            # self.ship_body.velocity -= self.normal_cancelled_velocity
-            # self.normal_cancelled_velocity = Vec2d(0, 0)
-
         else:
 
             # constant forward speed in global frame
@@ -395,11 +456,6 @@ class ObjectPushing(gym.Env):
             self.ship_body.angular_velocity = action
             self.ship_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
 
-            # adjust velocity if collision with boundary is occuring
-            print(self.normal_cancelled_velocity)
-            self.ship_body.velocity -= self.normal_cancelled_velocity
-            self.normal_cancelled_velocity = Vec2d(0, 0)
-
         # move simulation forward
         boundary_constraint_violated = False
         boundary_violation_terminal = False      # if out of boundary for too much, terminate and truncate the episode
@@ -407,12 +463,12 @@ class ObjectPushing(gym.Env):
             self.space.step(self.dt / self.steps)
 
             # apply boundary constraints
-            if self.ship_body.position.x < 0 or self.ship_body.position.x > self.cfg.occ.map_width:
-                boundary_constraint_violated = True
-        if self.ship_body.position.x < 0 and abs(self.ship_body.position.x - 0) >= self.boundary_violation_limit:
-            boundary_violation_terminal = True
-        if self.ship_body.position.x > self.cfg.occ.map_width and abs(self.ship_body.position.x - self.cfg.occ.map_width) >= self.boundary_violation_limit:
-            boundary_violation_terminal = True
+        #     if self.ship_body.position.x < 0 or self.ship_body.position.x > self.cfg.occ.map_width:
+        #         boundary_constraint_violated = True
+        # if self.ship_body.position.x < 0 and abs(self.ship_body.position.x - 0) >= self.boundary_violation_limit:
+        #     boundary_violation_terminal = True
+        # if self.ship_body.position.x > self.cfg.occ.map_width and abs(self.ship_body.position.x - self.cfg.occ.map_width) >= self.boundary_violation_limit:
+        #     boundary_violation_terminal = True
             
         # get updated obstacles
         updated_obstacles = CostMap.get_obs_from_poly(self.polygons)

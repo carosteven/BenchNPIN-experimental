@@ -38,7 +38,8 @@ class Plot:
             y_axis_limit=100,
             legend=False,
             scale: float = 1,
-            boundaries: List = None
+            boundaries: List = None,
+            corners: List = None
     ):
         R = lambda theta: np.asarray([
             [np.cos(theta), -np.sin(theta)],
@@ -81,6 +82,16 @@ class Plot:
                             patches.Polygon(bound['vertices'], True, fill=True, fc='black', ec=None)
                         )
                     )
+            
+            if corners:
+                self.sim_corners_patches = []
+                for corner in corners:
+                    for poly in corner['vertices']:
+                        self.sim_corners_patches.append(
+                            self.sim_ax.add_patch(
+                                patches.Polygon(poly, True, fill=True, fc='black', ec='black')
+                            )
+                        )
 
             # add the patches for the ice
             self.sim_obs_patches = []
@@ -121,7 +132,8 @@ class Plot:
 
         # set the axes limits for all plots
         for ax in self.ax:
-            ax.axis([0, costmap.shape[1], 0, y_axis_limit])
+            # ax.axis([0, costmap.shape[1], 0, y_axis_limit])
+            ax.axis([-costmap.shape[1] / 2, costmap.shape[1] / 2, -y_axis_limit / 2, y_axis_limit / 2])
             ax.set_aspect('equal')
 
         if scale > 1:

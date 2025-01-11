@@ -124,7 +124,7 @@ def collect_demos():
     if manual_stop:
         print("\nDemo manually stopped. Ignored")
         return
-        
+    ''' 
     global observations, actions, rewards, terminals, timeouts
     observations = np.array(observations).astype(np.float32)
     actions = np.array(actions).astype(np.float32)
@@ -193,6 +193,7 @@ def collect_demos():
     # save demo info data
     with open('pushing_demo_info.pkl', 'wb') as f:
         pickle.dump(pickle_dict_info, f)
+    '''
 
 
 if __name__ == "__main__":

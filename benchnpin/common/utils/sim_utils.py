@@ -6,14 +6,14 @@ import pymunk
 from benchnpin.common.ship import Ship
 
 
-def create_static(space, vertices, density):
+def create_static(space, boundary, density):
     body = space.static_body
     # body.position = (x, y)
     # dummy_shape = pymunk.Poly(None, vertices)
     # centre_of_g = dummy_shape.center_of_gravity
     # vs = [(x - centre_of_g[0], y - centre_of_g[1]) for x, y in vertices]
 
-    vs = [(x, y) for x, y in vertices]
+    vs = [(x, y) for x, y in boundary['vertices']]
     shape = pymunk.Poly(body, vs, radius=0.02)
     shape.density = density
     shape.elasticity = 0.01
@@ -24,9 +24,44 @@ def create_static(space, vertices, density):
 def generate_sim_bounds(space, bounds: List[dict], density):
     return [
         create_static(
-            space, bound['vertices'], density=density
+            space, bound, density=density
         )
         for bound in bounds
+    ]
+
+def create_corners(space, corner, density):
+    # body = space.static_body
+    shapes = []
+    vs1 = [(0, 0),
+           (0, -1),
+           (0.5*np.sin(22.5*np.pi/180), -1 + 0.5*np.cos(22.5*np.pi/180)),
+           ]
+    vs2 = [(0, 0),
+           (0.5*np.sin(22.5*np.pi/180), -1 + 0.5*np.cos(22.5*np.pi/180)),
+           (1 - 0.5*np.cos(22.5*np.pi/180), -0.5*np.sin(22.5*np.pi/180)),
+           ]
+    vs3 = [(0, 0),
+           (1, 0),
+           (1 - 0.5*np.cos(22.5*np.pi/180), -0.5*np.sin(22.5*np.pi/180)),
+           ]
+    
+    for vs in [vs1, vs2, vs3]:
+        body = pymunk.Body(body_type=pymunk.Body.STATIC)
+        shape = pymunk.Poly(body, vs, radius=0.02)
+        shape.density = density
+        shape.elasticity = 0.01
+        shape.friction = 1.0
+        shape.label = 'test'
+        body.position = corner['position']
+        body.angle = corner['heading']
+        space.add(body, shape)
+        shapes.append(shape)
+    return shapes
+
+def generate_sim_corners(space, corners: List[dict], density):
+    return [
+        create_corners(space, corner, density)
+        for corner in corners
     ]
 
 def create_polygon(space, vertices, x, y, density):
