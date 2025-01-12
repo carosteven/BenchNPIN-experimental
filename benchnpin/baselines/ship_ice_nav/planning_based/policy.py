@@ -1,16 +1,20 @@
+import benchnpin.environments
+import gymnasium as gym
 from benchnpin.baselines.ship_ice_nav.planning_based.planners.lattice import LatticePlanner
 from benchnpin.baselines.ship_ice_nav.planning_based.planners.predictive import PredictivePlanner
+from benchnpin.baselines.base_class import BasePolicy
 from benchnpin.common.controller.dp import DP
 import numpy as np
 
 
-class PlanningBasedPolicy():
+class PlanningBasedPolicy(BasePolicy):
     """
     A baseline policy for autonomous ship navigation in ice-covered waters. 
     This policy first plans a path using a ship planner and outputs actions to track the planned path.
     """
 
-    def __init__(self, planner_type, goal, conc, action_scale) -> None:
+    def __init__(self, planner_type) -> None:
+        super().__init__()
 
         if planner_type not in ['predictive', 'lattice']:
             raise Exception("Invalid planner type. Choose a planner between 'lattice' or 'predictive'.")
@@ -18,28 +22,31 @@ class PlanningBasedPolicy():
 
         self.lattice_planner = LatticePlanner()
         self.predictive_planner = PredictivePlanner()
-
-        self.goal = goal
         self.path = None
-        self.conc = conc
-        self.action_scale = action_scale
 
     
-    def plan_path(self, ship_pos, goal, observation, obstacles=None):
+    def plan_path(self, ship_pos, goal, observation, conc, obstacles=None):
         if self.planner_type == 'lattice':
             self.path = self.lattice_planner.plan(ship_pos=ship_pos, goal=goal, obs=obstacles)
 
         elif self.planner_type == 'predictive':
             occ_map = observation[0]
             footprint = observation[1]
-            self.path = self.predictive_planner.plan(ship_pos=ship_pos, goal=goal, occ_map=occ_map, footprint=footprint, conc=self.conc)
+            self.path = self.predictive_planner.plan(ship_pos=ship_pos, goal=goal, occ_map=occ_map, footprint=footprint, conc=conc)
 
 
-    def act(self, ship_pos, observation, obstacles=None):
+    def act(self, observation, **kwargs):
+
+        # parameters for planners
+        ship_pos = kwargs.get('ship_pos', [0, 0, np.pi / 2])
+        obstacles = kwargs.get('obstacles', None)
+        goal = kwargs.get('goal', None)
+        conc = kwargs.get('conc', None)
+        action_scale = kwargs.get('action_scale', None)
         
         # plan a path
         if self.path is None:
-            self.plan_path(ship_pos, self.goal, observation, obstacles)
+            self.plan_path(ship_pos, goal, observation, conc, obstacles)
 
             # setup dp controller to track the planned path
             cx = self.path.T[0]
@@ -56,9 +63,35 @@ class PlanningBasedPolicy():
         x_s, y_s, h_s = self.dp.get_setpoint()
         self.dp.setpoint = np.asarray([x_s, y_s, np.unwrap([self.dp_state.yaw, h_s])[1]])
 
-        return omega / self.action_scale
+        return omega / action_scale
 
+
+    def evaluate(self, num_eps: int, model_eps: str ='latest') -> list:
+        env = gym.make('ship-ice-v0')
+        env = env.unwrapped
+
+        rewards_list = []
+        for eps_idx in range(num_eps):
+            print("Progress: ", eps_idx, " / ", num_eps, " episodes")
+            observation, info = env.reset()
+            obstacles = info['obs']
+            done = truncated = False
+            eps_reward = 0.0
+
+            while True:
+                action = self.act(observation=(observation / 255).astype(np.float64), ship_pos=info['state'], obstacles=obstacles, 
+                                    goal=env.goal,
+                                    conc=env.cfg.concentration, 
+                                    action_scale=env.max_yaw_rate_step)
+                observation, reward, done, truncated, info = env.step(action)
+                obstacles = info['obs']
+                eps_reward += reward
+                if done or truncated:
+                    rewards_list.append(eps_reward)
+                    break
+
+        env.close()
+        return rewards_list
     
     def reset(self):
         self.path = None
-
