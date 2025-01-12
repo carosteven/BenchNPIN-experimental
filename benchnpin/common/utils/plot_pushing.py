@@ -39,7 +39,7 @@ class Plot:
             legend=False,
             scale: float = 1,
             boundaries: List = None,
-            corners: List = None
+            # corners: List = None
     ):
         R = lambda theta: np.asarray([
             [np.cos(theta), -np.sin(theta)],
@@ -77,19 +77,23 @@ class Plot:
             if boundaries:
                 self.sim_bounds_patches = []
                 for bound in boundaries:
-                    self.sim_bounds_patches.append(
-                        self.sim_ax.add_patch(
-                            patches.Polygon(bound['vertices'], True, fill=True, fc='black', ec=None)
-                        )
-                    )
-            
-            if corners:
-                self.sim_corners_patches = []
-                for corner in corners:
-                    for poly in corner['vertices']:
-                        self.sim_corners_patches.append(
+                    if bound['type'] == 'corner':
+                        for poly in bound['vertices']:
+                            self.sim_bounds_patches.append(
+                                self.sim_ax.add_patch(
+                                    patches.Polygon(poly, True, fill=True, fc='black', ec='black')
+                                )
+                            )
+                    elif bound['type'] == 'receptacle':
+                        self.sim_bounds_patches.append(
                             self.sim_ax.add_patch(
-                                patches.Polygon(poly, True, fill=True, fc='black', ec='black')
+                                patches.Polygon(bound['vertices'], True, fill=True, fc='green', ec=None)
+                            )
+                        )
+                    else:
+                        self.sim_bounds_patches.append(
+                            self.sim_ax.add_patch(
+                                patches.Polygon(bound['vertices'], True, fill=True, fc='black', ec=None)
                             )
                         )
 
@@ -98,7 +102,7 @@ class Plot:
             for obs in obstacles:
                 self.sim_obs_patches.append(
                     self.sim_ax.add_patch(
-                        patches.Polygon(obs['vertices'], True, fill=True, fc='lightblue', ec='k')
+                        patches.Polygon(obs['vertices'], True, fill=True, fc='lightblue', ec=None, gid=obs['idx'])
                     )
                 )
 
@@ -106,7 +110,7 @@ class Plot:
             if ship_vertices is not None:
                 self.ship_patch = self.sim_ax.add_patch(
                     patches.Polygon(ship_vertices @ R(ship_pos[2]).T + ship_pos[:2], True, fill=True,
-                                    edgecolor='black', facecolor='red', linewidth=2)
+                                    edgecolor=None, facecolor='red', linewidth=2)
                 )
 
             if self.horizon:
@@ -247,7 +251,7 @@ class Plot:
             ymin, ymax = self.sim_ax.get_ylim()
             self.sim_ax.set_ylim([ymin + offset[1], ymax + offset[1]])
 
-    def update_obstacles(self, polygons: List = None, obstacles: List = None, obs_idx: int = None) -> None:
+    def update_obstacles(self, polygons: List = None, obstacles: List = None, obs_idx: int = None, update_patch: bool = False) -> None:
         if polygons:
             for poly, patch in zip(polygons, self.sim_obs_patches):
                 heading = poly.body.angle
@@ -258,15 +262,23 @@ class Plot:
                 patch.set_xy(vs)
 
         elif obstacles:
-            for obs, patch in zip(obstacles, self.sim_obs_patches):
-                patch.set_xy(obs)
+            if update_patch:
+                for patch in self.sim_obs_patches:
+                    if patch.get_gid() == obs_idx:
+                        patch.remove()
+                        self.sim_obs_patches.remove(patch)
+                        self.sim_fig.canvas.draw_idle()
+
+            else:
+                for obs, patch in zip(obstacles, self.sim_obs_patches):
+                    patch.set_xy(obs)
             
-            if obs_idx is not None:
-                for i in range(len(self.sim_obs_patches)):
-                    if i == obs_idx:
-                        self.sim_obs_patches[i].set_facecolor('red')  # Change fill color
-                    else:
-                        self.sim_obs_patches[i].set_facecolor('lightblue')  # Change fill color
+                if obs_idx is not None:
+                    for i in range(len(self.sim_obs_patches)):
+                        if i == obs_idx:
+                            self.sim_obs_patches[i].set_facecolor('red')  # Change fill color
+                        else:
+                            self.sim_obs_patches[i].set_facecolor('lightblue')  # Change fill color
             
 
 

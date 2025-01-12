@@ -17,7 +17,7 @@ from benchnpin.common.evaluation.metrics import total_work_done
 from benchnpin.common.geometry.polygon import poly_area
 from benchnpin.common.ship import Ship as Robot
 from benchnpin.common.utils.plot_pushing import Plot
-from benchnpin.common.utils.sim_utils import generate_sim_obs, generate_sim_bounds, generate_sim_corners
+from benchnpin.common.utils.sim_utils import generate_sim_cubes, generate_sim_bounds, generate_sim_corners
 from benchnpin.common.geometry.polygon import poly_centroid
 from benchnpin.common.utils.utils import DotDict
 from benchnpin.common.occupancy_grid.occupancy_map import OccupancyGrid
@@ -40,10 +40,8 @@ SMALL_LEFT = 6
 SMALL_RIGHT = 7
 
 ROBOT_HALF_WIDTH = 0.03
-CUBE_WIDTH = 0.044*10
 CUBE_MASS = 0.01
 WALL_THICKNESS = 1.4*10
-RECEPTACLE_WIDTH = 0.15*10
 
 class ObjectPushing(gym.Env):
     """Custom Environment that follows gym interface"""
@@ -80,8 +78,8 @@ class ObjectPushing(gym.Env):
         self.low_dim_state = self.cfg.low_dim_state
         if self.low_dim_state:
             self.fixed_trial_idx = self.cfg.fixed_trial_idx
-            if self.cfg.randomize_obstacles:
-                self.observation_space = spaces.Box(low=-10, high=30, shape=(self.cfg.num_obstacles * 2,), dtype=np.float64)
+            if self.cfg.randomize_cubes:
+                self.observation_space = spaces.Box(low=-10, high=30, shape=(self.cfg.num_cubes * 2,), dtype=np.float64)
             else:
                 self.observation_space = spaces.Box(low=-10, high=30, shape=(6,), dtype=np.float64)
 
@@ -141,6 +139,9 @@ class ObjectPushing(gym.Env):
         # keep track of contact points
         self.contact_pts = []
 
+        # keep track of cubes pushed into receptacle
+        self.cumulative_cubes = 0
+
         # setup a collision callback to keep track of total ke
         # def pre_solve_handler(arbiter, space, data):
         #     nonlocal ship_ke
@@ -177,6 +178,9 @@ class ObjectPushing(gym.Env):
 
         def boundary_collision_begin(arbiter, space, data):
             return True
+        
+        def recept_collision_begin(arbiter, space, data):
+            return False
 
         # handler = space.add_default_collision_handler()
         self.handler = self.space.add_collision_handler(1, 2)
@@ -188,47 +192,59 @@ class ObjectPushing(gym.Env):
         self.boundary_handler = self.space.add_collision_handler(1, 3)
         self.boundary_handler.begin = boundary_collision_begin
 
-        
+        self.robot_recept_handler = self.space.add_collision_handler(1, 4)
+        self.robot_recept_handler.begin = recept_collision_begin
+
+        self.cube_recept_handler = self.space.add_collision_handler(2, 4)
+        self.cube_recept_handler.begin = recept_collision_begin
         
     def init_ship_ice_env(self):
 
         # generate random start point, if specified
         if self.cfg.random_start:
-            x_start = 1 + random.random() * (self.cfg.start_x_range - 1)    # [1, start_x_range]
-            self.start = (x_start, 1.0, np.pi / 2)
+            length = self.cfg.ship.length
+            width = self.cfg.ship.width
+            size = max(length, width)
+            x_start = random.uniform(-self.cfg.env.room_length / 2 + size, self.cfg.env.room_length / 2 - size)
+            y_start = random.uniform(-self.cfg.env.room_width / 2 + size, self.cfg.env.room_width / 2 - size)
+            heading = random.uniform(0, 2 * np.pi)
+            self.start = (x_start, y_start, heading)
         else:
             self.start = (5, 1.5, np.pi*3/2)
-            # self.start = (5, 1.5, np.pi/2)
 
         self.boundary_dicts = self.generate_boundary()
-        self.corner_dicts = self.generate_corners()
 
-        # if self.cfg.randomize_obstacles:
-        #     self.randomize_obstacles()
+        # if self.cfg.randomize_cubes:
+        #     self.randomize_cubes()
 
-        self.obs_dicts = self.generate_obstacles()
+        self.cubes_dicts = self.generate_cubes()
         
-        # filter out obstacles that have zero area
-        self.obs_dicts[:] = [ob for ob in self.obs_dicts if poly_area(ob['vertices']) != 0]
-        self.obstacles = [ob['vertices'] for ob in self.obs_dicts]
+        # filter out cubes that have zero area NOTE probably not needed
+        self.cubes_dicts[:] = [c for c in self.cubes_dicts if poly_area(c['vertices']) != 0]
+        self.cubes = [c['vertices'] for c in self.cubes_dicts]
 
         self.goal = (0, self.cfg.goal_y)
 
         # initialize ship sim objects
-        self.polygons = generate_sim_obs(self.space, self.obs_dicts, self.cfg.sim.obstacle_density)
+        self.polygons = generate_sim_cubes(self.space, self.cubes_dicts, self.cfg.sim.cube_density)
         self.boundaries = generate_sim_bounds(self.space, self.boundary_dicts, density=1)
-        self.corners = generate_sim_corners(self.space, self.corner_dicts, density=1)
         for p in self.polygons:
             p.collision_type = 2
         for b in self.boundaries:
             b.collision_type = 3
+            if b.label == 'receptacle':
+                b.collision_type = 4
+
         # Get vertices of corners (after they have been moved to proper spots)
-        for dict, corner in zip(self.corner_dicts, self.corners):
+        corner_dicts = [obstacle for obstacle in self.boundary_dicts if obstacle['type'] == 'corner']
+        corner_polys = [shape for shape in self.boundaries if getattr(shape, 'label', None) == 'corner']
+        for dict in corner_dicts:
             dict['vertices'] = []
-            for poly in corner:
-                vs = poly.get_vertices()
-                transformed_vertices = [poly.body.local_to_world(v) for v in vs]
-                dict['vertices'].append(transformed_vertices)
+            for i in range(3):
+                vs = corner_polys[0].get_vertices()
+                transformed_vertices = [corner_polys[0].body.local_to_world(v) for v in vs]
+                dict['vertices'].append(np.array([[v.x, v.y] for v in transformed_vertices]))
+                corner_polys.pop(0)
 
 
         self.ship_body, self.ship_shape = Robot.sim(self.cfg.ship.vertices, self.start, body_type=pymunk.Body.DYNAMIC)
@@ -239,35 +255,13 @@ class ObjectPushing(gym.Env):
             self.space.step(self.dt / self.steps)
         self.prev_obs = CostMap.get_obs_from_poly(self.polygons)
 
+    def get_receptacle_position_and_size(self):
+        size = self.cfg.env.receptacle_width
+        return [self.cfg.env.room_length / 2 - size / 2, self.cfg.env.room_width / 2 - size / 2, size]
+
     def generate_boundary(self):
-        '''
-        b_size = 0.5
-        boundaries = []
-        boundaries.append([0, 0, 10, 0])
-        boundaries.append([0, 0, 0, 10])
-        
         boundary_dicts = []
-        for b_x1, b_y1, b_x2, b_y2 in boundaries:
-            boundary_info = {}
-            if b_x1 == b_x2:  # Vertical line
-                boundary_info['vertices'] = np.array([[b_x1 - b_size, b_y1], 
-                                                      [b_x2 + b_size, b_y1],
-                                                      [b_x2 + b_size, b_y2], 
-                                                      [b_x1 - b_size, b_y2]
-                ])
-            elif b_y1 == b_y2:  # Horizontal line
-                boundary_info['vertices'] = np.array([[b_x1, b_y1 - b_size],
-                                                      [b_x2, b_y2 - b_size],
-                                                      [b_x2, b_y2 + b_size],
-                                                      [b_x1, b_y1 + b_size]
-                ])
-            else:
-                raise ValueError("Only vertical and horizontal lines are supported")
-            
-            # boundary_info['segment'] = [(b_x1, b_y1), (b_x2, b_y2)]
-            boundary_dicts.append(boundary_info)
-            '''
-        boundary_dicts = []
+        # generate walls
         for x, y, length, width in [
             (-self.cfg.env.room_length / 2 - WALL_THICKNESS / 2, 0, WALL_THICKNESS, self.cfg.env.room_width),
             (self.cfg.env.room_length / 2 + WALL_THICKNESS / 2, 0, WALL_THICKNESS, self.cfg.env.room_width),
@@ -278,29 +272,117 @@ class ObjectPushing(gym.Env):
             boundary_dicts.append(
                 {'type': 'wall',
                  'vertices': np.array([
-                    [x - length / 2, y - width / 2],  # Bottom-left
-                    [x + length / 2, y - width / 2],  # Bottom-right
-                    [x + length / 2, y + width / 2],  # Top-right
-                    [x - length / 2, y + width / 2],  # Top-left
+                    [x - length / 2, y - width / 2],  # bottom-left
+                    [x + length / 2, y - width / 2],  # bottom-right
+                    [x + length / 2, y + width / 2],  # top-right
+                    [x - length / 2, y + width / 2],  # top-left
                 ])
             })
+        
+        # generate receptacle
+        x, y, size = self.get_receptacle_position_and_size()
+        boundary_dicts.append(
+            {'type': 'receptacle',
+             'position': (x, y),
+             'vertices': np.array([
+                [x - size / 2, y - size / 2],  # bottom-left
+                [x + size / 2, y - size / 2],  # bottom-right
+                [x + size / 2, y + size / 2],  # top-right
+                [x - size / 2, y + size / 2],  # top-left
+            ]),
+            'length': size,
+            'width': size
+        })
+        
+        def add_random_columns(obstacles, max_num_columns):
+            num_columns = random.randint(1, max_num_columns) # NOTE need to be able to manually set seed
+            column_length = 1
+            column_width = 1
+            buffer_width = 0.8
+            col_min_dist = 1.2
+            cols_dict = []
 
+            new_cols = []
+            for _ in range(num_columns):
+                for _ in range(100): # try 100 times to generate a column that doesn't overlap with existing columns
+                    x = random.uniform(-self.cfg.env.room_length / 2 + 2 * buffer_width + column_length / 2,
+                                        self.cfg.env.room_length / 2 - 2 * buffer_width - column_length / 2)
+                    y = random.uniform(-self.cfg.env.room_width / 2 + 2 * buffer_width + column_width / 2,
+                                        self.cfg.env.room_width / 2 - 2 * buffer_width - column_width / 2)
+                    
+                    overlapped = False
+                    rx, ry, size = self.get_receptacle_position_and_size()
+                    if ((x - rx)**2 + (y - ry)**2)**(0.5) <= col_min_dist / 2 + size / 2:
+                        overlapped = True
+                        break
+                    for prev_col in new_cols:
+                        if ((x - prev_col[0])**2 + (y - prev_col[1])**2)**(0.5) <= col_min_dist:
+                            overlapped = True
+                            break
+
+                    if not overlapped:
+                        new_cols.append([x, y])
+                        break
+
+            for x, y in new_cols:
+                cols_dict.append({'type': 'column',
+                                  'position': (x, y),
+                                  'vertices': np.array([
+                                      [x - column_length / 2, y - column_width / 2],  # bottom-left
+                                      [x + column_length / 2, y - column_width / 2],  # bottom-right
+                                      [x + column_length / 2, y + column_width / 2],  # top-right
+                                      [x - column_length / 2, y + column_width / 2],  # top-left
+                                      ]),
+                                  'length': column_length,
+                                  'width': column_width
+                                })
+            return cols_dict
         
-        # boundary_dicts.append({
-        #     'vertices': np.array([
-        #         [0, 0],
-        #         [0, -1],
-        #         [0.5*np.sin(22.5*np.pi/180), -1 + 0.5*np.cos(22.5*np.pi/180)],
-        #         [1 - 0.5*np.cos(22.5*np.pi/180), -0.5*np.sin(22.5*np.pi/180)],
-        #         [1, 0],
-        #     ])
-        # })
+        def add_random_horiz_divider():
+            divider_length = 8
+            divider_width = 0.5
+            buffer_width = 3.5
+
+            new_divider = []
+            for _ in range(100): # try 100 times to generate a divider that doesn't overlap with existing obstacles
+                if len(new_divider) == 1:
+                    break
+
+                x = self.cfg.env.room_length / 2 - divider_length / 2
+                y = random.uniform(-self.cfg.env.room_width / 2 + buffer_width + divider_width / 2,
+                                    self.cfg.env.room_width / 2 - buffer_width - divider_width / 2)
+
+                new_divider.append([x, y])
+            
+            divider_dicts = []
+            for x, y in new_divider:
+                divider_dicts.append({'type': 'divider',
+                                      'position': (x, y),
+                                      'vertices': np.array([
+                                          [x - divider_length / 2, y - divider_width / 2],  # bottom-left
+                                          [x + divider_length / 2, y - divider_width / 2],  # bottom-right
+                                          [x + divider_length / 2, y + divider_width / 2],  # top-right
+                                          [x - divider_length / 2, y + divider_width / 2],  # top-left
+                                          ]),
+                                        'length': divider_length,
+                                        'width': divider_width
+                                    })
+            return divider_dicts
+                    
         
-        return boundary_dicts
-    
-    def generate_corners(self):
-        # Corner
-        corner_dicts = []
+        # generate obstacles
+        if self.cfg.env.obstacle_config == 'small_empty':
+            pass
+        elif self.cfg.env.obstacle_config == 'small_columns':
+            boundary_dicts.extend(add_random_columns(boundary_dicts, 3))
+        elif self.cfg.env.obstacle_config == 'large_columns':
+            boundary_dicts.extend(add_random_columns(boundary_dicts, 8))
+        elif self.cfg.env.obstacle_config == 'large_divider':
+            boundary_dicts.extend(add_random_horiz_divider())
+        else:
+            raise ValueError(f'Invalid obstacle config: {self.cfg.env.obstacle_config}')
+        
+        # generate corners
         for i, (x, y) in enumerate([
             (-self.cfg.env.room_length / 2, self.cfg.env.room_width / 2),
             (self.cfg.env.room_length / 2, self.cfg.env.room_width / 2),
@@ -310,61 +392,91 @@ class ObjectPushing(gym.Env):
             if i == 1: # Skip the receptacle corner
                 continue
             heading = -np.radians(i * 90)
-            corner_dicts.append(
+            boundary_dicts.append(
                 {'type': 'corner',
                  'position': (x, y),
                  'heading': heading,
                 })
-        return corner_dicts
+            
+        # generate corners for divider
+        for obstacle in boundary_dicts:
+            if obstacle['type'] == 'divider':
+                (x, y), length, width = obstacle['position'], obstacle['length'], obstacle['width']
+                corner_positions = [(self.cfg.env.room_length / 2, y - width / 2), (self.cfg.env.room_length / 2, y + width / 2)]
+                corner_headings = [-90, 180]
+                for position, heading in zip(corner_positions, corner_headings):
+                    heading = np.radians(heading)
+                    boundary_dicts.append(
+                        {'type': 'corner',
+                        'position': position,
+                        'heading': heading,
+                        })
 
-    def generate_obstacles(self):
-        obs_size = self.cfg.obstacle_size
-        obstacles = []          # a list storing non-overlapping obstacle centers
+        return boundary_dicts
 
-        if self.cfg.randomize_obstacles:
-            total_obs_required = self.cfg.num_obstacles
-            self.num_box = self.cfg.num_obstacles
-            obs_min_dist = self.cfg.min_obs_dist
-            min_x = self.cfg.min_obs_x
-            max_x = self.cfg.max_obs_x
-            min_y = self.cfg.min_obs_y
-            max_y = self.cfg.max_obs_y
+    def generate_cubes(self):
+        cubes_size = self.cfg.cube_size / 2
+        cubes = []          # a list storing non-overlapping cube centers
 
-            obs_count = 0
-            while obs_count < total_obs_required:
-                center_x = random.random() * (max_x - min_x) + min_x
-                center_y = random.random() * (max_y - min_y) + min_y
+        if self.cfg.randomize_cubes:
+            total_cubes_required = self.cfg.num_cubes
+            self.num_box = self.cfg.num_cubes
+            cube_min_dist = self.cfg.min_cube_dist
+            min_x = self.cfg.min_cube_x
+            max_x = self.cfg.max_cube_x
+            min_y = self.cfg.min_cube_y
+            max_y = self.cfg.max_cube_y
 
-                # loop through previous obstacles to check for overlap
+            cube_count = 0
+            while cube_count < total_cubes_required:
+                center_x = random.uniform(min_x, max_x)
+                center_y = random.uniform(min_y, max_y)
+                heading = random.uniform(0, 2 * np.pi)
+
+                # loop through previous cubes to check for overlap
                 overlapped = False
-                for prev_obs_x, pre_obs_y in obstacles:
-                    if ((center_x - prev_obs_x)**2 + (center_y - pre_obs_y)**2)**(0.5) <= obs_min_dist:
+                for obstacle in self.boundary_dicts:
+                    if obstacle['type'] == 'corner' or obstacle['type'] == 'wall':
+                        continue
+                    # print("obstacle: ", obstacle)
+                    if ((center_x - obstacle['position'][0])**2 + (center_y - obstacle['position'][1])**2)**(0.5) <= (cube_min_dist / 2 + obstacle['width'] / 2) * 1.2:
+                        overlapped = True
+                        break
+                for prev_cube_x, pre_cube_y, _ in cubes:
+                    if ((center_x - prev_cube_x)**2 + (center_y - pre_cube_y)**2)**(0.5) <= cube_min_dist:
                         overlapped = True
                         break
                 
                 if not overlapped:
-                    obstacles.append([center_x, center_y])
-                    obs_count += 1
+                    cubes.append([center_x, center_y, heading])
+                    cube_count += 1
         
         else:
-            obstacles.append([-0.5, -0.5])
-            # obstacles.append([3, 7])
-            # obstacles.append([13, 8])
-            self.num_box = 1
+            cubes.append([3, 2, 0])
+            cubes.append([3, 1.5, 0])
+            cubes.append([3, 1, 0])
+            cubes.append([3, 3, 0])
+            self.num_box = 4
         
-        # convert to obs dict
-        obs_dict = []
-        for obs_x, obs_y in obstacles:
-            obs_info = {}
-            obs_info['centre'] = np.array([obs_x, obs_y])
-            obs_info['vertices'] = np.array([[obs_x + obs_size, obs_y + obs_size], 
-                                    [obs_x - obs_size, obs_y + obs_size], 
-                                    [obs_x - obs_size, obs_y - obs_size], 
-                                    [obs_x + obs_size, obs_y - obs_size]])
-            obs_dict.append(obs_info)
-        return obs_dict
+        # convert to cubes dict
+        cubes_dict = []
+        for i, [cubes_x, cubes_y, cubes_heading] in enumerate(cubes):
+            cubes_info = {}
+            cubes_info['centre'] = np.array([cubes_x, cubes_y])
+            cubes_info['vertices'] = np.array([[cubes_x + cubes_size, cubes_y + cubes_size], 
+                                    [cubes_x - cubes_size, cubes_y + cubes_size], 
+                                    [cubes_x - cubes_size, cubes_y - cubes_size], 
+                                    [cubes_x + cubes_size, cubes_y - cubes_size]])
+            cubes_info['heading'] = cubes_heading
+            cubes_info['idx'] = i
+            cubes_dict.append(cubes_info)
+        return cubes_dict
 
-        
+    def cube_position_in_receptacle(self, cube_position):
+        x, y, size = self.get_receptacle_position_and_size()
+        if x - size / 2 <= cube_position[0] <= x + size / 2 and y - size / 2 <= cube_position[1] <= y + size / 2:
+            return True
+        return False
 
     def reset(self, seed=None, options=None):
         """Resets the environment to the initial state and returns the initial observation."""
@@ -384,23 +496,23 @@ class ObjectPushing(gym.Env):
             self.plot.close()
 
         self.plot = Plot(
-                np.zeros((self.cfg.costmap.m, self.cfg.costmap.n)), self.obs_dicts,
+                np.zeros((self.cfg.costmap.m, self.cfg.costmap.n)), self.cubes_dicts,
                 ship_pos=self.start, ship_vertices=np.asarray(self.ship_shape.get_vertices()),
                 map_figsize=None, y_axis_limit=self.cfg.plot.y_axis_limit, inf_stream=False, goal=self.goal[1], 
-                path=np.zeros((3, 50)), boundaries=self.boundary_dicts, corners=self.corner_dicts
+                path=np.zeros((3, 50)), boundaries=self.boundary_dicts
             )
 
-        # get updated obstacles
-        updated_obstacles = CostMap.get_obs_from_poly(self.polygons)
+        # get updated cubes
+        updated_cubes = CostMap.get_obs_from_poly(self.polygons)
         info = {'state': (round(self.ship_body.position.x, 2),
                                 round(self.ship_body.position.y, 2),
                                 round(self.ship_body.angle, 2)), 
                 'total_work': self.total_work[0], 
-                'obs': updated_obstacles, 
+                'cubes': updated_cubes, 
                 'box_count': 0}
 
         if self.low_dim_state:
-            observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles)
+            observation = self.generate_observation_low_dim(updated_cubes=updated_cubes)
 
         else:
             observation = self.generate_observation()
@@ -470,16 +582,16 @@ class ObjectPushing(gym.Env):
         # if self.ship_body.position.x > self.cfg.occ.map_width and abs(self.ship_body.position.x - self.cfg.occ.map_width) >= self.boundary_violation_limit:
         #     boundary_violation_terminal = True
             
-        # get updated obstacles
-        updated_obstacles = CostMap.get_obs_from_poly(self.polygons)
-        num_completed, all_boxes_completed = self.boxes_completed(updated_obstacles=updated_obstacles)
+        # get updated cubes
+        all_boxes_completed = self.boxes_completed()
+        updated_cubes = CostMap.get_obs_from_poly(self.polygons)
 
         # compute work done
-        work = total_work_done(self.prev_obs, updated_obstacles)
+        work = total_work_done(self.prev_obs, updated_cubes)
         self.total_work[0] += work
         self.total_work[1].append(work)
-        self.prev_obs = updated_obstacles
-        self.obstacles = updated_obstacles
+        self.prev_obs = updated_cubes
+        self.cubes = updated_cubes
 
         # check episode terminal condition
         if all_boxes_completed:
@@ -514,26 +626,26 @@ class ObjectPushing(gym.Env):
                 'collision reward': collision_reward, 
                 'scaled collision reward': collision_reward * self.beta, 
                 'dist reward': dist_reward, 
-                'obs': updated_obstacles, 
-                'box_count': num_completed}
+                'cubes': updated_cubes, 
+                'box_count': self.cumulative_cubes}
         
         # generate observation
         if self.low_dim_state:
-            observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles)
+            observation = self.generate_observation_low_dim(updated_cubes=updated_cubes)
         else:
             observation = self.generate_observation()
         
         return observation, reward, terminated, False, info
 
 
-    def generate_observation_low_dim(self, updated_obstacles):
+    def generate_observation_low_dim(self, updated_cubes):
         """
-        The observation is a vector of shape (num_obstacles * 2) specifying the 2d position of the obstacles
+        The observation is a vector of shape (num_cubes * 2) specifying the 2d position of the cubes
         <obs1_x, obs1_y, obs2_x, obs2_y, ..., obsn_x, obsn_y>
         """
-        observation = np.zeros((len(updated_obstacles) * 2))
-        for i in range(len(updated_obstacles)):
-            obs = updated_obstacles[i]
+        observation = np.zeros((len(updated_cubes) * 2))
+        for i in range(len(updated_cubes)):
+            obs = updated_cubes[i]
             center = np.abs(poly_centroid(obs))
             observation[i * 2] = center[0]
             observation[i * 2 + 1] = center[1]
@@ -549,18 +661,18 @@ class ObjectPushing(gym.Env):
     def generate_observation(self):
         # compute occupancy map observation  (40, 12)
         if self.occupancy.map_height == 40:
-            raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, ice_binary_w=235, ice_binary_h=774)
+            raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.cubes, ice_binary_w=235, ice_binary_h=774)
 
         elif self.occupancy.map_height == 20 and self.occupancy.map_width == 12:
-            raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, ice_binary_w=235, ice_binary_h=387)
+            raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.cubes, ice_binary_w=235, ice_binary_h=387)
 
         elif self.occupancy.map_height == 20 and self.occupancy.map_width == 6:
-            raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, ice_binary_w=118, ice_binary_h=387)
+            raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.cubes, ice_binary_w=118, ice_binary_h=387)
 
         elif self.occupancy.map_height == 10 and self.occupancy.map_width == 6:
-            raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, ice_binary_w=118, ice_binary_h=192)
+            raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.cubes, ice_binary_w=118, ice_binary_h=192)
         else:
-            raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, ice_binary_w=235, ice_binary_h=1355)
+            raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.cubes, ice_binary_w=235, ice_binary_h=1355)
         self.occupancy.compute_con_gridmap(raw_ice_binary=raw_ice_binary, save_fig_dir=None)
         occupancy = np.copy(self.occupancy.occ_map)         # (H, W)
 
@@ -573,22 +685,24 @@ class ObjectPushing(gym.Env):
         return observation
 
     
-    def boxes_completed(self, updated_obstacles):
+    def boxes_completed(self):
         """
         Returns a tuple: (int: number of boxes completed, bool: whether pushing task is complete)
         """
-        completed_count = 0
         completed = False
 
-        for obs in updated_obstacles:
-            center = np.abs(poly_centroid(obs))
-            if center[1] - self.cfg.obstacle_size >= self.cfg.goal_y:
-                completed_count += 1
+        for cube in self.polygons:
+            if self.cube_position_in_receptacle(cube.body.position):
+                self.cumulative_cubes += 1
+                self.space.remove(cube, cube.body)
+                self.polygons.remove(cube)
+                self.plot.update_obstacles(obstacles=CostMap.get_obs_from_poly(self.polygons), obs_idx=cube.idx, update_patch=True)
+
         
-        if completed_count == self.num_box:
+        if self.cumulative_cubes == self.num_box:
             completed = True
         
-        return completed_count, completed
+        return completed
 
 
 

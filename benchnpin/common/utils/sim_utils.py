@@ -18,16 +18,15 @@ def create_static(space, boundary, density):
     shape.density = density
     shape.elasticity = 0.01
     shape.friction = 1.0
+    shape.label = boundary['type']
     space.add(shape)
     return shape
 
 def generate_sim_bounds(space, bounds: List[dict], density):
-    return [
-        create_static(
-            space, bound, density=density
-        )
-        for bound in bounds
-    ]
+    shapes = [create_static(space, bound, density=density)
+              for bound in bounds if bound['type'] != 'corner']
+    shapes.extend(generate_sim_corners(space, [bound for bound in bounds if bound['type'] == 'corner'], density))
+    return shapes
 
 def create_corners(space, corner, density):
     # body = space.static_body
@@ -47,26 +46,30 @@ def create_corners(space, corner, density):
     
     for vs in [vs1, vs2, vs3]:
         body = pymunk.Body(body_type=pymunk.Body.STATIC)
+        body.position = corner['position']
+        body.angle = corner['heading']
+
         shape = pymunk.Poly(body, vs, radius=0.02)
         shape.density = density
         shape.elasticity = 0.01
         shape.friction = 1.0
-        shape.label = 'test'
-        body.position = corner['position']
-        body.angle = corner['heading']
+        shape.label = 'corner'
         space.add(body, shape)
         shapes.append(shape)
     return shapes
 
 def generate_sim_corners(space, corners: List[dict], density):
-    return [
-        create_corners(space, corner, density)
-        for corner in corners
-    ]
+    corner_shapes = []
+    for corner in corners:
+        cs = create_corners(space, corner, density)
+        for shape in cs:
+            corner_shapes.append(shape)
+    return corner_shapes
 
-def create_polygon(space, vertices, x, y, density):
+def create_polygon(space, vertices, x, y, density, heading=0, label='poly', idx=None):
     body = pymunk.Body(body_type=pymunk.Body.DYNAMIC)
     body.position = (x, y)
+    body.angle = heading
     dummy_shape = pymunk.Poly(None, vertices)
     centre_of_g = dummy_shape.center_of_gravity
     vs = [(x - centre_of_g[0], y - centre_of_g[1]) for x, y in vertices]
@@ -75,6 +78,8 @@ def create_polygon(space, vertices, x, y, density):
     shape.density = density
     shape.elasticity = 0.01
     shape.friction = 1.0
+    shape.label = label
+    shape.idx = idx
     space.add(body, shape)
     return shape
 
@@ -85,6 +90,15 @@ def generate_sim_obs(space, obstacles: List[dict], density):
             *obs['centre'], density=density
         )
         for obs in obstacles
+    ]
+
+def generate_sim_cubes(space, cubes: List[dict], density):
+    return [
+        create_polygon(
+            space, (cube['vertices'] - np.array(cube['centre'])).tolist(),
+            *cube['centre'], density=density, heading=cube['heading'], label='cube', idx=cube['idx']
+        )
+        for cube in cubes
     ]
 
 
