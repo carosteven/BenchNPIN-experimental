@@ -435,5 +435,5 @@ class ShipIceEnv(gym.Env):
 
 
     def close(self):
-        """Optional: close any resources or cleanup if necessary."""
-        pass
+        plt.close('all')
+        self.plot.close()
