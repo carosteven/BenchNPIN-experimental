@@ -179,6 +179,11 @@ class ObjectPushing(gym.Env):
         def boundary_collision_begin(arbiter, space, data):
             return True
         
+        def cube_boundary_pre_solve(arbiter, space, data):
+            cube_shape = arbiter.shapes[0]
+            self.prevent_cube_boundary_intersection(cube_shape)
+            return True
+        
         def recept_collision_begin(arbiter, space, data):
             return False
 
@@ -191,13 +196,59 @@ class ObjectPushing(gym.Env):
 
         self.boundary_handler = self.space.add_collision_handler(1, 3)
         self.boundary_handler.begin = boundary_collision_begin
+        
+        self.cube_boundary_handler = self.space.add_collision_handler(2, 3)
+        self.cube_boundary_handler.pre_solve = cube_boundary_pre_solve
 
         self.robot_recept_handler = self.space.add_collision_handler(1, 4)
         self.robot_recept_handler.begin = recept_collision_begin
 
         self.cube_recept_handler = self.space.add_collision_handler(2, 4)
         self.cube_recept_handler.begin = recept_collision_begin
-        
+
+    def is_point_inside_polygon(self, point, polygon_vertices):
+        # Ray-casting algorithm to check if a point is inside a polygon
+        x, y = point
+        n = len(polygon_vertices)
+        inside = False
+
+        p1x, p1y = polygon_vertices[0][:2]  # Unpack only the first two elements
+        for i in range(n + 1):
+            p2x, p2y = polygon_vertices[i % n][:2]  # Unpack only the first two elements
+            if y > min(p1y, p2y):
+                if y <= max(p1y, p2y):
+                    if x <= max(p1x, p2x):
+                        if p1y != p2y:
+                            xinters = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
+                        if p1x == p2x or x <= xinters:
+                            inside = not inside
+            p1x, p1y = p2x, p2y
+
+        return inside
+    
+    def prevent_cube_boundary_intersection(self, cube_shape):
+        cube_body = cube_shape.body
+        # Check if any vertex of the cube intersects with the boundary
+        cube_vertices = [cube_body.local_to_world(v) for v in cube_shape.get_vertices()]
+        new_position = pymunk.Vec2d(cube_body.position.x, cube_body.position.y)
+
+        # Check if the cube intersects with any dividers or columns
+        for obstacle in self.boundary_dicts:
+            if obstacle['type'] == 'divider' or obstacle['type'] == 'column' or obstacle['type'] == 'wall':
+                obstacle_vertices = obstacle['vertices']
+                for vertex in cube_vertices:
+                    if self.is_point_inside_polygon(vertex, obstacle_vertices):
+                        # Adjust the position of the cube to prevent intersection with the obstacle
+                        for vertex in cube_vertices:
+                            if self.is_point_inside_polygon(vertex, obstacle_vertices):
+                                # Move the cube away from the obstacle
+                                obstacle_center = np.mean(obstacle_vertices, axis=0)
+                                direction = pymunk.Vec2d(vertex[0], vertex[1]) - pymunk.Vec2d(obstacle_center[0], obstacle_center[1])
+                                direction = direction.normalized()
+                                new_position += direction * 0.1  # Move the cube slightly away from the obstacle
+                        cube_body.position = new_position
+                        break
+
     def init_ship_ice_env(self):
 
         # generate random start point, if specified
@@ -438,8 +489,12 @@ class ObjectPushing(gym.Env):
                 for obstacle in self.boundary_dicts:
                     if obstacle['type'] == 'corner' or obstacle['type'] == 'wall':
                         continue
-                    # print("obstacle: ", obstacle)
-                    if ((center_x - obstacle['position'][0])**2 + (center_y - obstacle['position'][1])**2)**(0.5) <= (cube_min_dist / 2 + obstacle['width'] / 2) * 1.2:
+                    elif obstacle['type'] == 'divider':
+                        # just check y distance
+                        if abs(center_y - obstacle['position'][1]) <= (cube_min_dist / 2 + obstacle['width'] / 2) * 1.2:
+                            overlapped = True
+                            break
+                    elif ((center_x - obstacle['position'][0])**2 + (center_y - obstacle['position'][1])**2)**(0.5) <= (cube_min_dist / 2 + obstacle['width'] / 2) * 1.2:
                         overlapped = True
                         break
                 for prev_cube_x, pre_cube_y, _ in cubes:
@@ -472,11 +527,17 @@ class ObjectPushing(gym.Env):
             cubes_dict.append(cubes_info)
         return cubes_dict
 
-    def cube_position_in_receptacle(self, cube_position):
+    def cube_position_in_receptacle(self, cube_vertices):
         x, y, size = self.get_receptacle_position_and_size()
-        if x - size / 2 <= cube_position[0] <= x + size / 2 and y - size / 2 <= cube_position[1] <= y + size / 2:
-            return True
-        return False
+        receptacle_min_x = x - size / 2
+        receptacle_max_x = x + size / 2
+        receptacle_min_y = y - size / 2
+        receptacle_max_y = y + size / 2
+    
+        for vertex in cube_vertices:
+            if not (receptacle_min_x <= vertex[0] <= receptacle_max_x and receptacle_min_y <= vertex[1] <= receptacle_max_y):
+                return False
+        return True
 
     def reset(self, seed=None, options=None):
         """Resets the environment to the initial state and returns the initial observation."""
@@ -691,8 +752,8 @@ class ObjectPushing(gym.Env):
         """
         completed = False
 
-        for cube in self.polygons:
-            if self.cube_position_in_receptacle(cube.body.position):
+        for cube, vertices in zip(self.polygons, self.cubes):
+            if self.cube_position_in_receptacle(vertices):
                 self.cumulative_cubes += 1
                 self.space.remove(cube, cube.body)
                 self.polygons.remove(cube)

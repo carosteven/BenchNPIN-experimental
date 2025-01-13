@@ -11,8 +11,8 @@ plot:
 demo_mode: true     # when using demo mode, control both forward and angular speed
 
 # cubes information
-randomize_cubes: false
-num_cubes: 5
+randomize_cubes: true
+num_cubes: 10
 cube_size: 0.44
 min_cube_dist: 0.62       # minimum cube distance during random initialization
 max_cube_x: 4
@@ -130,7 +130,7 @@ controller:
 
 ### ENVIRONMENT PARAMS
 env:
-  obstacle_config: small_empty # options are small_empty, small_columns, large_columns, large_divider
+  obstacle_config: large_divider # options are small_empty, small_columns, large_columns, large_divider
   room_length: 10
-  room_width: 5 # 5 for small, 10 for large
+  room_width: 10 # 5 for small, 10 for large
   receptacle_width: 1.5
