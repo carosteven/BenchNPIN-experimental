@@ -12,10 +12,11 @@ shapely
 scikit-image
 pymunk==6.5.1
 pycpd
-opencv-python-headless==4.5.2.54
+opencv-python-headless==4.9.0.80
 packcircles
 torch
 torchsummary
 torchvision
 gymnasium
+pynput
 git+https://github.com/rdesc/pydubins.git
