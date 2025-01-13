@@ -23,7 +23,7 @@ After following the installation steps, run
 ```bash
 python tests/env_test.py
 ```
-This script runs a straight-line policy. Note that step visualizations will be dumped to the `/logs` folder.
+This script runs a straight-line policy and renders the visualization of the simulation.
 
 ### Running a simple demo for autonomous ship planning
 ```bash

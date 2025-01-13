@@ -17,3 +17,5 @@ for i in range(500):
     observation, reward, terminated, truncated, info = env.step(action)
 
     print(observation.shape)
+
+    env.render()
