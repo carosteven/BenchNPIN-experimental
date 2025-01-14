@@ -22,6 +22,10 @@ from benchnpin.common.geometry.polygon import poly_centroid
 from benchnpin.common.utils.utils import DotDict
 from benchnpin.common.occupancy_grid.occupancy_map import OccupancyGrid
 
+# SAM imports
+from scipy.ndimage import rotate as rotate_image
+from cv2 import fillPoly
+
 R = lambda theta: np.asarray([
     [np.cos(theta), -np.sin(theta)],
     [np.sin(theta), np.cos(theta)]
@@ -39,9 +43,19 @@ BACKWARD = 5
 SMALL_LEFT = 6
 SMALL_RIGHT = 7
 
-ROBOT_HALF_WIDTH = 0.03
 CUBE_MASS = 0.01
 WALL_THICKNESS = 1.4*10
+
+LOCAL_MAP_PIXEL_WIDTH = 96
+LOCAL_MAP_WIDTH = 10 # 10 meters
+LOCAL_MAP_PIXELS_PER_METER = LOCAL_MAP_PIXEL_WIDTH / LOCAL_MAP_WIDTH
+
+OBSTACLE_SEG_INDEX = 0
+FLOOR_SEG_INDEX = 1
+RECEPTACLE_SEG_INDEX = 3
+CUBE_SEG_INDEX = 4
+ROBOT_SEG_INDEX = 5
+MAX_SEG_INDEX = 8
 
 class ObjectPushing(gym.Env):
     """Custom Environment that follows gym interface"""
@@ -57,8 +71,22 @@ class ObjectPushing(gym.Env):
         cfg_file = os.path.join(self.current_dir, 'config.yaml')
 
         cfg = DotDict.load_from_file(cfg_file)
-        self.occupancy = OccupancyGrid(grid_width=cfg.occ.grid_size, grid_height=cfg.occ.grid_size, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, ship_body=None)
+        # self.occupancy = OccupancyGrid(grid_width=cfg.occ.grid_size, grid_height=cfg.occ.grid_size, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, ship_body=None)
         self.cfg = cfg
+
+        # State
+        self.observation = None
+        self.global_overhead_map = None
+
+        # Robot state
+        robot_pixel_width = int(np.ceil(self.cfg.ship.length * LOCAL_MAP_PIXELS_PER_METER))
+        self.robot_state_channel = np.zeros((LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH), dtype=np.float32)
+        start = int(np.floor(LOCAL_MAP_PIXEL_WIDTH / 2 - robot_pixel_width / 2))
+        for i in range(start, start + robot_pixel_width):
+            for j in range(start, start + robot_pixel_width):
+                # Circular robot mask
+                if (((i + 0.5) - LOCAL_MAP_PIXEL_WIDTH / 2)**2 + ((j + 0.5) - LOCAL_MAP_PIXEL_WIDTH / 2)**2)**0.5 < robot_pixel_width / 2:
+                    self.robot_state_channel[i, j] = 1
 
         self.env_max_trial = 4000
 
@@ -84,14 +112,16 @@ class ObjectPushing(gym.Env):
                 self.observation_space = spaces.Box(low=-10, high=30, shape=(6,), dtype=np.float64)
 
         else:
-            self.observation_shape = (2, self.occupancy.occ_map_height, self.occupancy.occ_map_width)
-            self.observation_space = spaces.Box(low=0, high=1, shape=self.observation_shape, dtype=np.float64)
+            # self.observation_shape = (2, self.occupancy.occ_map_height, self.occupancy.occ_map_width)
+            # self.observation_space = spaces.Box(low=0, high=1, shape=self.observation_shape, dtype=np.float64)
+            self.observation_shape = (2, LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH)
+            self.observation_space = spaces.Box(low=0, high=1, shape=self.observation_shape, dtype=np.float32)
 
         self.yaw_lim = (0, np.pi)       # lower and upper limit of ship yaw  
         self.boundary_violation_limit = 0.0       # if the ship is out of boundary more than this limit, terminate and truncate the episode 
 
         self.plot = None
-        self.con_fig, self.con_ax = plt.subplots(figsize=(10, 10))
+        # self.con_fig, self.con_ax = plt.subplots(figsize=(10, 10))
 
 
         if self.cfg.demo_mode:
@@ -100,7 +130,14 @@ class ObjectPushing(gym.Env):
             self.linear_speed = 0.0
             self.linear_speed_increment = 0.02
 
-        plt.ion()  # Interactive mode on
+            # show state
+            num_plots = 2
+            self.state_plot = plt
+            self.state_fig, self.state_ax = self.state_plot.subplots(1, num_plots, figsize=(4 * num_plots, 6))
+            self.colorbars = [None] * num_plots
+            self.state_plot.ion()  # Interactive mode on
+
+        # plt.ion()  # Interactive mode on
         
 
     def init_ship_ice_sim(self):
@@ -299,6 +336,7 @@ class ObjectPushing(gym.Env):
 
 
         self.ship_body, self.ship_shape = Robot.sim(self.cfg.ship.vertices, self.start, body_type=pymunk.Body.DYNAMIC)
+        self.ship_shape.label = 'robot'
         self.ship_shape.collision_type = 1
         self.space.add(self.ship_body, self.ship_shape)
         # run initial simulation steps to let environment settle
@@ -312,6 +350,21 @@ class ObjectPushing(gym.Env):
 
     def generate_boundary(self):
         boundary_dicts = []
+        # generate receptacle
+        x, y, size = self.get_receptacle_position_and_size()
+        boundary_dicts.append(
+            {'type': 'receptacle',
+             'position': (x, y),
+             'vertices': np.array([
+                [x - size / 2, y - size / 2],  # bottom-left
+                [x + size / 2, y - size / 2],  # bottom-right
+                [x + size / 2, y + size / 2],  # top-right
+                [x - size / 2, y + size / 2],  # top-left
+            ]),
+            'length': size,
+            'width': size
+        })
+        
         # generate walls
         for x, y, length, width in [
             (-self.cfg.env.room_length / 2 - WALL_THICKNESS / 2, 0, WALL_THICKNESS, self.cfg.env.room_width),
@@ -329,21 +382,6 @@ class ObjectPushing(gym.Env):
                     [x - length / 2, y + width / 2],  # top-left
                 ])
             })
-        
-        # generate receptacle
-        x, y, size = self.get_receptacle_position_and_size()
-        boundary_dicts.append(
-            {'type': 'receptacle',
-             'position': (x, y),
-             'vertices': np.array([
-                [x - size / 2, y - size / 2],  # bottom-left
-                [x + size / 2, y - size / 2],  # bottom-right
-                [x + size / 2, y + size / 2],  # top-right
-                [x - size / 2, y + size / 2],  # top-left
-            ]),
-            'length': size,
-            'width': size
-        })
         
         def add_random_columns(obstacles, max_num_columns):
             num_columns = random.randint(1, max_num_columns) # NOTE need to be able to manually set seed
@@ -550,6 +588,10 @@ class ObjectPushing(gym.Env):
         self.init_ship_ice_sim()
         self.init_ship_ice_env()
 
+        # reset map
+        self.global_overhead_map = self.create_padded_room_zeros()
+        self.update_global_overhead_map()
+
         self.t = 0
         
         # close figure before opening new ones
@@ -692,11 +734,11 @@ class ObjectPushing(gym.Env):
         
         # generate observation
         if self.low_dim_state:
-            observation = self.generate_observation_low_dim(updated_cubes=updated_cubes)
+            self.observation = self.generate_observation_low_dim(updated_cubes=updated_cubes)
         else:
-            observation = self.generate_observation()
+            self.observation = self.generate_observation()
         
-        return observation, reward, terminated, False, info
+        return self.observation, reward, terminated, False, info
 
 
     def generate_observation_low_dim(self, updated_cubes):
@@ -719,7 +761,8 @@ class ObjectPushing(gym.Env):
         self.path = new_path
     
 
-    def generate_observation(self):
+    def generate_observation(self, done=False):
+        '''
         # compute occupancy map observation  (40, 12)
         if self.occupancy.map_height == 40:
             raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.cubes, ice_binary_w=235, ice_binary_h=774)
@@ -744,7 +787,89 @@ class ObjectPushing(gym.Env):
 
         observation = np.concatenate((np.array([occupancy]), np.array([footprint])))          # (2, H, W)
         return observation
+        '''
 
+        self.update_global_overhead_map()
+
+        if done:
+            return None
+        
+        # Overhead map
+        channels = []
+        channels.append(self.get_local_overhead_map())
+        channels.append(self.robot_state_channel)
+
+        observation = np.stack(channels)
+        return observation
+    
+    def get_local_overhead_map(self):
+        rotation_angle = -np.degrees(self.ship_body.angle) + 90
+        pos_y = int(np.floor(self.global_overhead_map.shape[0] / 2 - self.ship_body.position.y * LOCAL_MAP_PIXELS_PER_METER))
+        pos_x = int(np.floor(self.global_overhead_map.shape[1] / 2 + self.ship_body.position.x * LOCAL_MAP_PIXELS_PER_METER))
+        mask = rotate_image(np.zeros((LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH), dtype=np.float32), rotation_angle, order=0)
+        y_start = pos_y - int(mask.shape[0] / 2)
+        y_end = y_start + mask.shape[0]
+        x_start = pos_x - int(mask.shape[1] / 2)
+        x_end = x_start + mask.shape[1]
+        crop = self.global_overhead_map[y_start:y_end, x_start:x_end]
+        crop = rotate_image(crop, rotation_angle, order=0)
+        y_start = int(crop.shape[0] / 2 - LOCAL_MAP_PIXEL_WIDTH / 2)
+        y_end = y_start + LOCAL_MAP_PIXEL_WIDTH
+        x_start = int(crop.shape[1] / 2 - LOCAL_MAP_PIXEL_WIDTH / 2)
+        x_end = x_start + LOCAL_MAP_PIXEL_WIDTH
+        return crop[y_start:y_end, x_start:x_end]
+
+    def create_padded_room_zeros(self):
+        return np.zeros((
+            int(2 * np.ceil((self.cfg.env.room_width * LOCAL_MAP_PIXELS_PER_METER + LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)) / 2)),
+            int(2 * np.ceil((self.cfg.env.room_length * LOCAL_MAP_PIXELS_PER_METER + LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)) / 2))
+        ), dtype=np.float32)
+    
+    def update_global_overhead_map(self):
+        points, seg = self.segment_env()
+        small_overhead_map = np.ones((points.shape[0], points.shape[1]), dtype=np.float32) * FLOOR_SEG_INDEX/MAX_SEG_INDEX
+
+        for poly in self.boundaries + self.polygons + [self.ship_shape]:
+            # Get world coordinates of vertices
+            vertices = [poly.body.local_to_world(v) for v in poly.get_vertices()]
+            vertices_np = np.array([[v.x, v.y] for v in vertices])
+
+            # Convert world coordinates to pixel coordinates
+            vertices_px = (vertices_np * LOCAL_MAP_PIXELS_PER_METER).astype(np.int32)
+            vertices_px[:, 0] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
+            vertices_px[:, 1] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
+            vertices_px[:, 1] = small_overhead_map.shape[0] - vertices_px[:, 1]
+
+            # Draw the boundary on the small_overhead_map
+            if poly.label in ['wall', 'divider', 'column', 'corner']:
+                fillPoly(small_overhead_map, [vertices_px], color=OBSTACLE_SEG_INDEX/MAX_SEG_INDEX)
+            elif poly.label == 'receptacle':
+                fillPoly(small_overhead_map, [vertices_px], color=RECEPTACLE_SEG_INDEX/MAX_SEG_INDEX)
+            elif poly.label == 'cube':
+                fillPoly(small_overhead_map, [vertices_px], color=CUBE_SEG_INDEX/MAX_SEG_INDEX)
+            elif poly.label == 'robot':
+                # print(vertices_px)
+                fillPoly(small_overhead_map, [vertices_px], color=ROBOT_SEG_INDEX/MAX_SEG_INDEX)
+
+        start_i, start_j = int(self.global_overhead_map.shape[0] / 2 - small_overhead_map.shape[0] / 2), int(self.global_overhead_map.shape[1] / 2 - small_overhead_map.shape[1] / 2)
+        self.global_overhead_map[start_i:start_i + small_overhead_map.shape[0], start_j:start_j + small_overhead_map.shape[1]] = small_overhead_map
+        # self.spy = small_overhead_map
+
+
+    def segment_env(self):
+        width, height = 116, 116
+        u, v = np.meshgrid(np.arange(width), np.arange(height))
+        u = u.astype(np.float32)
+        v = v.astype(np.float32)
+
+        u = u - width / 2
+        v = v - height / 2
+
+        points = np.stack((u, v), axis=2)
+
+
+
+        return points, None
     
     def boxes_completed(self):
         """
@@ -785,26 +910,37 @@ class ObjectPushing(gym.Env):
                         if (self.cfg.anim.save and self.cfg.output_dir) else None, suffix=self.t)
 
         if self.cfg.render.log_obs and not self.low_dim_state:
+            # self.observation[1,:,:] = self.spy[10:106, 10:106]
+            for ax, i in zip(self.state_ax, range(2)):
+                ax.clear()
+                ax.set_title(f'Channel {i}')
+                im = ax.imshow(self.observation[i,:,:], cmap='hot', interpolation='nearest')
+                if self.colorbars[i] is not None:
+                    self.colorbars[i].update_normal(im)
+                else:
+                    self.colorbars[i] = self.state_fig.colorbar(im, ax=ax)
+            
+            self.state_plot.draw()
+            self.state_plot.pause(0.001)
+            # # visualize occupancy map
+            # self.con_ax.clear()
+            # occ_map_render = np.copy(self.occupancy.occ_map)
+            # occ_map_render = np.flip(occ_map_render, axis=0)
+            # self.con_ax.imshow(occ_map_render, cmap='gray')
+            # self.con_ax.axis('off')
+            # save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
+            # fp = os.path.join(save_fig_dir, str(self.t) + '_con.png')
+            # self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
 
-            # visualize occupancy map
-            self.con_ax.clear()
-            occ_map_render = np.copy(self.occupancy.occ_map)
-            occ_map_render = np.flip(occ_map_render, axis=0)
-            self.con_ax.imshow(occ_map_render, cmap='gray')
-            self.con_ax.axis('off')
-            save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
-            fp = os.path.join(save_fig_dir, str(self.t) + '_con.png')
-            self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
-
-            # visualize footprint
-            self.con_ax.clear()
-            occ_map_render = np.copy(self.occupancy.footprint)
-            occ_map_render = np.flip(occ_map_render, axis=0)
-            self.con_ax.imshow(occ_map_render, cmap='gray')
-            self.con_ax.axis('off')
-            save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
-            fp = os.path.join(save_fig_dir, str(self.t) + '_footprint.png')
-            self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
+            # # visualize footprint
+            # self.con_ax.clear()
+            # occ_map_render = np.copy(self.occupancy.footprint)
+            # occ_map_render = np.flip(occ_map_render, axis=0)
+            # self.con_ax.imshow(occ_map_render, cmap='gray')
+            # self.con_ax.axis('off')
+            # save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
+            # fp = os.path.join(save_fig_dir, str(self.t) + '_footprint.png')
+            # self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
 
 
     def close(self):

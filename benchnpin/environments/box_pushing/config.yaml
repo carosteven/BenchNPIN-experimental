@@ -21,7 +21,7 @@ max_cube_y: 2
 min_cube_y: -2
 
 # parameters for low-dim environment
-low_dim_state: true
+low_dim_state: false
 fixed_trial_idx: 1
 random_start: true
 start_x_range: 15
@@ -130,7 +130,7 @@ controller:
 
 ### ENVIRONMENT PARAMS
 env:
-  obstacle_config: large_divider # options are small_empty, small_columns, large_columns, large_divider
+  obstacle_config: small_columns # options are small_empty, small_columns, large_columns, large_divider
   room_length: 10
-  room_width: 10 # 5 for small, 10 for large
+  room_width: 5 # 5 for small, 10 for large
   receptacle_width: 1.5
