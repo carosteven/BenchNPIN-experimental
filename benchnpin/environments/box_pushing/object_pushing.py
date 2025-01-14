@@ -25,6 +25,8 @@ from benchnpin.common.occupancy_grid.occupancy_map import OccupancyGrid
 # SAM imports
 from scipy.ndimage import rotate as rotate_image
 from cv2 import fillPoly
+from skimage.morphology import disk, binary_dilation
+import spfa
 
 R = lambda theta: np.asarray([
     [np.cos(theta), -np.sin(theta)],
@@ -75,8 +77,11 @@ class ObjectPushing(gym.Env):
         self.cfg = cfg
 
         # State
+        self.num_channels = 4
         self.observation = None
         self.global_overhead_map = None
+        self.small_obstacle_map = None
+        self.configuration_space = None
 
         # Robot state
         robot_pixel_width = int(np.ceil(self.cfg.ship.length * LOCAL_MAP_PIXELS_PER_METER))
@@ -114,7 +119,7 @@ class ObjectPushing(gym.Env):
         else:
             # self.observation_shape = (2, self.occupancy.occ_map_height, self.occupancy.occ_map_width)
             # self.observation_space = spaces.Box(low=0, high=1, shape=self.observation_shape, dtype=np.float64)
-            self.observation_shape = (2, LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH)
+            self.observation_shape = (self.num_channels, LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH)
             self.observation_space = spaces.Box(low=0, high=1, shape=self.observation_shape, dtype=np.float32)
 
         self.yaw_lim = (0, np.pi)       # lower and upper limit of ship yaw  
@@ -131,7 +136,7 @@ class ObjectPushing(gym.Env):
             self.linear_speed_increment = 0.02
 
             # show state
-            num_plots = 2
+            num_plots = self.num_channels
             self.state_plot = plt
             self.state_fig, self.state_ax = self.state_plot.subplots(1, num_plots, figsize=(4 * num_plots, 6))
             self.colorbars = [None] * num_plots
@@ -243,49 +248,6 @@ class ObjectPushing(gym.Env):
         self.cube_recept_handler = self.space.add_collision_handler(2, 4)
         self.cube_recept_handler.begin = recept_collision_begin
 
-    def is_point_inside_polygon(self, point, polygon_vertices):
-        # Ray-casting algorithm to check if a point is inside a polygon
-        x, y = point
-        n = len(polygon_vertices)
-        inside = False
-
-        p1x, p1y = polygon_vertices[0][:2]  # Unpack only the first two elements
-        for i in range(n + 1):
-            p2x, p2y = polygon_vertices[i % n][:2]  # Unpack only the first two elements
-            if y > min(p1y, p2y):
-                if y <= max(p1y, p2y):
-                    if x <= max(p1x, p2x):
-                        if p1y != p2y:
-                            xinters = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
-                        if p1x == p2x or x <= xinters:
-                            inside = not inside
-            p1x, p1y = p2x, p2y
-
-        return inside
-    
-    def prevent_cube_boundary_intersection(self, cube_shape):
-        cube_body = cube_shape.body
-        # Check if any vertex of the cube intersects with the boundary
-        cube_vertices = [cube_body.local_to_world(v) for v in cube_shape.get_vertices()]
-        new_position = pymunk.Vec2d(cube_body.position.x, cube_body.position.y)
-
-        # Check if the cube intersects with any dividers or columns
-        for obstacle in self.boundary_dicts:
-            if obstacle['type'] == 'divider' or obstacle['type'] == 'column' or obstacle['type'] == 'wall':
-                obstacle_vertices = obstacle['vertices']
-                for vertex in cube_vertices:
-                    if self.is_point_inside_polygon(vertex, obstacle_vertices):
-                        # Adjust the position of the cube to prevent intersection with the obstacle
-                        for vertex in cube_vertices:
-                            if self.is_point_inside_polygon(vertex, obstacle_vertices):
-                                # Move the cube away from the obstacle
-                                obstacle_center = np.mean(obstacle_vertices, axis=0)
-                                direction = pymunk.Vec2d(vertex[0], vertex[1]) - pymunk.Vec2d(obstacle_center[0], obstacle_center[1])
-                                direction = direction.normalized()
-                                new_position += direction * 0.1  # Move the cube slightly away from the obstacle
-                        cube_body.position = new_position
-                        break
-
     def init_ship_ice_env(self):
 
         # generate random start point, if specified
@@ -339,10 +301,57 @@ class ObjectPushing(gym.Env):
         self.ship_shape.label = 'robot'
         self.ship_shape.collision_type = 1
         self.space.add(self.ship_body, self.ship_shape)
+
+        # Initialize configuration space (only need to compute once)
+        self.update_configuration_space()
+
         # run initial simulation steps to let environment settle
         for _ in range(1000):
             self.space.step(self.dt / self.steps)
         self.prev_obs = CostMap.get_obs_from_poly(self.polygons)
+
+    def is_point_inside_polygon(self, point, polygon_vertices):
+        # Ray-casting algorithm to check if a point is inside a polygon
+        x, y = point
+        n = len(polygon_vertices)
+        inside = False
+
+        p1x, p1y = polygon_vertices[0][:2]  # Unpack only the first two elements
+        for i in range(n + 1):
+            p2x, p2y = polygon_vertices[i % n][:2]  # Unpack only the first two elements
+            if y > min(p1y, p2y):
+                if y <= max(p1y, p2y):
+                    if x <= max(p1x, p2x):
+                        if p1y != p2y:
+                            xinters = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
+                        if p1x == p2x or x <= xinters:
+                            inside = not inside
+            p1x, p1y = p2x, p2y
+
+        return inside
+    
+    def prevent_cube_boundary_intersection(self, cube_shape):
+        cube_body = cube_shape.body
+        # Check if any vertex of the cube intersects with the boundary
+        cube_vertices = [cube_body.local_to_world(v) for v in cube_shape.get_vertices()]
+        new_position = pymunk.Vec2d(cube_body.position.x, cube_body.position.y)
+
+        # Check if the cube intersects with any dividers or columns
+        for obstacle in self.boundary_dicts:
+            if obstacle['type'] == 'divider' or obstacle['type'] == 'column' or obstacle['type'] == 'wall':
+                obstacle_vertices = obstacle['vertices']
+                for vertex in cube_vertices:
+                    if self.is_point_inside_polygon(vertex, obstacle_vertices):
+                        # Adjust the position of the cube to prevent intersection with the obstacle
+                        for vertex in cube_vertices:
+                            if self.is_point_inside_polygon(vertex, obstacle_vertices):
+                                # Move the cube away from the obstacle
+                                obstacle_center = np.mean(obstacle_vertices, axis=0)
+                                direction = pymunk.Vec2d(vertex[0], vertex[1]) - pymunk.Vec2d(obstacle_center[0], obstacle_center[1])
+                                direction = direction.normalized()
+                                new_position += direction * 0.1  # Move the cube slightly away from the obstacle
+                        cube_body.position = new_position
+                        break
 
     def get_receptacle_position_and_size(self):
         size = self.cfg.env.receptacle_width
@@ -796,8 +805,10 @@ class ObjectPushing(gym.Env):
         
         # Overhead map
         channels = []
-        channels.append(self.get_local_overhead_map())
+        channels.append(self.get_local_map(self.global_overhead_map, self.ship_body.position, self.ship_body.angle))
         channels.append(self.robot_state_channel)
+        channels.append(self.get_local_distance_map(self.create_global_shortest_path_to_receptacle_map(), self.ship_body.position, self.ship_body.angle))
+        channels.append(self.get_local_distance_map(self.create_global_shortest_path_map(self.ship_body.position), self.ship_body.position, self.ship_body.angle))
 
         observation = np.stack(channels)
         return observation
@@ -818,18 +829,67 @@ class ObjectPushing(gym.Env):
         x_start = int(crop.shape[1] / 2 - LOCAL_MAP_PIXEL_WIDTH / 2)
         x_end = x_start + LOCAL_MAP_PIXEL_WIDTH
         return crop[y_start:y_end, x_start:x_end]
+    
+    def get_local_map(self, global_map, robot_position, robot_heading):
+        w = LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)
+        crop_width = int(2 * np.ceil(w / 2)) # make sure the crop is even (rounds up to even)
+        rotation_angle = 90 - np.degrees(robot_heading)
+        pixel_i = int(np.floor(-robot_position[1] * LOCAL_MAP_PIXELS_PER_METER + global_map.shape[0] / 2))
+        pixel_j = int(np.floor(robot_position[0] * LOCAL_MAP_PIXELS_PER_METER + global_map.shape[1] / 2))
+        crop = global_map[pixel_i - crop_width // 2:pixel_i + crop_width // 2, pixel_j - crop_width // 2:pixel_j + crop_width // 2]
+        rotated_crop = rotate_image(crop, rotation_angle, order=0)
+        local_map = rotated_crop[
+            rotated_crop.shape[0] // 2 - LOCAL_MAP_PIXEL_WIDTH // 2:rotated_crop.shape[0] // 2 + LOCAL_MAP_PIXEL_WIDTH // 2,
+            rotated_crop.shape[1] // 2 - LOCAL_MAP_PIXEL_WIDTH // 2:rotated_crop.shape[1] // 2 + LOCAL_MAP_PIXEL_WIDTH // 2
+        ]
+        return local_map
+    
+    def get_local_distance_map(self, global_map, robot_position, robot_heading):
+        local_map = self.get_local_map(global_map, robot_position, robot_heading)
+        local_map -= local_map.min() # move the min to 0 to make invariant to size of environment
+        return local_map
+
+    def position_to_pixel_indices(self, x, y, image_shape):
+        pixel_i = np.floor(image_shape[0] / 2 - y * LOCAL_MAP_PIXELS_PER_METER).astype(np.int32)
+        pixel_j = np.floor(image_shape[1] / 2 + x * LOCAL_MAP_PIXELS_PER_METER).astype(np.int32)
+        pixel_i = np.clip(pixel_i, 0, image_shape[0] - 1)
+        pixel_j = np.clip(pixel_j, 0, image_shape[1] - 1)
+        return pixel_i, pixel_j
 
     def create_padded_room_zeros(self):
         return np.zeros((
             int(2 * np.ceil((self.cfg.env.room_width * LOCAL_MAP_PIXELS_PER_METER + LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)) / 2)),
             int(2 * np.ceil((self.cfg.env.room_length * LOCAL_MAP_PIXELS_PER_METER + LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)) / 2))
         ), dtype=np.float32)
-    
-    def update_global_overhead_map(self):
-        points, seg = self.segment_env()
-        small_overhead_map = np.ones((points.shape[0], points.shape[1]), dtype=np.float32) * FLOOR_SEG_INDEX/MAX_SEG_INDEX
 
-        for poly in self.boundaries + self.polygons + [self.ship_shape]:
+    def create_global_shortest_path_to_receptacle_map(self):
+        global_map = self.create_padded_room_zeros() + np.inf
+        rx, ry, _ = self.get_receptacle_position_and_size()
+        pixel_i, pixel_j = self.position_to_pixel_indices(rx, ry, self.configuration_space.shape)
+        shortest_path_image, _ = spfa.spfa(self.configuration_space, (pixel_i, pixel_j))
+        shortest_path_image /= LOCAL_MAP_PIXELS_PER_METER
+        global_map = np.minimum(global_map, shortest_path_image)
+        global_map /= (np.sqrt(2) * LOCAL_MAP_PIXEL_WIDTH) / LOCAL_MAP_PIXELS_PER_METER
+        global_map *= self.cfg.env.shortest_path_channel_scale
+        return global_map
+    
+    def create_global_shortest_path_map(self, robot_position):
+        pixel_i, pixel_j = self.position_to_pixel_indices(robot_position[0], robot_position[1], self.configuration_space.shape)
+        global_map, _ = spfa.spfa(self.configuration_space, (pixel_i, pixel_j))
+        global_map /= LOCAL_MAP_PIXELS_PER_METER
+        global_map /= (np.sqrt(2) * LOCAL_MAP_PIXEL_WIDTH) / LOCAL_MAP_PIXELS_PER_METER
+        global_map *= self.cfg.env.shortest_path_channel_scale
+        return global_map
+    
+    def update_configuration_space(self):
+        """
+        Obstacles are dilated based on the robot's radius to define a collision-free space
+        """
+
+        obstacle_map = self.create_padded_room_zeros()
+        small_obstacle_map = np.zeros((LOCAL_MAP_PIXEL_WIDTH+20, LOCAL_MAP_PIXEL_WIDTH+20), dtype=np.float32)
+
+        for poly in self.boundaries:
             # Get world coordinates of vertices
             vertices = [poly.body.local_to_world(v) for v in poly.get_vertices()]
             vertices_np = np.array([[v.x, v.y] for v in vertices])
@@ -838,12 +898,44 @@ class ObjectPushing(gym.Env):
             vertices_px = (vertices_np * LOCAL_MAP_PIXELS_PER_METER).astype(np.int32)
             vertices_px[:, 0] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
             vertices_px[:, 1] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
+            vertices_px[:, 1] = small_obstacle_map.shape[0] - vertices_px[:, 1]
+
+            # Draw the boundary on the small_obstacle_map
+            if poly.label in ['wall', 'divider', 'column', 'corner']:
+                fillPoly(small_obstacle_map, [vertices_px], color=1)
+        
+        start_i, start_j = int(obstacle_map.shape[0] / 2 - small_obstacle_map.shape[0] / 2), int(obstacle_map.shape[1] / 2 - small_obstacle_map.shape[1] / 2)
+        obstacle_map[start_i:start_i + small_obstacle_map.shape[0], start_j:start_j + small_obstacle_map.shape[1]] = small_obstacle_map
+
+        # Dilate obstacles and walls based on robot size
+        robot_pixel_width = int(np.ceil(self.cfg.ship.length * LOCAL_MAP_PIXELS_PER_METER))
+        selem = disk(np.floor(robot_pixel_width / 2))
+        self.configuration_space = 1 - binary_dilation(obstacle_map, selem).astype(np.float32)
+        self.small_obstacle_map = 1 - small_obstacle_map
+        # self.spy = self.small_obstacle_map
+
+    def update_global_overhead_map(self):
+        # small_overhead_map = np.ones((LOCAL_MAP_PIXEL_WIDTH+20, LOCAL_MAP_PIXEL_WIDTH+20), dtype=np.float32) * FLOOR_SEG_INDEX/MAX_SEG_INDEX
+        small_overhead_map = self.small_obstacle_map.copy()
+
+        for poly in self.boundaries + self.polygons + [self.ship_shape]:
+            if poly.label in ['wall', 'divider', 'column', 'corner']:
+                continue # Precomputed in update_configuration_space
+
+            # get world coordinates of vertices
+            vertices = [poly.body.local_to_world(v) for v in poly.get_vertices()]
+            vertices_np = np.array([[v.x, v.y] for v in vertices])
+
+            # convert world coordinates to pixel coordinates
+            vertices_px = (vertices_np * LOCAL_MAP_PIXELS_PER_METER).astype(np.int32)
+            vertices_px[:, 0] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
+            vertices_px[:, 1] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
             vertices_px[:, 1] = small_overhead_map.shape[0] - vertices_px[:, 1]
 
-            # Draw the boundary on the small_overhead_map
-            if poly.label in ['wall', 'divider', 'column', 'corner']:
-                fillPoly(small_overhead_map, [vertices_px], color=OBSTACLE_SEG_INDEX/MAX_SEG_INDEX)
-            elif poly.label == 'receptacle':
+            # draw the boundary on the small_overhead_map
+            
+                # fillPoly(small_overhead_map, [vertices_px], color=OBSTACLE_SEG_INDEX/MAX_SEG_INDEX)
+            if poly.label == 'receptacle':
                 fillPoly(small_overhead_map, [vertices_px], color=RECEPTACLE_SEG_INDEX/MAX_SEG_INDEX)
             elif poly.label == 'cube':
                 fillPoly(small_overhead_map, [vertices_px], color=CUBE_SEG_INDEX/MAX_SEG_INDEX)
@@ -854,22 +946,6 @@ class ObjectPushing(gym.Env):
         start_i, start_j = int(self.global_overhead_map.shape[0] / 2 - small_overhead_map.shape[0] / 2), int(self.global_overhead_map.shape[1] / 2 - small_overhead_map.shape[1] / 2)
         self.global_overhead_map[start_i:start_i + small_overhead_map.shape[0], start_j:start_j + small_overhead_map.shape[1]] = small_overhead_map
         # self.spy = small_overhead_map
-
-
-    def segment_env(self):
-        width, height = 116, 116
-        u, v = np.meshgrid(np.arange(width), np.arange(height))
-        u = u.astype(np.float32)
-        v = v.astype(np.float32)
-
-        u = u - width / 2
-        v = v - height / 2
-
-        points = np.stack((u, v), axis=2)
-
-
-
-        return points, None
     
     def boxes_completed(self):
         """
@@ -911,7 +987,7 @@ class ObjectPushing(gym.Env):
 
         if self.cfg.render.log_obs and not self.low_dim_state:
             # self.observation[1,:,:] = self.spy[10:106, 10:106]
-            for ax, i in zip(self.state_ax, range(2)):
+            for ax, i in zip(self.state_ax, range(self.num_channels)):
                 ax.clear()
                 ax.set_title(f'Channel {i}')
                 im = ax.imshow(self.observation[i,:,:], cmap='hot', interpolation='nearest')

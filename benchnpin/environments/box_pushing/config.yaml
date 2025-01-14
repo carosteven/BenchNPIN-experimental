@@ -134,3 +134,4 @@ env:
   room_length: 10
   room_width: 5 # 5 for small, 10 for large
   receptacle_width: 1.5
+  shortest_path_channel_scale: 0.25
