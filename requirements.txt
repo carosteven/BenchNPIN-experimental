@@ -18,5 +18,8 @@ torch
 torchsummary
 torchvision
 gymnasium
-pynput
 git+https://github.com/rdesc/pydubins.git
+pynput
+
+# cd benchnpin/common/spfa
+# python setup.py install

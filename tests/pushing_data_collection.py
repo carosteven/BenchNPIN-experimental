@@ -26,7 +26,7 @@ STOP_TURNING = 1
 LEFT = 2
 RIGHT = 3
 STOP = 4
-OTHER = 5
+BACKWARD = 5
 SMALL_LEFT = 6
 SMALL_RIGHT = 7
 
@@ -39,16 +39,18 @@ def on_press(key):
         if key.char == 'w':  # Move up
             command = FORWARD
         elif key.char == 'x':  # Move down
-            command = STOP_TURNING
+            command = BACKWARD
         elif key.char == 'a':  # Move left
             command = LEFT
         elif key.char == 'd':  # Move right
             command = RIGHT
-        elif key.char == 't':  # Move right
+        elif key.char == 't':  # Stop moving
             command = STOP
-        elif key.char == 'z':  # Move right
+        elif key.char == 'r':  # Stop turning
+            command = STOP_TURNING
+        elif key.char == 'z':  # Move left slowly
             command = SMALL_LEFT
-        elif key.char == 'c':  # Move right
+        elif key.char == 'c':  # Move right slowly
             command = SMALL_RIGHT
     except AttributeError:
         pass
@@ -122,7 +124,7 @@ def collect_demos():
     if manual_stop:
         print("\nDemo manually stopped. Ignored")
         return
-        
+    ''' 
     global observations, actions, rewards, terminals, timeouts
     observations = np.array(observations).astype(np.float32)
     actions = np.array(actions).astype(np.float32)
@@ -191,6 +193,7 @@ def collect_demos():
     # save demo info data
     with open('pushing_demo_info.pkl', 'wb') as f:
         pickle.dump(pickle_dict_info, f)
+    '''
 
 
 if __name__ == "__main__":
