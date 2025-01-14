@@ -10,6 +10,16 @@ from pymunk import Vec2d
 from matplotlib import pyplot as plt
 
 # maze NAMO specific imports
+from benchnpin.common.cost_map import CostMap
+from benchnpin.common.evaluation.metrics import total_work_done
+from benchnpin.common.geometry.polygon import poly_area
+from benchnpin.common.robot import Robot
+from benchnpin.common.utils.plot_pushing import Plot
+from benchnpin.common.utils.sim_utils import generate_sim_obs, generate_sim_maze
+from benchnpin.common.geometry.polygon import poly_centroid
+from benchnpin.common.utils.utils import DotDict
+from benchnpin.common.occupancy_grid.occupancy_map import OccupancyGrid
+
 
 R = lambda theta: np.asarray([
     [np.cos(theta), -np.sin(theta)],
@@ -33,7 +43,7 @@ class MazeNAMO(gym.Env):
         # construct absolute path to the env_config folder
         cfg_file = os.path.join(self.current_dir, 'config.yaml')
 
-        cfg = cfg = DotDict.load_from_file(cfg_file)
+        cfg = DotDict.load_from_file(cfg_file)
         self.occupancy = OccupancyGrid(grid_width=cfg.occ.grid_size, grid_height=cfg.occ.grid_size, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, ship_body=None)
         self.cfg = cfg
 
@@ -47,16 +57,43 @@ class MazeNAMO(gym.Env):
         self.low_dim_state = self.cfg.low_dim_state
 
         # Define action space
-        
+        max_yaw_rate_step = (np.pi/2) / 15        # rad/sec
+        print("max yaw rate per step: ", max_yaw_rate_step)
+        self.action_space = spaces.Box(low=-max_yaw_rate_step, high=max_yaw_rate_step, dtype=np.float64)
         # load maze environment
         
         # Define observation space
+        self.low_dim_state = self.cfg.low_dim_state
+        if self.low_dim_state:
+            self.fixed_trial_idx = self.cfg.fixed_trial_idx
+            if self.cfg.randomize_obstacles:
+                self.observation_space = spaces.Box(low=-10, high=30, shape=(self.cfg.num_obstacles * 2,), dtype=np.float64)
+            else:
+                self.observation_space = spaces.Box(low=-10, high=30, shape=(6,), dtype=np.float64)
 
+        else:
+            self.observation_shape = (2, self.occupancy.occ_map_height, self.occupancy.occ_map_width)
+            self.observation_space = spaces.Box(low=0, high=1, shape=self.observation_shape, dtype=np.float64)
+
+        self.yaw_lim = (0, np.pi)       # lower and upper limit of ship yaw  
+        self.boundary_violation_limit = 0.0       # if the ship is out of boundary more than this limit, terminate and truncate the episode 
+
+        self.plot = None
+        self.con_fig, self.con_ax = plt.subplots(figsize=(10, 10))
+
+
+        if self.cfg.demo_mode:
+            self.angular_speed = 0.0
+            self.angular_speed_increment = 0.005
+            self.linear_speed = 0.0
+            self.linear_speed_increment = 0.02
+
+        plt.ion()  # Interactive mode on
         
 
     def init_maze_NAMO_sim(self):
 
-        # initialize ship-ice environment
+        # initialize maze environment
         self.steps = self.cfg.sim.steps
         self.t_max = self.cfg.sim.t_max if self.cfg.sim.t_max else np.inf
         self.horizon = self.cfg.a_star.horizon
@@ -145,6 +182,7 @@ class MazeNAMO(gym.Env):
         
         _, self.start, self.obs_dicts = init_queue.values()
 
+
         # generate random start point, if specified
         if self.cfg.random_start:
             x_start = 1 + random.random() * (self.cfg.start_x_range - 1)    # [1, start_x_range]
@@ -157,14 +195,17 @@ class MazeNAMO(gym.Env):
         self.obs_dicts[:] = [ob for ob in self.obs_dicts if poly_area(ob['vertices']) != 0]
         self.obstacles = [ob['vertices'] for ob in self.obs_dicts]
 
-        self.goal = (0, self.cfg.goal_y)
+        self.goal = (self.cfg.goal_x, self.cfg.goal_y)
 
-        # initialize ship sim objects
+        #initialize maze
+        self.maze = generate_sim_maze(self.space, self.cfg.env.maze_walls)
+
+        # initialize robot sim objects
         self.polygons = generate_sim_obs(self.space, self.obs_dicts, self.cfg.sim.obstacle_density)
         for p in self.polygons:
             p.collision_type = 2
 
-        self.ship_body, self.ship_shape = Ship.sim(self.cfg.ship.vertices, self.start)
+        self.ship_body, self.ship_shape = Robot.sim(self.cfg.ship.vertices, self.start)
         self.ship_shape.collision_type = 1
         self.space.add(self.ship_body, self.ship_shape)
         # run initial simulation steps to let environment settle
