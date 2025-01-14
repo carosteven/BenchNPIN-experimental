@@ -97,7 +97,7 @@ class AreaClearingEnv(gym.Env):
         plt.ion()  # Interactive mode on
         
 
-    def init_ship_ice_sim(self):
+    def init_area_clearing_sim(self):
 
         # initialize ship-ice environment
         self.steps = self.cfg.sim.steps
@@ -147,9 +147,6 @@ class AreaClearingEnv(gym.Env):
             return True
 
         def post_solve_handler(arbiter, space, data):
-            # nonlocal self.total_ke, self.system_ke_loss, self.total_impulse, self.clln_obs
-            ship_shape, ice_shape = arbiter.shapes
-
             self.system_ke_loss.append(arbiter.total_ke)
 
             self.total_ke[0] += arbiter.total_ke
@@ -174,7 +171,7 @@ class AreaClearingEnv(gym.Env):
         self.handler.post_solve = post_solve_handler
         
         
-    def init_ship_ice_env(self):
+    def init_area_clearing_env(self):
 
         # generate random start point, if specified
         if self.cfg.random_start:
@@ -199,9 +196,9 @@ class AreaClearingEnv(gym.Env):
         for p in self.polygons:
             p.collision_type = 2
 
-        self.ship_body, self.ship_shape = Robot.sim(self.cfg.ship.vertices, self.start)
-        self.ship_shape.collision_type = 1
-        self.space.add(self.ship_body, self.ship_shape)
+        self.robot_body, self.robot_shape = Robot.sim(self.cfg.ship.vertices, self.start)
+        self.robot_shape.collision_type = 1
+        self.space.add(self.robot_body, self.robot_shape)
         # run initial simulation steps to let environment settle
         for _ in range(1000):
             self.space.step(self.dt / self.steps)
@@ -265,8 +262,8 @@ class AreaClearingEnv(gym.Env):
         else:
             self.episode_idx += 1
 
-        self.init_ship_ice_sim()
-        self.init_ship_ice_env()
+        self.init_area_clearing_sim()
+        self.init_area_clearing_env()
 
         self.t = 0
         
@@ -276,16 +273,16 @@ class AreaClearingEnv(gym.Env):
 
         self.plot = Plot(
                 np.zeros((self.cfg.costmap.m, self.cfg.costmap.n)), self.obs_dicts,
-                ship_pos=self.start, ship_vertices=np.asarray(self.ship_shape.get_vertices()),
+                ship_pos=self.start, ship_vertices=np.asarray(self.robot_shape.get_vertices()),
                 map_figsize=None, y_axis_limit=self.cfg.plot.y_axis_limit, inf_stream=False, goal=self.goal[1], 
                 path=np.zeros((3, 50))
             )
 
         # get updated obstacles
         updated_obstacles = CostMap.get_obs_from_poly(self.polygons)
-        info = {'state': (round(self.ship_body.position.x, 2),
-                                round(self.ship_body.position.y, 2),
-                                round(self.ship_body.angle, 2)), 
+        info = {'state': (round(self.robot_body.position.x, 2),
+                                round(self.robot_body.position.y, 2),
+                                round(self.robot_body.angle, 2)), 
                 'total_work': self.total_work[0], 
                 'obs': updated_obstacles, 
                 'box_count': 0}
@@ -330,20 +327,20 @@ class AreaClearingEnv(gym.Env):
                 self.linear_speed = self.target_speed
 
             # apply linear and angular speeds
-            global_velocity = R(self.ship_body.angle) @ [self.linear_speed, 0]
+            global_velocity = R(self.robot_body.angle) @ [self.linear_speed, 0]
 
             # apply velocity controller
-            self.ship_body.angular_velocity = self.angular_speed
-            self.ship_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
+            self.robot_body.angular_velocity = self.angular_speed
+            self.robot_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
 
         else:
 
             # constant forward speed in global frame
-            global_velocity = R(self.ship_body.angle) @ [self.target_speed, 0]
+            global_velocity = R(self.robot_body.angle) @ [self.target_speed, 0]
 
             # apply velocity controller
-            self.ship_body.angular_velocity = action
-            self.ship_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
+            self.robot_body.angular_velocity = action
+            self.robot_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
 
         # move simulation forward
         boundary_constraint_violated = False
@@ -352,11 +349,11 @@ class AreaClearingEnv(gym.Env):
             self.space.step(self.dt / self.steps)
 
             # apply boundary constraints
-            if self.ship_body.position.x < 0 or self.ship_body.position.x > self.cfg.occ.map_width:
+            if self.robot_body.position.x < 0 or self.robot_body.position.x > self.cfg.occ.map_width:
                 boundary_constraint_violated = True
-        if self.ship_body.position.x < 0 and abs(self.ship_body.position.x - 0) >= self.boundary_violation_limit:
+        if self.robot_body.position.x < 0 and abs(self.robot_body.position.x - 0) >= self.boundary_violation_limit:
             boundary_violation_terminal = True
-        if self.ship_body.position.x > self.cfg.occ.map_width and abs(self.ship_body.position.x - self.cfg.occ.map_width) >= self.boundary_violation_limit:
+        if self.robot_body.position.x > self.cfg.occ.map_width and abs(self.robot_body.position.x - self.cfg.occ.map_width) >= self.boundary_violation_limit:
             boundary_violation_terminal = True
             
         # get updated obstacles
@@ -379,7 +376,7 @@ class AreaClearingEnv(gym.Env):
             terminated = False
 
         # compute reward
-        if self.ship_body.position.y < self.goal[1]:
+        if self.robot_body.position.y < self.goal[1]:
             dist_reward = -1
         else:
             dist_reward = 0
@@ -396,9 +393,9 @@ class AreaClearingEnv(gym.Env):
             reward += TERMINAL_REWARD
 
         # Optionally, we can add additional info
-        info = {'state': (round(self.ship_body.position.x, 2),
-                                round(self.ship_body.position.y, 2),
-                                round(self.ship_body.angle, 2)), 
+        info = {'state': (round(self.robot_body.position.x, 2),
+                                round(self.robot_body.position.y, 2),
+                                round(self.robot_body.angle, 2)), 
                 'total_work': self.total_work[0], 
                 'collision reward': collision_reward, 
                 'scaled collision reward': collision_reward * self.beta, 
@@ -444,7 +441,7 @@ class AreaClearingEnv(gym.Env):
         occupancy = np.copy(self.occupancy.occ_map)         # (H, W)
 
         # compute footprint observation  NOTE: here we want unscaled, unpadded vertices
-        ship_pose = (self.ship_body.position.x, self.ship_body.position.y, self.ship_body.angle)
+        ship_pose = (self.robot_body.position.x, self.robot_body.position.y, self.robot_body.angle)
         self.occupancy.compute_ship_footprint_planner(ship_state=ship_pose, ship_vertices=self.cfg.ship.vertices)
         footprint = np.copy(self.occupancy.footprint)       # (H, W)
 
@@ -469,8 +466,6 @@ class AreaClearingEnv(gym.Env):
         
         return completed_count, completed
 
-
-
     def render(self, mode='human', close=False):
         """Renders the environment."""
 
@@ -482,7 +477,7 @@ class AreaClearingEnv(gym.Env):
             else:
                 self.plot.update_path_scatter(full_path=self.path.T)
 
-        self.plot.update_ship(self.ship_body, self.ship_shape, move_yaxis_threshold=self.cfg.anim.move_yaxis_threshold)
+        self.plot.update_ship(self.robot_body, self.robot_shape, move_yaxis_threshold=self.cfg.anim.move_yaxis_threshold)
         self.plot.update_obstacles(obstacles=CostMap.get_obs_from_poly(self.polygons))
         # get updated obstacles
         self.plot.animate_sim(save_fig_dir=os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
