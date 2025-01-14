@@ -214,7 +214,7 @@ class Plot:
             scale_axis_labels(self.ax, scale)
 
     def close(self):
-        plt.close(self.sim_fig)
+        plt.close('all')
 
     def update_map(self, cost_map: np.ndarray, obstacles: List, ship_vertices=None, ship_pos=None) -> None:
         # update the costmap plot
