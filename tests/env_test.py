@@ -8,7 +8,7 @@ import numpy as np
 
 
 # env = gym.make('ship-ice-v0')
-env = gym.make('object-pushing-v0')
+env = gym.make('maze-NAMO-v0')
 env.reset()
 
 for i in range(500):
@@ -17,3 +17,5 @@ for i in range(500):
     observation, reward, terminated, truncated, info = env.step(action)
 
     print(observation.shape)
+    
+    env.render()
