@@ -20,7 +20,7 @@ max_obs_y: 9
 
 ### PLANNER PARAMS
 #max_replan: 1        # max number of replans
-concentration: 0.2    # options are 0.2, 0.3, 0.4, 0.5
+concentration: 0.2    # options are 0.1, 0.2, 0.3, 0.4, 0.5
 planner: 'predictive'    # options are 'skeleton', 'straight', or 'lattice'
 goal_y: 39
 threshold_dist: 0.5   # fraction of path length for deciding whether to update planned path

@@ -8,7 +8,7 @@ BenchNPIN is a comprehensive suite of benchmarking tools for mobile robot non-pr
 
 2. Install dependencies.
 ```bash
-cd BenchNAMO
+cd BenchNPIN
 pip install -r requirements.txt
 ```
 
@@ -25,14 +25,20 @@ python tests/env_test.py
 ```
 This script runs a straight-line policy and renders the visualization of the simulation.
 
-### Running a simple demo for autonomous ship planning
+### Running a demo for autonomous ship navigation using a planning-based policy
 ```bash
-python tests/plan_ship_ice_nav.py
+python tests/ship_ice_nav.py
 ```
 This script runs the lattice planner for ship ice navigation
 
-### Running a simple for box pushing teleoperation
+### Running a simple box pushing teleoperation pipeline
 ```bash
 python tests/pushing_data_collection.py
 ```
 This script runs a simple demonstration data collection pipeline on the box pushing environment.
+
+
+### Train and evaluate baselines for autonomous ship navigation
+```bash
+python tests/ship_ice_baselines.py
+```
