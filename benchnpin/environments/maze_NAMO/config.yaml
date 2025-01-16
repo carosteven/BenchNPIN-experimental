@@ -126,12 +126,7 @@ controller:
 
 #env parameters
 env:
-length: 10
-width: 10
-maze_walls:
-  - [None, [0, 0, length, 0, 1]]  # Bottom boundary
-  - [None, [0, 0, 0, width, 1]]  # Left boundary
-  - [None, [length, 0, length, width, 1]]  # Right boundary
-  - [None, [0, width, length, width, 1]]  # Top boundary
-  - [None, [length / 3, 0, length / 3, width / 2, 1]]  # Vertical maze wall
-  - [None, [2 * length / 3, 0, 2 * length / 3, width / 2, 1]]  # Another vertical maze wall
+  length: 15
+  width: 16
+
+  

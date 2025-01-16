@@ -15,5 +15,5 @@ register(
 register(
      id="maze-NAMO-v0",
      entry_point="benchnpin.environments.maze_NAMO:MazeNAMO",
-     max_episode_steps=300,
+     max_episode_steps=300000,
 )

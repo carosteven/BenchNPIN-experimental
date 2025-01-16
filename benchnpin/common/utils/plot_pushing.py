@@ -246,6 +246,10 @@ class Plot:
                         self.sim_obs_patches[i].set_facecolor('lightblue')  # Change fill color
             
 
+    def plot_maze(self, maze_walls: List, width) -> None:
+        for wall in maze_walls:
+            self.sim_ax.plot([wall[0][0], wall[1][0]], [wall[0][1], wall[1][1]], 'k-', linewidth=width)
+        
 
     def animate_map(self, save_fig_dir=None, suffix=0):
         # draw artists for map plot

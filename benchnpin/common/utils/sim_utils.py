@@ -32,11 +32,12 @@ def generate_sim_obs(space, obstacles: List[dict], density):
 
 
 def generate_sim_maze(space, maze_walls):
-    for body, shape in maze_walls:
+    for pos in maze_walls:
+        print(pos)
         body = pymunk.Body(body_type=pymunk.Body.STATIC)
-        shape = pymunk.Segment(body, shape[0], shape[1], 5)
-        shape.elasticity = 0.01
-        shape.friction = 1.0
+        shape = pymunk.Segment(body, pos[0], pos[1], 1)
+        shape.elasticity = 0.5
+        shape.friction = 0.5
         space.add(body, shape)
 
 

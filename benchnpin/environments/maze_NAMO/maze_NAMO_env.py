@@ -30,6 +30,15 @@ YAW_CONSTRAINT_PENALTY = 0
 BOUNDARY_PENALTY = -50
 TERMINAL_REWARD = 200
 
+FORWARD = 0
+STOP_TURNING = 1
+LEFT = 2
+RIGHT = 3
+STOP = 4
+OTHER = 5
+SMALL_LEFT = 6
+SMALL_RIGHT = 7
+
 class MazeNAMO(gym.Env):
     """Custom Environment that follows gym interface"""
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
@@ -56,12 +65,21 @@ class MazeNAMO(gym.Env):
 
         self.low_dim_state = self.cfg.low_dim_state
 
+        
+        self.env_max_trial = 4000
+
         # Define action space
         max_yaw_rate_step = (np.pi/2) / 15        # rad/sec
         print("max yaw rate per step: ", max_yaw_rate_step)
         self.action_space = spaces.Box(low=-max_yaw_rate_step, high=max_yaw_rate_step, dtype=np.float64)
-        # load maze environment
         
+        
+        # Define observation space
+                # Define action space
+        max_yaw_rate_step = (np.pi/2) / 15        # rad/sec
+        print("max yaw rate per step: ", max_yaw_rate_step)
+        self.action_space = spaces.Box(low=-max_yaw_rate_step, high=max_yaw_rate_step, dtype=np.float64)
+
         # Define observation space
         self.low_dim_state = self.cfg.low_dim_state
         if self.low_dim_state:
@@ -90,7 +108,7 @@ class MazeNAMO(gym.Env):
 
         plt.ion()  # Interactive mode on
         
-
+   
     def init_maze_NAMO_sim(self):
 
         # initialize maze environment
@@ -166,41 +184,31 @@ class MazeNAMO(gym.Env):
         # post_solve: two shapes are touching and collision response processed
         self.handler.pre_solve = pre_solve_handler
         self.handler.post_solve = post_solve_handler
-        
+    
         
     def init_maze_NAMO_env(self):
-
-        trial_idx = self.episode_idx % self.env_max_trial       # this will warp around the environment trial after reaching the last one
-        if self.low_dim_state:
-            trial = self.experiment[self.fixed_trial_idx]  # 0.5 is the concentration, 0 is the trial number
-        else:
-            trial = self.experiment[trial_idx]  # 0.5 is the concentration, 0 is the trial number
-
-        init_queue={
-                    **trial
-                }
         
-        _, self.start, self.obs_dicts = init_queue.values()
-
-
         # generate random start point, if specified
         if self.cfg.random_start:
             x_start = 1 + random.random() * (self.cfg.start_x_range - 1)    # [1, start_x_range]
             self.start = (x_start, 1.0, np.pi / 2)
+        else:
+            self.start = (5, 1.0, np.pi / 2)
 
-        if self.cfg.randomize_obstacles:
-            self.randomize_obstacles()
+        # if self.cfg.randomize_obstacles:
+        #     self.randomize_obstacles()
+
+        self.obs_dicts = self.generate_obstacles()
         
         # filter out obstacles that have zero area
         self.obs_dicts[:] = [ob for ob in self.obs_dicts if poly_area(ob['vertices']) != 0]
         self.obstacles = [ob['vertices'] for ob in self.obs_dicts]
 
-        self.goal = (self.cfg.goal_x, self.cfg.goal_y)
-
-        #initialize maze
-        self.maze = generate_sim_maze(self.space, self.cfg.env.maze_walls)
-
-        # initialize robot sim objects
+        self.goal = (0, self.cfg.goal_y)
+        #initialize the maze walls
+        self.construct_maze_walls()
+        generate_sim_maze(self.space, self.maze_walls)
+        # initialize ship sim objects
         self.polygons = generate_sim_obs(self.space, self.obs_dicts, self.cfg.sim.obstacle_density)
         for p in self.polygons:
             p.collision_type = 2
@@ -212,7 +220,54 @@ class MazeNAMO(gym.Env):
         for _ in range(1000):
             self.space.step(self.dt / self.steps)
         self.prev_obs = CostMap.get_obs_from_poly(self.polygons)
+     
+    def generate_obstacles(self):
+        obs_size = self.cfg.obstacle_size
+        obstacles = []          # a list storing non-overlappin obstacle centers
+
+        if self.cfg.randomize_obstacles:
+            total_obs_required = self.cfg.num_obstacles
+            self.num_box = self.cfg.num_obstacles
+            obs_min_dist = self.cfg.min_obs_dist
+            min_x = self.cfg.min_obs_x
+            max_x = self.cfg.max_obs_x
+            min_y = self.cfg.min_obs_y
+            max_y = self.cfg.max_obs_y
+
+            obs_count = 0
+            while obs_count < total_obs_required:
+                center_x = random.random() * (max_x - min_x) + min_x
+                center_y = random.random() * (max_y - min_y) + min_y
+
+                # loop through previous obstacles to check for overlap
+                overlapped = False
+                for prev_obs_x, pre_obs_y in obstacles:
+                    if ((center_x - prev_obs_x)**2 + (center_y - pre_obs_y)**2)**(0.5) <= obs_min_dist:
+                        overlapped = True
+                        break
+                
+                if not overlapped:
+                    obstacles.append([center_x, center_y])
+                    obs_count += 1
         
+        else:
+            obstacles.append([8, 5.5])
+            obstacles.append([3, 7])
+            obstacles.append([13, 8])
+            self.num_box = 3
+        
+        # convert to obs dict
+        obs_dict = []
+        for obs_x, obs_y in obstacles:
+            obs_info = {}
+            obs_info['centre'] = np.array([obs_x, obs_y])
+            obs_info['vertices'] = np.array([[obs_x + obs_size, obs_y + obs_size], 
+                                    [obs_x - obs_size, obs_y + obs_size], 
+                                    [obs_x - obs_size, obs_y - obs_size], 
+                                    [obs_x + obs_size, obs_y - obs_size]])
+            obs_dict.append(obs_info)
+        return obs_dict
+   
 
     def reset(self, seed=None, options=None):
         """Resets the environment to the initial state and returns the initial observation."""
@@ -244,7 +299,8 @@ class MazeNAMO(gym.Env):
                                 round(self.ship_body.position.y, 2),
                                 round(self.ship_body.angle, 2)), 
                 'total_work': self.total_work[0], 
-                'obs': updated_obstacles}
+                'obs': updated_obstacles, 
+                'box_count': 0}
 
         if self.low_dim_state:
             observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles)
@@ -253,7 +309,16 @@ class MazeNAMO(gym.Env):
             observation = self.generate_observation()
         return observation, info
 
-
+          
+    def construct_maze_walls(self):
+        self.length = self.cfg.env.length
+        self.width = self.cfg.env.width
+        self.maze_walls = [[(0,0),(self.width,0)] , [(0,0),(0,self.length)],
+                    [(self.width,0),(self.width,self.length)], 
+                    [(0,self.length),(self.width,self.length)],
+                    [(self.width/3,0),(self.width/3,self.length/3)], [(2*self.width/3,self.length),(2*self.width/3,5)]]
+       
+    
     def randomize_obstacles(self):
         """
         NOTE this function is called only when using low-dimensional observation
@@ -274,24 +339,54 @@ class MazeNAMO(gym.Env):
         """Executes one time step in the environment and returns the result."""
         self.t += 1
 
-        # constant forward speed in global frame
-        global_velocity = R(self.ship_body.angle) @ [self.target_speed, 0]
+        if self.cfg.demo_mode:
 
-        # apply velocity controller
-        self.ship_body.angular_velocity = action
-        self.ship_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
+            if action == FORWARD:
+                self.linear_speed = 0.1
+            elif action == STOP_TURNING:
+                self.angular_speed = 0.0
+
+            elif action == LEFT:
+                self.angular_speed = 0.1
+            elif action == RIGHT:
+                self.angular_speed = -0.1
+
+            elif action == SMALL_LEFT:
+                self.angular_speed = 0.05
+            elif action == SMALL_RIGHT:
+                self.angular_speed = -0.05
+
+            elif action == STOP:
+                self.linear_speed = 0.0
+                self.angular_speed = 0.0
+
+            # check speed boundary
+            if self.linear_speed <= 0:
+                self.linear_speed = 0
+            elif self.linear_speed >= self.target_speed:
+                self.linear_speed = self.target_speed
+
+            # apply linear and angular speeds
+            global_velocity = R(self.ship_body.angle) @ [self.linear_speed, 0]
+
+            # apply velocity controller
+            self.ship_body.angular_velocity = self.angular_speed
+            self.ship_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
+
+        else:
+
+            # constant forward speed in global frame
+            global_velocity = R(self.ship_body.angle) @ [self.target_speed, 0]
+
+            # apply velocity controller
+            self.ship_body.angular_velocity = action
+            self.ship_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
 
         # move simulation forward
-        yaw_constraint_violated = False
         boundary_constraint_violated = False
         boundary_violation_terminal = False      # if out of boundary for too much, terminate and truncate the episode
         for _ in range(self.steps):
             self.space.step(self.dt / self.steps)
-
-            # apply yaw constraints
-            if self.ship_body.angle <= self.yaw_lim[0] or self.ship_body.angle >= self.yaw_lim[1]:
-                self.ship_body.angular_velocity = 0.0
-                yaw_constraint_violated = True
 
             # apply boundary constraints
             if self.ship_body.position.x < 0 or self.ship_body.position.x > self.cfg.occ.map_width:
@@ -300,10 +395,10 @@ class MazeNAMO(gym.Env):
             boundary_violation_terminal = True
         if self.ship_body.position.x > self.cfg.occ.map_width and abs(self.ship_body.position.x - self.cfg.occ.map_width) >= self.boundary_violation_limit:
             boundary_violation_terminal = True
-            
-
+        
         # get updated obstacles
         updated_obstacles = CostMap.get_obs_from_poly(self.polygons)
+        num_completed, all_boxes_completed = self.boxes_completed(updated_obstacles=updated_obstacles)
 
         # compute work done
         work = total_work_done(self.prev_obs, updated_obstacles)
@@ -313,28 +408,23 @@ class MazeNAMO(gym.Env):
         self.obstacles = updated_obstacles
 
         # check episode terminal condition
-        if self.ship_body.position.y >= self.goal[1]:
+        if all_boxes_completed:
             terminated = True
-        elif self.t >= self.t_max or boundary_violation_terminal:
+        elif boundary_violation_terminal:
             terminated = True
         else:
             terminated = False
 
         # compute reward
         if self.ship_body.position.y < self.goal[1]:
-            # dist_reward = self.goal[1] - self.ship_body.position.y
             dist_reward = -1
         else:
             dist_reward = 0
         collision_reward = -work
 
-        # print("collision reward: ", collision_reward, "; dist reward: ", dist_reward)
-        # collision_reward = 0.0
         reward = self.beta * collision_reward + dist_reward
 
         # apply constraint penalty
-        if yaw_constraint_violated:
-            reward += YAW_CONSTRAINT_PENALTY
         if boundary_constraint_violated:
             reward += BOUNDARY_PENALTY
 
@@ -350,12 +440,15 @@ class MazeNAMO(gym.Env):
                 'collision reward': collision_reward, 
                 'scaled collision reward': collision_reward * self.beta, 
                 'dist reward': dist_reward, 
-                'obs': updated_obstacles}
+                'obs': updated_obstacles, 
+                'box_count': num_completed}
         
+        # generate observation
         if self.low_dim_state:
             observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles)
         else:
             observation = self.generate_observation()
+        
         return observation, reward, terminated, False, info
 
 
@@ -400,7 +493,23 @@ class MazeNAMO(gym.Env):
         observation = np.concatenate((np.array([occupancy]), np.array([footprint])))          # (2, H, W)
         return observation
 
+    def boxes_completed(self, updated_obstacles):
+        """
+        Returns a tuple: (int: number of boxes completed, bool: whether pushing task is complete)
+        """
+        completed_count = 0
+        completed = False
 
+        for obs in updated_obstacles:
+            center = np.abs(poly_centroid(obs))
+            if center[1] - self.cfg.obstacle_size >= self.cfg.goal_y:
+                completed_count += 1
+        
+        if completed_count == self.num_box:
+            completed = True
+        
+        return completed_count, completed
+    
     def render(self, mode='human', close=False):
         """Renders the environment."""
 
@@ -411,39 +520,34 @@ class MazeNAMO(gym.Env):
                 self.plot.update_path(full_path=self.path.T)
             else:
                 self.plot.update_path_scatter(full_path=self.path.T)
-
+        self.plot.plot_maze(self.maze_walls, 5)
         self.plot.update_ship(self.ship_body, self.ship_shape, move_yaxis_threshold=self.cfg.anim.move_yaxis_threshold)
         self.plot.update_obstacles(obstacles=CostMap.get_obs_from_poly(self.polygons))
-        if self.t % self.cfg.anim.plot_steps == 0:
-            self.plot.animate_sim(save_fig_dir=os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
-                            if (self.cfg.anim.save and self.cfg.output_dir) else None, suffix=self.t)
+        # get updated obstacles
+        self.plot.animate_sim(save_fig_dir=os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
+                        if (self.cfg.anim.save and self.cfg.output_dir) else None, suffix=self.t)
 
-            # whether to also log occupancy observation
-            if self.cfg.render.log_obs and not self.low_dim_state:
+        if self.cfg.render.log_obs and not self.low_dim_state:
 
-                # visualize occupancy map
-                self.con_ax.clear()
-                occ_map_render = np.copy(self.occupancy.occ_map)
-                occ_map_render = np.flip(occ_map_render, axis=0)
-                self.con_ax.imshow(occ_map_render, cmap='gray')
-                self.con_ax.axis('off')
-                save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
-                fp = os.path.join(save_fig_dir, str(self.t) + '_con.png')
-                self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
+            # visualize occupancy map
+            self.con_ax.clear()
+            occ_map_render = np.copy(self.occupancy.occ_map)
+            occ_map_render = np.flip(occ_map_render, axis=0)
+            self.con_ax.imshow(occ_map_render, cmap='gray')
+            self.con_ax.axis('off')
+            save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
+            fp = os.path.join(save_fig_dir, str(self.t) + '_con.png')
+            self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
 
-                # visualize footprint
-                self.con_ax.clear()
-                occ_map_render = np.copy(self.occupancy.footprint)
-                occ_map_render = np.flip(occ_map_render, axis=0)
-                self.con_ax.imshow(occ_map_render, cmap='gray')
-                self.con_ax.axis('off')
-                save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
-                fp = os.path.join(save_fig_dir, str(self.t) + '_footprint.png')
-                self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
-
-        else:
-            self.plot.animate_sim(suffix=self.t)
-
+            # visualize footprint
+            self.con_ax.clear()
+            occ_map_render = np.copy(self.occupancy.footprint)
+            occ_map_render = np.flip(occ_map_render, axis=0)
+            self.con_ax.imshow(occ_map_render, cmap='gray')
+            self.con_ax.axis('off')
+            save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
+            fp = os.path.join(save_fig_dir, str(self.t) + '_footprint.png')
+            self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
 
     def close(self):
         """Optional: close any resources or cleanup if necessary."""
