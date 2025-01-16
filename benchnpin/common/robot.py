@@ -83,12 +83,12 @@ class Robot:
         if body_type is None:
             body_type = Body.KINEMATIC  # Body.DYNAMIC
         body = Body()  # mass and moment ignored when kinematic body type
-        body.mass = 1
-        body.moment = 1
         body.position = (x, y)
         body.velocity = Vec2d(*velocity)
         body.angle = theta  # Rotation of the body in radians
         shape = Poly(body, [tuple(item) for item in vertices], radius=0.02)
+        shape.mass = 1
+        shape.elasticity = 0.01
         # shape.mass = 100
 
         return body, shape

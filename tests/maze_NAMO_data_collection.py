@@ -29,6 +29,7 @@ STOP = 4
 OTHER = 5
 SMALL_LEFT = 6
 SMALL_RIGHT = 7
+BACKWARD = 8
 
 command = STOP
 manual_stop = False
@@ -38,8 +39,10 @@ def on_press(key):
     try:
         if key.char == 'w':  # Move up
             command = FORWARD
-        elif key.char == 'x':  # Move down
+        elif key.char == 'y':  # Stop turning
             command = STOP_TURNING
+        elif key.char == 'x':  # Move down
+            command = BACKWARD
         elif key.char == 'a':  # Move left
             command = LEFT
         elif key.char == 'd':  # Move right
@@ -86,9 +89,8 @@ def collect_demos():
             transition_count = 1        # start from 1 as we recorded the reset step
             while listener.running:  # While the listener is active
                 global command
-                print(info)
                 print("command: ", command, "; step: ", t, \
-                    "; num completed: ", info['box_count'],  end="\r")
+                    "; num completed: ",  end="\r")
                 observation, reward, terminated, truncated, info = env.step(command)
 
                 # command = OTHER

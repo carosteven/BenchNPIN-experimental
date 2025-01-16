@@ -38,6 +38,7 @@ STOP = 4
 OTHER = 5
 SMALL_LEFT = 6
 SMALL_RIGHT = 7
+BACKWARD = 8
 
 class MazeNAMO(gym.Env):
     """Custom Environment that follows gym interface"""
@@ -106,6 +107,10 @@ class MazeNAMO(gym.Env):
             self.linear_speed = 0.0
             self.linear_speed_increment = 0.02
 
+        #robot and obstacles occupancy grid
+        self.occupancy_plot = plt
+        self.occupancy_plot.ion()
+
         plt.ion()  # Interactive mode on
         
    
@@ -154,13 +159,13 @@ class MazeNAMO(gym.Env):
 
         # setup pymunk collision callbacks
         def pre_solve_handler(arbiter, space, data):
-            ice_body = arbiter.shapes[1].body
-            ice_body.pre_collision_KE = ice_body.kinetic_energy  # hacky, adding a field to pymunk body object
+            obstacle_body = arbiter.shapes[1].body
+            obstacle_body.pre_collision_KE = obstacle_body.kinetic_energy  # hacky, adding a field to pymunk body object
             return True
 
         def post_solve_handler(arbiter, space, data):
             # nonlocal self.total_ke, self.system_ke_loss, self.total_impulse, self.clln_obs
-            ship_shape, ice_shape = arbiter.shapes
+            robot_shape, obstacle_shape = arbiter.shapes
 
             self.system_ke_loss.append(arbiter.total_ke)
 
@@ -187,13 +192,26 @@ class MazeNAMO(gym.Env):
     
         
     def init_maze_NAMO_env(self):
+
+        #initialize the maze walls in a list (temporary)
+        self.construct_maze_walls()
+        #add maze walls to pymunk
+        generate_sim_maze(self.space, self.maze_walls)
         
-        # generate random start point, if specified
+        # generate random start point, if specified and avoid maze walls
         if self.cfg.random_start:
-            x_start = 1 + random.random() * (self.cfg.start_x_range - 1)    # [1, start_x_range]
-            self.start = (x_start, 1.0, np.pi / 2)
+            #x_start = 1 + random.random() * (self.cfg.start_x_range - 1)    # [1, start_x_range]
+            while True:
+                x_start = 1 + random.random() * (self.cfg.start_x_range - 1)
+                y_start = 1 + random.random() * (self.cfg.start_y_range - 1)
+                #check if the start and goal points are not in the maze walls
+                if not self.space.point_query((x_start, y_start), 0, pymunk.ShapeFilter()): 
+                    print("start point: ", x_start, y_start)
+                    break
+
+            self.start = (x_start, y_start,np.pi*3/2)
         else:
-            self.start = (5, 1.0, np.pi / 2)
+            self.start = (2, 2,np.pi*3/2)
 
         # if self.cfg.randomize_obstacles:
         #     self.randomize_obstacles()
@@ -204,18 +222,16 @@ class MazeNAMO(gym.Env):
         self.obs_dicts[:] = [ob for ob in self.obs_dicts if poly_area(ob['vertices']) != 0]
         self.obstacles = [ob['vertices'] for ob in self.obs_dicts]
 
-        self.goal = (0, self.cfg.goal_y)
-        #initialize the maze walls
-        self.construct_maze_walls()
-        generate_sim_maze(self.space, self.maze_walls)
+        self.goal = (self.cfg.goal_x, self.cfg.goal_y)
+        
         # initialize ship sim objects
         self.polygons = generate_sim_obs(self.space, self.obs_dicts, self.cfg.sim.obstacle_density)
         for p in self.polygons:
             p.collision_type = 2
 
-        self.ship_body, self.ship_shape = Robot.sim(self.cfg.ship.vertices, self.start)
-        self.ship_shape.collision_type = 1
-        self.space.add(self.ship_body, self.ship_shape)
+        self.robot_body, self.robot_shape = Robot.sim(self.cfg.robot.vertices, self.start, body_type=pymunk.Body.DYNAMIC)
+        self.robot_shape.collision_type = 1
+        self.space.add(self.robot_body, self.robot_shape)
         # run initial simulation steps to let environment settle
         for _ in range(1000):
             self.space.step(self.dt / self.steps)
@@ -251,7 +267,7 @@ class MazeNAMO(gym.Env):
                     obs_count += 1
         
         else:
-            obstacles.append([8, 5.5])
+            obstacles.apself.startpend([8, 5.5])
             obstacles.append([3, 7])
             obstacles.append([13, 8])
             self.num_box = 3
@@ -288,16 +304,16 @@ class MazeNAMO(gym.Env):
 
         self.plot = Plot(
                 np.zeros((self.cfg.costmap.m, self.cfg.costmap.n)), self.obs_dicts,
-                ship_pos=self.start, ship_vertices=np.asarray(self.ship_shape.get_vertices()),
-                map_figsize=None, y_axis_limit=self.cfg.plot.y_axis_limit, inf_stream=False, goal=self.goal[1], 
-                path=np.zeros((3, 50))
+                robot_pos=self.start, robot_vertices=np.asarray(self.robot_shape.get_vertices()),
+                map_figsize=None, y_axis_limit=self.cfg.plot.y_axis_limit, inf_stream=False, goal_point = self.goal , 
+                path=np.zeros((3, 50)) , maze= self.maze_walls
             )
 
         # get updated obstacles
         updated_obstacles = CostMap.get_obs_from_poly(self.polygons)
-        info = {'state': (round(self.ship_body.position.x, 2),
-                                round(self.ship_body.position.y, 2),
-                                round(self.ship_body.angle, 2)), 
+        info = {'state': (round(self.robot_body.position.x, 2),
+                                round(self.robot_body.position.y, 2),
+                                round(self.robot_body.angle, 2)), 
                 'total_work': self.total_work[0], 
                 'obs': updated_obstacles, 
                 'box_count': 0}
@@ -342,14 +358,15 @@ class MazeNAMO(gym.Env):
         if self.cfg.demo_mode:
 
             if action == FORWARD:
-                self.linear_speed = 0.1
+                self.linear_speed = 10
             elif action == STOP_TURNING:
-                self.angular_speed = 0.0
-
+                self.angular_speed = 0
+            elif action == BACKWARD:
+                self.linear_speed = -10
             elif action == LEFT:
-                self.angular_speed = 0.1
+                self.angular_speed = 5
             elif action == RIGHT:
-                self.angular_speed = -0.1
+                self.angular_speed = -5
 
             elif action == SMALL_LEFT:
                 self.angular_speed = 0.05
@@ -361,26 +378,26 @@ class MazeNAMO(gym.Env):
                 self.angular_speed = 0.0
 
             # check speed boundary
-            if self.linear_speed <= 0:
-                self.linear_speed = 0
-            elif self.linear_speed >= self.target_speed:
+           # if self.linear_speed <= 0:
+            #    self.linear_speed = 0
+            if self.linear_speed >= self.target_speed:
                 self.linear_speed = self.target_speed
 
             # apply linear and angular speeds
-            global_velocity = R(self.ship_body.angle) @ [self.linear_speed, 0]
+            global_velocity = R(self.robot_body.angle) @ [self.linear_speed, 0]
 
             # apply velocity controller
-            self.ship_body.angular_velocity = self.angular_speed
-            self.ship_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
+            self.robot_body.angular_velocity = self.angular_speed
+            self.robot_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
 
         else:
 
             # constant forward speed in global frame
-            global_velocity = R(self.ship_body.angle) @ [self.target_speed, 0]
+            global_velocity = R(self.robot_body.angle) @ [self.target_speed, 0]
 
             # apply velocity controller
-            self.ship_body.angular_velocity = action
-            self.ship_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
+            self.robot_body.angular_velocity = action
+            self.robot_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
 
         # move simulation forward
         boundary_constraint_violated = False
@@ -389,16 +406,16 @@ class MazeNAMO(gym.Env):
             self.space.step(self.dt / self.steps)
 
             # apply boundary constraints
-            if self.ship_body.position.x < 0 or self.ship_body.position.x > self.cfg.occ.map_width:
+            if self.robot_body.position.x < 0 or self.robot_body.position.x > self.cfg.occ.map_width:
                 boundary_constraint_violated = True
-        if self.ship_body.position.x < 0 and abs(self.ship_body.position.x - 0) >= self.boundary_violation_limit:
+        if self.robot_body.position.x < 0 and abs(self.robot_body.position.x - 0) >= self.boundary_violation_limit:
             boundary_violation_terminal = True
-        if self.ship_body.position.x > self.cfg.occ.map_width and abs(self.ship_body.position.x - self.cfg.occ.map_width) >= self.boundary_violation_limit:
+        if self.robot_body.position.x > self.cfg.occ.map_width and abs(self.robot_body.position.x - self.cfg.occ.map_width) >= self.boundary_violation_limit:
             boundary_violation_terminal = True
         
         # get updated obstacles
         updated_obstacles = CostMap.get_obs_from_poly(self.polygons)
-        num_completed, all_boxes_completed = self.boxes_completed(updated_obstacles=updated_obstacles)
+        
 
         # compute work done
         work = total_work_done(self.prev_obs, updated_obstacles)
@@ -408,15 +425,13 @@ class MazeNAMO(gym.Env):
         self.obstacles = updated_obstacles
 
         # check episode terminal condition
-        if all_boxes_completed:
-            terminated = True
-        elif boundary_violation_terminal:
+        if self.goal_is_reached():
             terminated = True
         else:
             terminated = False
 
         # compute reward
-        if self.ship_body.position.y < self.goal[1]:
+        if self.robot_body.position.y < self.goal[1]:
             dist_reward = -1
         else:
             dist_reward = 0
@@ -433,15 +448,15 @@ class MazeNAMO(gym.Env):
             reward += TERMINAL_REWARD
 
         # Optionally, we can add additional info
-        info = {'state': (round(self.ship_body.position.x, 2),
-                                round(self.ship_body.position.y, 2),
-                                round(self.ship_body.angle, 2)), 
+        info = {'state': (round(self.robot_body.position.x, 2),
+                                round(self.robot_body.position.y, 2),
+                                round(self.robot_body.angle, 2)), 
                 'total_work': self.total_work[0], 
                 'collision reward': collision_reward, 
                 'scaled collision reward': collision_reward * self.beta, 
                 'dist reward': dist_reward, 
                 'obs': updated_obstacles, 
-                'box_count': num_completed}
+               }    
         
         # generate observation
         if self.low_dim_state:
@@ -481,8 +496,8 @@ class MazeNAMO(gym.Env):
         occupancy = np.copy(self.occupancy.occ_map)         # (H, W)
 
         # compute footprint observation  NOTE: here we want unscaled, unpadded vertices
-        ship_pose = (self.ship_body.position.x, self.ship_body.position.y, self.ship_body.angle)
-        self.occupancy.compute_ship_footprint_planner(ship_state=ship_pose, ship_vertices=self.cfg.ship.vertices)
+        robot_pose = (self.robot_body.position.x, self.robot_body.position.y, self.robot_body.angle)
+        self.occupancy.compute_ship_footprint_planner(ship_state=robot_pose, ship_vertices=self.cfg.robot.vertices)
         footprint = np.copy(self.occupancy.footprint)       # (H, W)
 
         # compute goal observation
@@ -493,22 +508,24 @@ class MazeNAMO(gym.Env):
         observation = np.concatenate((np.array([occupancy]), np.array([footprint])))          # (2, H, W)
         return observation
 
-    def boxes_completed(self, updated_obstacles):
-        """
-        Returns a tuple: (int: number of boxes completed, bool: whether pushing task is complete)
-        """
-        completed_count = 0
-        completed = False
+    def goal_is_reached(self):
+        #check if the goal is within the robot's dimensions
+        robot_x = self.robot_body.position.x
+        robot_y = self.robot_body.position.y
+        robot_angle = self.robot_body.angle
+        robot_vertices = self.robot_shape.get_vertices()
+        robot_transformed_vertices = [R(robot_angle) @ vertex + np.array([robot_x, robot_y]) for vertex in robot_vertices]
+        #check if the goal is within the robot's dimensions (cross-product method)
+        cross_product = []
+        for i in range(len(robot_transformed_vertices)):
+            vertex1 = robot_transformed_vertices[i]
+            vertex2 = robot_transformed_vertices[(i+1)%len(robot_transformed_vertices)]
+            cross_product.append(np.cross(vertex2 - vertex1, self.goal - vertex1))
+        if all([cross >= 0 for cross in cross_product]) or all([cross <= 0 for cross in cross_product]):
+            print("goal reached")
+            return True
+            
 
-        for obs in updated_obstacles:
-            center = np.abs(poly_centroid(obs))
-            if center[1] - self.cfg.obstacle_size >= self.cfg.goal_y:
-                completed_count += 1
-        
-        if completed_count == self.num_box:
-            completed = True
-        
-        return completed_count, completed
     
     def render(self, mode='human', close=False):
         """Renders the environment."""
@@ -521,7 +538,7 @@ class MazeNAMO(gym.Env):
             else:
                 self.plot.update_path_scatter(full_path=self.path.T)
         self.plot.plot_maze(self.maze_walls, 5)
-        self.plot.update_ship(self.ship_body, self.ship_shape, move_yaxis_threshold=self.cfg.anim.move_yaxis_threshold)
+        self.plot.update_ship(self.robot_body, self.robot_shape, move_yaxis_threshold=self.cfg.anim.move_yaxis_threshold)
         self.plot.update_obstacles(obstacles=CostMap.get_obs_from_poly(self.polygons))
         # get updated obstacles
         self.plot.animate_sim(save_fig_dir=os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))

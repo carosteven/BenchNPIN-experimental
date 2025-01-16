@@ -26,11 +26,12 @@ class Plot:
             smoothing_nodes: Tuple[List, List] = tuple(),
             swath: np.ndarray = None,
             swath_cost: float = None,
-            ship_pos: Union[Tuple, np.ndarray] = None,
-            ship_vertices: np.ndarray = None,
+            robot_pos: Union[Tuple, np.ndarray] = None,
+            robot_vertices: np.ndarray = None,
             turning_radius: float = None,
             horizon: float = None,
             goal: float = None,
+            goal_point: Tuple[float, float] = None,
             inf_stream=False,
             map_figsize=(5, 10),
             sim_figsize=(10, 10),
@@ -39,6 +40,7 @@ class Plot:
             legend=False,
             scale: float = 1,
             boundaries: List = None,
+            maze =  None
             # corners: List = None
     ):
         R = lambda theta: np.asarray([
@@ -50,6 +52,7 @@ class Plot:
         self.full_path = path  # shape is 3 x n
         self.horizon = horizon if horizon != np.inf else None
         self.goal = goal
+        self.goal_point = goal_point
         self.inf_stream = inf_stream
         self.target = target
         self.node_scat = None
@@ -66,7 +69,7 @@ class Plot:
             self.ax.append(self.sim_ax)
 
             # show the ship poses
-            self.sim_ax.plot(ship_pos[0], ship_pos[1], 'b-', label='ship path')
+            self.sim_ax.plot(robot_pos[0], robot_pos[1], 'b-', label='ship path')
 
             if self.full_path is not None:
                 self.path_line.append(
@@ -102,14 +105,14 @@ class Plot:
             for obs in obstacles:
                 self.sim_obs_patches.append(
                     self.sim_ax.add_patch(
-                        patches.Polygon(obs['vertices'], True, fill=True, fc='lightblue', ec=None, gid=obs['idx'])
+                        patches.Polygon(obs['vertices'], True, fill=True, fc='lightblue', ec='k')
                     )
                 )
 
             #  add patch for ship
-            if ship_vertices is not None:
+            if robot_vertices is not None:
                 self.ship_patch = self.sim_ax.add_patch(
-                    patches.Polygon(ship_vertices @ R(ship_pos[2]).T + ship_pos[:2], True, fill=True,
+                    patches.Polygon(robot_vertices @ R(robot_pos[2]).T + robot_pos[:2], True, fill=True,
                                     edgecolor=None, facecolor='red', linewidth=2)
                 )
 
@@ -122,11 +125,14 @@ class Plot:
                                                      linewidth=3.0, label='final goal')
                 self.sim_fig.canvas.draw()
 
+            if self.goal_point:
+                self.goal_line, *_ = self.sim_ax.plot(*self.goal_point, 'go', label='goal', zorder=3)
+
             self.ship_state_line = None
             self.past_path_line = None
 
             # keeps track of how far ship has traveled in subsequent steps
-            self.prev_ship_pos = ship_pos
+            self.prev_ship_pos = robot_pos
 
             # display target on path
             if target:
@@ -136,8 +142,8 @@ class Plot:
 
         # set the axes limits for all plots
         for ax in self.ax:
-            # ax.axis([0, costmap.shape[1], 0, y_axis_limit])
-            ax.axis([-costmap.shape[1] / 2, costmap.shape[1] / 2, -y_axis_limit / 2, y_axis_limit / 2])
+            ax.axis([0, costmap.shape[1], 0, y_axis_limit])
+            #ax.axis([-costmap.shape[1] / 2, costmap.shape[1] / 2, -y_axis_limit / 2, y_axis_limit / 2])
             ax.set_aspect('equal')
 
         if scale > 1:
