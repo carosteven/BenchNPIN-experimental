@@ -29,8 +29,6 @@ class Plot:
             robot_pos: Union[Tuple, np.ndarray] = None,
             robot_vertices: np.ndarray = None,
             turning_radius: float = None,
-            horizon: float = None,
-            goal: float = None,
             inf_stream=False,
             map_figsize=(5, 10),
             sim_figsize=(10, 10),
@@ -38,8 +36,7 @@ class Plot:
             y_axis_limit=100,
             legend=False,
             scale: float = 1,
-            boundaries: List = None,
-            # corners: List = None
+            boundary_polygon: float = None,
     ):
         R = lambda theta: np.asarray([
             [np.cos(theta), -np.sin(theta)],
@@ -48,11 +45,113 @@ class Plot:
         self.ax = []
         self.path_line = []
         self.full_path = path  # shape is 3 x n
-        self.horizon = horizon if horizon != np.inf else None
-        self.goal = goal
         self.inf_stream = inf_stream
         self.target = target
         self.node_scat = None
+
+        self.boundary_polygon = boundary_polygon
+        self.boundary_patches = []
+
+        self.map = bool(map_figsize)
+        if self.map:
+            # init two fig and ax objects
+            # the first is for plotting the updated costmap, node plot, swath, and path
+            # the second is for plotting the simulated ship, polygons
+            if nodes_expanded:
+                self.map_fig, ax = plt.subplots(1, 2, figsize=map_figsize, sharex='all', sharey='all')
+                self.node_ax, self.map_ax = ax
+                self.ax.extend([self.node_ax, self.map_ax])
+
+                # plot the nodes that were expanded
+                self.create_node_plot(nodes_expanded)
+
+            else:
+                self.map_fig, self.map_ax = plt.subplots(1, 1, figsize=map_figsize)
+                self.ax.append(self.map_ax)
+
+            # add title
+            self.map_ax.set_title('Costmap')
+
+            # plot the costmap
+            if costmap.sum() > 0:
+                costmap[costmap == np.max(costmap)] = np.nan  # set the max to nan
+                cmap = 'viridis'
+            else:
+                cmap = 'Greys'
+            self.costmap_image = self.map_ax.imshow(costmap, origin='lower', cmap=cmap)
+
+            # show the path on both the map and sim plot
+            if self.full_path is not None:
+                self.path_line.extend([
+                    *self.map_ax.plot(self.full_path[0], self.full_path[1], 'g'),
+                ])
+
+            # plot the nodes along the path and the nodes added from the smoothing step
+            self.nodes_line = []
+            if len(path_nodes) != 0:
+                self.nodes_line.append(*self.map_ax.plot(*path_nodes, 'bx'))
+            if smoothing_nodes:
+                self.nodes_line.append(*self.map_ax.plot(*smoothing_nodes, 'gx'))
+
+                
+            # plot the boundary polygon
+            if boundary_polygon is not None:
+                self.boundary_patches.append(
+                    self.map_ax.add_patch(
+                        patches.Polygon(boundary_polygon, True, fill=False, edgecolor='green')
+                    )
+                )
+
+
+            if swath is not None:
+                # init swath image
+                swath_im = np.zeros(swath.shape + (4,))  # init RGBA array
+                # fill in the RGB values
+                swath_im[:] = colors.to_rgba('m')
+                swath_im[:, :, 3] = swath  # set pixel transparency to 0 if pixel value is 0
+                # plot the full swath
+                self.swath_image = self.map_ax.imshow(swath_im, origin='lower', alpha=0.3)
+
+            if swath_cost:
+                self.map_ax.set_title('Swath cost: {:.2f}'.format(swath_cost))
+
+            if legend:
+                # create a path for swath
+                patch_swath = patches.Patch(color=colors.to_rgba('m'), alpha=0.6)
+
+                # add legend
+                self.map_fig.legend(
+                    (*self.nodes_line, self.path_line[0], patch_swath),
+                    ('path nodes', 'smoothing nodes', 'path', 'swath')  # , loc=(0.5, 0)
+                )
+
+            # add the patches for the ice
+            for obs in obstacles:
+                self.map_ax.add_patch(
+                    patches.Polygon(obs['vertices'], True, fill=False)
+                )
+
+            if robot_vertices is not None:
+                assert robot_pos is not None
+                if len(np.shape(robot_pos)) > 1:
+                    # we have a list of poses
+                    self.map_ax.plot(robot_pos[0], robot_pos[1], 'b-', label='ship path')
+                    robot_pos = robot_pos[:, -1]
+
+                self.map_ax.add_patch(
+                    patches.Polygon(robot_vertices @ R(robot_pos[2]).T + robot_pos[:2], True, fill=False, color='red')
+                )
+
+                if turning_radius is not None:
+                    x = np.arange(0, 2 * np.pi, 0.01)
+                    self.map_ax.plot(
+                        (robot_pos[0] - turning_radius * np.sin(robot_pos[2]) + turning_radius * np.cos(x)).tolist(),
+                        (robot_pos[1] + turning_radius * np.cos(robot_pos[2]) + turning_radius * np.sin(x)).tolist(), 'g'
+                    )
+                    self.map_ax.plot(
+                        (robot_pos[0] + turning_radius * np.sin(robot_pos[2]) + turning_radius * np.cos(x)).tolist(),
+                        (robot_pos[1] - turning_radius * np.cos(robot_pos[2]) + turning_radius * np.sin(x)).tolist(), 'g'
+                    )
 
         self.sim = bool(sim_figsize)
         if self.sim:
@@ -73,37 +172,20 @@ class Plot:
                     *self.sim_ax.plot(self.full_path[0], self.full_path[1], 'r', label='planned path')
                 )
 
-            # add the patches for the boundaries
-            if boundaries:
-                self.sim_bounds_patches = []
-                for bound in boundaries:
-                    if bound['type'] == 'corner':
-                        for poly in bound['vertices']:
-                            self.sim_bounds_patches.append(
-                                self.sim_ax.add_patch(
-                                    patches.Polygon(poly, True, fill=True, fc='black', ec='black')
-                                )
-                            )
-                    elif bound['type'] == 'receptacle':
-                        self.sim_bounds_patches.append(
-                            self.sim_ax.add_patch(
-                                patches.Polygon(bound['vertices'], True, fill=True, fc='green', ec=None)
-                            )
-                        )
-                    else:
-                        self.sim_bounds_patches.append(
-                            self.sim_ax.add_patch(
-                                patches.Polygon(bound['vertices'], True, fill=True, fc='black', ec=None)
-                            )
-                        )
-
             # add the patches for the ice
             self.sim_obs_patches = []
-            for i in range(len(obstacles)):
-                obs = obstacles[i]
+            for obs in obstacles:
                 self.sim_obs_patches.append(
                     self.sim_ax.add_patch(
-                        patches.Polygon(obs['vertices'], True, fill=True, fc='lightblue', ec=None, gid=i)
+                        patches.Polygon(obs['vertices'], True, fill=True, fc='lightblue', ec='k')
+                    )
+                )
+            
+            # plot the boundary polygon
+            if boundary_polygon is not None:
+                self.boundary_patches.append(
+                    self.sim_ax.add_patch(
+                        patches.Polygon(boundary_polygon, True, fill=False, edgecolor='green')
                     )
                 )
 
@@ -111,20 +193,8 @@ class Plot:
             if robot_vertices is not None:
                 self.ship_patch = self.sim_ax.add_patch(
                     patches.Polygon(robot_vertices @ R(robot_pos[2]).T + robot_pos[:2], True, fill=True,
-                                    edgecolor=None, facecolor='red', linewidth=2)
+                                    edgecolor='black', facecolor='white', linewidth=2)
                 )
-
-            if self.horizon:
-                self.horizon_line = self.sim_ax.axhline(y=self.horizon + self.full_path[1, 0], color='orange',
-                                                        linestyle='--', linewidth=3.0, label='intermediate goal')
-
-            if self.goal:
-                self.goal_line = self.sim_ax.axhline(y=self.goal, color='g', linestyle='-',
-                                                     linewidth=3.0, label='final goal')
-                self.sim_fig.canvas.draw()
-
-            self.ship_state_line = None
-            self.past_path_line = None
 
             # keeps track of how far ship has traveled in subsequent steps
             self.prev_ship_pos = robot_pos
@@ -137,16 +207,14 @@ class Plot:
 
         # set the axes limits for all plots
         for ax in self.ax:
-            # ax.axis([0, costmap.shape[1], 0, y_axis_limit])
-            ax.axis([-costmap.shape[1] / 2, costmap.shape[1] / 2, -y_axis_limit / 2, y_axis_limit / 2])
+            ax.axis([0, costmap.shape[1], 0, y_axis_limit])
             ax.set_aspect('equal')
 
         if scale > 1:
             scale_axis_labels(self.ax, scale)
 
     def close(self):
-        # plt.close(self.obs_fig)
-        plt.close(self.sim_fig)
+        plt.close('all')
 
     def update_map(self, cost_map: np.ndarray, obstacles: List, ship_vertices=None, ship_pos=None) -> None:
         # update the costmap plot
@@ -200,13 +268,34 @@ class Plot:
                 self.past_path_line[0].remove()
             self.past_path_line = self.sim_ax.plot(past_path[0], past_path[1], 'r--', linewidth=1)
 
-        if self.sim:
-            # update goal line segment
-            if self.horizon:
-                if start_y and self.horizon + start_y < self.goal_line.get_ydata()[0]:
-                    self.horizon_line.set_ydata(self.horizon + start_y)
-                else:
-                    self.horizon_line.set_visible(False)
+        if self.map:
+            # update the node plot
+            if nodes_expanded:
+                self.create_node_plot(nodes_expanded)
+
+            # update the nodes lines
+            if path_nodes is not None:
+                self.nodes_line[0].set_data(path_nodes[0], path_nodes[1])
+            if smoothing_nodes is not None:
+                self.nodes_line[1].set_data(smoothing_nodes[0], smoothing_nodes[1])
+
+            if full_swath is not None:
+                swath_im = np.zeros(full_swath.shape + (4,))  # init RGBA array
+                # fill in the RGB values
+                swath_im[:] = colors.to_rgba('m')
+                swath_im[:, :, 3] = full_swath  # set pixel transparency to 0 if pixel value is 0
+                # update the swath image
+                self.swath_image.set_data(swath_im)
+
+            if swath_cost:
+                self.map_ax.set_title('Swath cost: {:.2f}'.format(swath_cost))
+
+            # update y axis
+            ymin, ymax = self.map_ax.get_ylim()
+            if self.inf_stream or full_path[1, -1] > ymax:
+                offset = full_path[1, 0] - self.full_path[1, 0]
+                self.map_ax.set_ylim([ymin + offset, ymax + offset])
+                self.full_path = full_path
 
 
     def update_path_scatter(
@@ -222,14 +311,6 @@ class Plot:
         
         self.sim_ax.scatter(p_x, p_y, c='r', label='planned path', s=0.5)
 
-        if self.sim:
-            # update goal line segment
-            if self.horizon:
-                if start_y and self.horizon + start_y < self.goal_line.get_ydata()[0]:
-                    self.horizon_line.set_ydata(self.horizon + start_y)
-                else:
-                    self.horizon_line.set_visible(False)
-
 
     def update_ship(self, body, shape, move_yaxis_threshold=20) -> None:
         heading = body.angle
@@ -243,16 +324,7 @@ class Plot:
         offset = np.array([0, body.position.y - self.prev_ship_pos[1]])
         self.prev_ship_pos = body.position  # update prev ship position
 
-        # update y axis if necessary
-        if (
-                self.inf_stream and
-                body.position.y > move_yaxis_threshold and
-                body.position.y + self.horizon < self.goal
-        ):
-            ymin, ymax = self.sim_ax.get_ylim()
-            self.sim_ax.set_ylim([ymin + offset[1], ymax + offset[1]])
-
-    def update_obstacles(self, polygons: List = None, obstacles: List = None, obs_idx: int = None, update_patch: bool = False) -> None:
+    def update_obstacles(self, polygons: List = None, obstacles: List = None) -> None:
         if polygons:
             for poly, patch in zip(polygons, self.sim_obs_patches):
                 heading = poly.body.angle
@@ -263,25 +335,8 @@ class Plot:
                 patch.set_xy(vs)
 
         elif obstacles:
-            if update_patch:
-                for patch in self.sim_obs_patches:
-                    if patch.get_gid() == obs_idx:
-                        patch.remove()
-                        self.sim_obs_patches.remove(patch)
-                        self.sim_fig.canvas.draw_idle()
-
-            else:
-                for obs, patch in zip(obstacles, self.sim_obs_patches):
-                    patch.set_xy(obs)
-            
-                if obs_idx is not None:
-                    for i in range(len(self.sim_obs_patches)):
-                        if i == obs_idx:
-                            self.sim_obs_patches[i].set_facecolor('red')  # Change fill color
-                        else:
-                            self.sim_obs_patches[i].set_facecolor('lightblue')  # Change fill color
-            
-
+            for obs, patch in zip(obstacles, self.sim_obs_patches):
+                patch.set_xy(obs)
 
     def animate_map(self, save_fig_dir=None, suffix=0):
         # draw artists for map plot
@@ -305,13 +360,13 @@ class Plot:
         #     if artist is not None:
         #         self.sim_ax.draw_artist(artist)
 
-        for artist in [self.ship_patch, *self.sim_obs_patches, *self.path_line, self.goal_line]:
+        for artist in [self.ship_patch, *self.sim_obs_patches, *self.path_line, *self.boundary_patches]:
             if artist is not None:
                 self.sim_ax.draw_artist(artist)
 
         self.sim_fig.canvas.blit(self.sim_fig.bbox)
         self.sim_fig.canvas.flush_events()
-        # self.save(save_fig_dir, suffix, fig='sim')
+        self.save(save_fig_dir, suffix, fig='sim')
 
     def save(self, save_fig_dir, suffix, im_format='png', fig='map'):
         if save_fig_dir:

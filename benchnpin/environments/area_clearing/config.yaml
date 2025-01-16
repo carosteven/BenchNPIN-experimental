@@ -8,6 +8,29 @@ plot:
   y_axis_limit: 18  # limits the y-axis of the plot
   show: false       # true will show planner plots
 
+env:
+  boundary: [
+    [0.0, 0.0],
+    [0.0, 18.0],
+    [16.0, 18.0],
+    [16.0, 0.0]
+  ]
+  # boundary: [
+  #   # a regular octagon of side length 16
+  #   [0.0, 0.0],
+  #   [-8.0, 8.0],
+  #   [-8.0, 16.0],
+  #   [0.0, 24.0],
+  #   [8.0, 24.0],
+  #   [16.0, 16.0],
+  #   [16.0, 8.0],
+  #   [8.0, 0.0]
+  # ]
+  static_obstacles: 
+    - [ [2.5, 4.5], [2.5, 5.0], [3.0, 5.0], [3.0, 4.5] ]
+    - [ [5.5, 6.5], [5.5, 7.0], [6.0, 7.0], [6.0, 6.5] ]
+    - [ [10.0, 10.0], [10.0, 10.5], [10.5, 10.5], [10.5, 10.0] ]
+
 demo_mode: true     # when using demo mode, control both forward and angular speed
 
 # obstacles information

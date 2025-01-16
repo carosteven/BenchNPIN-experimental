@@ -609,7 +609,7 @@ class ObjectPushing(gym.Env):
 
         self.plot = Plot(
                 np.zeros((self.cfg.costmap.m, self.cfg.costmap.n)), self.cubes_dicts,
-                ship_pos=self.start, ship_vertices=np.asarray(self.ship_shape.get_vertices()),
+                robot_pos=self.start, robot_vertices=np.asarray(self.ship_shape.get_vertices()),
                 map_figsize=None, y_axis_limit=self.cfg.plot.y_axis_limit, inf_stream=False, goal=self.goal[1], 
                 path=np.zeros((3, 50)), boundaries=self.boundary_dicts
             )

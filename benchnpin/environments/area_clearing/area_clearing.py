@@ -13,7 +13,7 @@ from benchnpin.common.cost_map import CostMap
 from benchnpin.common.evaluation.metrics import total_work_done
 from benchnpin.common.geometry.polygon import poly_area
 from benchnpin.common.ship import Ship as Robot
-from benchnpin.common.utils.plot_pushing import Plot
+from benchnpin.common.utils.plot_area_clear import Plot
 from benchnpin.common.utils.sim_utils import generate_sim_obs
 from benchnpin.common.geometry.polygon import poly_centroid
 from benchnpin.common.utils.utils import DotDict
@@ -87,7 +87,6 @@ class AreaClearingEnv(gym.Env):
         self.plot = None
         self.con_fig, self.con_ax = plt.subplots(figsize=(10, 10))
 
-
         if self.cfg.demo_mode:
             self.angular_speed = 0.0
             self.angular_speed_increment = 0.005
@@ -95,6 +94,8 @@ class AreaClearingEnv(gym.Env):
             self.linear_speed_increment = 0.02
 
         plt.ion()  # Interactive mode on
+
+        self.boundary_polygon = self.cfg.env.boundary
         
 
     def init_area_clearing_sim(self):
@@ -204,6 +205,9 @@ class AreaClearingEnv(gym.Env):
             self.space.step(self.dt / self.steps)
         self.prev_obs = CostMap.get_obs_from_poly(self.polygons)
 
+    def generate_static_obstacles(self):
+        pass
+
     
     def generate_obstacles(self):
         obs_size = self.cfg.obstacle_size
@@ -251,7 +255,6 @@ class AreaClearingEnv(gym.Env):
                                     [obs_x + obs_size, obs_y - obs_size]])
             obs_dict.append(obs_info)
         return obs_dict
-
         
 
     def reset(self, seed=None, options=None):
@@ -273,9 +276,9 @@ class AreaClearingEnv(gym.Env):
 
         self.plot = Plot(
                 np.zeros((self.cfg.costmap.m, self.cfg.costmap.n)), self.obs_dicts,
-                ship_pos=self.start, ship_vertices=np.asarray(self.robot_shape.get_vertices()),
-                map_figsize=None, y_axis_limit=self.cfg.plot.y_axis_limit, inf_stream=False, goal=self.goal[1], 
-                path=np.zeros((3, 50))
+                robot_pos=self.start, robot_vertices=np.asarray(self.robot_shape.get_vertices()),
+                map_figsize=None, y_axis_limit=self.cfg.plot.y_axis_limit, inf_stream=False, 
+                path=np.zeros((3, 50)), boundary_polygon=self.boundary_polygon,
             )
 
         # get updated obstacles

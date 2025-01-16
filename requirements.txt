@@ -21,3 +21,6 @@ gymnasium
 stable-baselines3
 tensorboard
 git+https://github.com/rdesc/pydubins.git
+
+# cd benchnpin/common/spfa
+# python setup.py install
