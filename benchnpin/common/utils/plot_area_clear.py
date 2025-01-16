@@ -312,7 +312,7 @@ class Plot:
         self.sim_ax.scatter(p_x, p_y, c='r', label='planned path', s=0.5)
 
 
-    def update_ship(self, body, shape, move_yaxis_threshold=20) -> None:
+    def update_robot(self, body, shape, move_yaxis_threshold=20) -> None:
         heading = body.angle
         R = np.asarray([
             [math.cos(heading), -math.sin(heading)], [math.sin(heading), math.cos(heading)]
@@ -364,7 +364,7 @@ class Plot:
             if artist is not None:
                 self.sim_ax.draw_artist(artist)
 
-        self.sim_fig.canvas.blit(self.sim_fig.bbox)
+        # self.sim_fig.canvas.blit(self.sim_fig.bbox)
         self.sim_fig.canvas.flush_events()
         self.save(save_fig_dir, suffix, fig='sim')
 

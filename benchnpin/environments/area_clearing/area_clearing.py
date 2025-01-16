@@ -480,7 +480,7 @@ class AreaClearingEnv(gym.Env):
             else:
                 self.plot.update_path_scatter(full_path=self.path.T)
 
-        self.plot.update_ship(self.robot_body, self.robot_shape, move_yaxis_threshold=self.cfg.anim.move_yaxis_threshold)
+        self.plot.update_robot(self.robot_body, self.robot_shape, move_yaxis_threshold=self.cfg.anim.move_yaxis_threshold)
         self.plot.update_obstacles(obstacles=CostMap.get_obs_from_poly(self.polygons))
         # get updated obstacles
         self.plot.animate_sim(save_fig_dir=os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
