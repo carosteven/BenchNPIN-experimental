@@ -8,6 +8,8 @@ bench_mano/ice_environments*
 
 __pycache__/
 
+venv/
+
 *egg-info
 
 venv/

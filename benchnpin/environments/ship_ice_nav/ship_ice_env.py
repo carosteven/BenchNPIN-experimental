@@ -50,17 +50,18 @@ class ShipIceEnv(gym.Env):
 
         self.episode_idx = None     # the increment of this index is handled in reset()
 
+        self.goal = (0, self.cfg.goal_y)
         self.path = None
         self.scatter = False
 
         self.low_dim_state = self.cfg.low_dim_state
 
         # Define action space
-        max_yaw_rate_step = (np.pi/2) / 15        # rad/sec
-        print("max yaw rate per step: ", max_yaw_rate_step)
-        self.action_space = spaces.Box(low=-max_yaw_rate_step, high=max_yaw_rate_step, dtype=np.float64)
+        self.max_yaw_rate_step = (np.pi/2) / 7        # rad/sec
+        self.action_space = spaces.Box(low=-1, high=1, dtype=np.float32)
         
         # load ice field environment
+        assert self.cfg.concentration in [0.1, 0.2, 0.3, 0.4, 0.5], print("PLease check environment config. Concentration value should be set to one of the followings: 0.1, 0.2, 0.3, 0.4, 0.5")
         ice_file = os.path.join(self.current_dir, 'ice_environments', 'experiments_' + str(int(self.cfg.concentration * 100)) + '_100_r06_d40x12.pk')
         ddict = pickle.load(open(ice_file, 'rb'))
 
@@ -76,7 +77,7 @@ class ShipIceEnv(gym.Env):
 
         else:
             self.observation_shape = (2, self.occupancy.occ_map_height, self.occupancy.occ_map_width)
-            self.observation_space = spaces.Box(low=0, high=1, shape=self.observation_shape, dtype=np.float64)
+            self.observation_space = spaces.Box(low=0, high=255, shape=self.observation_shape, dtype=np.uint8)
 
         self.yaw_lim = (0, np.pi)       # lower and upper limit of ship yaw  
         self.boundary_violation_limit = 0.0       # if the ship is out of boundary more than this limit, terminate and truncate the episode 
@@ -190,8 +191,6 @@ class ShipIceEnv(gym.Env):
         self.obs_dicts[:] = [ob for ob in self.obs_dicts if poly_area(ob['vertices']) != 0]
         self.obstacles = [ob['vertices'] for ob in self.obs_dicts]
 
-        self.goal = (0, self.cfg.goal_y)
-
         # initialize ship sim objects
         self.polygons = generate_sim_obs(self.space, self.obs_dicts, self.cfg.sim.obstacle_density)
         for p in self.polygons:
@@ -265,6 +264,8 @@ class ShipIceEnv(gym.Env):
     def step(self, action):
         """Executes one time step in the environment and returns the result."""
         self.t += 1
+
+        action = action * self.max_yaw_rate_step
 
         # constant forward speed in global frame
         global_velocity = R(self.ship_body.angle) @ [self.target_speed, 0]
@@ -373,20 +374,9 @@ class ShipIceEnv(gym.Env):
     
 
     def generate_observation(self):
-        # compute occupancy map observation  (40, 12)
-        if self.occupancy.map_height == 40:
-            raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, ice_binary_w=235, ice_binary_h=774)
-
-        elif self.occupancy.map_height == 20 and self.occupancy.map_width == 12:
-            raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, ice_binary_w=235, ice_binary_h=387)
-
-        elif self.occupancy.map_height == 20 and self.occupancy.map_width == 6:
-            raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, ice_binary_w=118, ice_binary_h=387)
-
-        elif self.occupancy.map_height == 10 and self.occupancy.map_width == 6:
-            raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, ice_binary_w=118, ice_binary_h=192)
-        else:
-            raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, ice_binary_w=235, ice_binary_h=1355)
+        raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, 
+                        ice_binary_w=int(self.occupancy.map_width * self.cfg.occ.m_to_pix_scale), 
+                        ice_binary_h=int(self.occupancy.map_height * self.cfg.occ.m_to_pix_scale))
         self.occupancy.compute_con_gridmap(raw_ice_binary=raw_ice_binary, save_fig_dir=None)
         occupancy = np.copy(self.occupancy.occ_map)         # (H, W)
 
@@ -395,12 +385,8 @@ class ShipIceEnv(gym.Env):
         self.occupancy.compute_ship_footprint_planner(ship_state=ship_pose, ship_vertices=self.cfg.ship.vertices)
         footprint = np.copy(self.occupancy.footprint)       # (H, W)
 
-        # compute goal observation
-        # self.occupancy.compute_goal_image(goal_y=self.goal[1])
-        # goal_img = np.copy(self.occupancy.goal_img)               # (H, W)
-        # observation = np.concatenate((np.array([occupancy]), np.array([footprint]), np.array([goal_img])))          # (3, H, W)
-
         observation = np.concatenate((np.array([occupancy]), np.array([footprint])))          # (2, H, W)
+        observation = (observation*255).astype(np.uint8)                                      # NOTE SB3 image format
         return observation
 
 
@@ -449,5 +435,5 @@ class ShipIceEnv(gym.Env):
 
 
     def close(self):
-        """Optional: close any resources or cleanup if necessary."""
-        pass
+        plt.close('all')
+        self.plot.close()

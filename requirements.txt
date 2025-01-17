@@ -1,5 +1,5 @@
 numpy
-matplotlib
+matplotlib==3.7.5
 pyyaml
 tqdm
 scipy
@@ -18,6 +18,8 @@ torch
 torchsummary
 torchvision
 gymnasium
+stable-baselines3
+tensorboard
 git+https://github.com/rdesc/pydubins.git
 
 # cd benchnpin/common/spfa
