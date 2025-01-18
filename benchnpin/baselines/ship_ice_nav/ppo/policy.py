@@ -1,4 +1,5 @@
 from benchnpin.baselines.base_class import BasePolicy
+from benchnpin.baselines.feature_extractors import ResNet18
 import benchnpin.environments
 import gymnasium as gym
 from stable_baselines3 import PPO
@@ -21,7 +22,9 @@ class ShipIcePPO(BasePolicy):
         self.model = None
 
 
-    def train(self, policy_kwargs=dict(net_arch=dict(pi=[256, 256], vf=[256, 256])),
+    def train(self, policy_kwargs=dict(features_extractor_class=ResNet18,
+                                        features_extractor_kwargs=dict(features_dim=512),
+                                        net_arch=dict(pi=[512, 256], vf=[512, 256])),
             n_steps=256,
             batch_size=64,
             n_epochs=10,
