@@ -56,7 +56,7 @@ prim:
   num_headings: 8  # number of headings in the discretized heading space
   step_size: 0.1   # step size for sampling points on the path
   turning_radius: 2.0  # turning radius of the ship in lattice units
-ship:
+agent:
   mass: 1  # mass of the NRC ship in kg
   padding: 0.25  # adds padding to ship footprint
   length: 0.8
@@ -86,6 +86,7 @@ ship:
 ### SIMULATION PARAMS
 render:
   log_obs: true       # whether to log occupancy observation
+  frequency: 20       # frequency of rendering
 sim:
   t_max: 2000  # max number of iterations in simulation loop (originally 5000)
   steps: 100    # number of simulation steps per iteration (originally 10)
@@ -131,8 +132,8 @@ controller:
 
 ### ENVIRONMENT PARAMS
 env:
-  obstacle_config: small_columns # options are small_empty, small_columns, large_columns, large_divider
+  obstacle_config: large_divider # options are small_empty, small_columns, large_columns, large_divider
   room_length: 10
-  room_width: 5 # 5 for small, 10 for large
+  room_width: 10 # 5 for small, 10 for large
   receptacle_width: 1.5
   shortest_path_channel_scale: 0.25

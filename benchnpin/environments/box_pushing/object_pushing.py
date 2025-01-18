@@ -15,9 +15,9 @@ from matplotlib import pyplot as plt
 from benchnpin.common.cost_map import CostMap
 from benchnpin.common.evaluation.metrics import total_work_done
 from benchnpin.common.geometry.polygon import poly_area
-from benchnpin.common.ship import Ship as Robot
+# from benchnpin.common.ship import Ship as Robot
 from benchnpin.common.utils.plot_pushing import Plot
-from benchnpin.common.utils.sim_utils import generate_sim_cubes, generate_sim_bounds, generate_sim_corners
+from benchnpin.common.utils.sim_utils import generate_sim_cubes, generate_sim_bounds, generate_sim_agent
 from benchnpin.common.geometry.polygon import poly_centroid
 from benchnpin.common.utils.utils import DotDict
 from benchnpin.common.occupancy_grid.occupancy_map import OccupancyGrid
@@ -73,7 +73,7 @@ class ObjectPushing(gym.Env):
         cfg_file = os.path.join(self.current_dir, 'config.yaml')
 
         cfg = DotDict.load_from_file(cfg_file)
-        # self.occupancy = OccupancyGrid(grid_width=cfg.occ.grid_size, grid_height=cfg.occ.grid_size, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, ship_body=None)
+        # self.occupancy = OccupancyGrid(grid_width=cfg.occ.grid_size, grid_height=cfg.occ.grid_size, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, agent.body=None)
         self.cfg = cfg
 
         # State
@@ -84,7 +84,7 @@ class ObjectPushing(gym.Env):
         self.configuration_space = None
 
         # Robot state
-        robot_pixel_width = int(np.ceil(self.cfg.ship.length * LOCAL_MAP_PIXELS_PER_METER))
+        robot_pixel_width = int(np.ceil(self.cfg.agent.length * LOCAL_MAP_PIXELS_PER_METER))
         self.robot_state_channel = np.zeros((LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH), dtype=np.float32)
         start = int(np.floor(LOCAL_MAP_PIXEL_WIDTH / 2 - robot_pixel_width / 2))
         for i in range(start, start + robot_pixel_width):
@@ -200,7 +200,7 @@ class ObjectPushing(gym.Env):
 
         def post_solve_handler(arbiter, space, data):
             # nonlocal self.total_ke, self.system_ke_loss, self.total_impulse, self.clln_obs
-            ship_shape, ice_shape = arbiter.shapes
+            agent, ice_shape = arbiter.shapes
 
             self.system_ke_loss.append(arbiter.total_ke)
 
@@ -223,10 +223,13 @@ class ObjectPushing(gym.Env):
         
         def cube_boundary_pre_solve(arbiter, space, data):
             cube_shape = arbiter.shapes[0]
-            self.prevent_cube_boundary_intersection(cube_shape)
+            boundary_shape = arbiter.shapes[1]
+            self.prevent_cube_boundary_intersection(cube_shape, boundary_shape)
             return True
         
         def recept_collision_begin(arbiter, space, data):
+            if arbiter.shapes[0].label == 'cube':
+                self.cubes_completed(arbiter.shapes[0])
             return False
 
         # handler = space.add_default_collision_handler()
@@ -246,14 +249,14 @@ class ObjectPushing(gym.Env):
         self.robot_recept_handler.begin = recept_collision_begin
 
         self.cube_recept_handler = self.space.add_collision_handler(2, 4)
-        self.cube_recept_handler.begin = recept_collision_begin
+        self.cube_recept_handler.pre_solve = recept_collision_begin
 
     def init_ship_ice_env(self):
 
         # generate random start point, if specified
         if self.cfg.random_start:
-            length = self.cfg.ship.length
-            width = self.cfg.ship.width
+            length = self.cfg.agent.length
+            width = self.cfg.agent.width
             size = max(length, width)
             x_start = random.uniform(-self.cfg.env.room_length / 2 + size, self.cfg.env.room_length / 2 - size)
             y_start = random.uniform(-self.cfg.env.room_width / 2 + size, self.cfg.env.room_width / 2 - size)
@@ -261,23 +264,23 @@ class ObjectPushing(gym.Env):
             self.start = (x_start, y_start, heading)
         else:
             self.start = (5, 1.5, np.pi*3/2)
+        self.agent_info = self.cfg.agent
+        self.agent_info['start_pos'] = self.start
 
         self.boundary_dicts = self.generate_boundary()
-
-        # if self.cfg.randomize_cubes:
-        #     self.randomize_cubes()
-
         self.cubes_dicts = self.generate_cubes()
         
         # filter out cubes that have zero area NOTE probably not needed
-        self.cubes_dicts[:] = [c for c in self.cubes_dicts if poly_area(c['vertices']) != 0]
-        self.cubes = [c['vertices'] for c in self.cubes_dicts]
+        # self.cubes_dicts[:] = [c for c in self.cubes_dicts if poly_area(c['vertices']) != 0]
+        # self.cubes = [c['vertices'] for c in self.cubes_dicts]
 
-        self.goal = (0, self.cfg.goal_y)
+        self.goal = (0, self.cfg.goal_y) # TODO remove
 
         # initialize ship sim objects
         self.polygons = generate_sim_cubes(self.space, self.cubes_dicts, self.cfg.sim.cube_density)
-        self.boundaries = generate_sim_bounds(self.space, self.boundary_dicts, density=1)
+        self.boundaries = generate_sim_bounds(self.space, self.boundary_dicts)
+        self.agent = generate_sim_agent(self.space, self.agent_info)
+        self.agent.collision_type = 1
         for p in self.polygons:
             p.collision_type = 2
         for b in self.boundaries:
@@ -290,17 +293,11 @@ class ObjectPushing(gym.Env):
         corner_polys = [shape for shape in self.boundaries if getattr(shape, 'label', None) == 'corner']
         for dict in corner_dicts:
             dict['vertices'] = []
-            for i in range(3):
+            for _ in range(3):
                 vs = corner_polys[0].get_vertices()
                 transformed_vertices = [corner_polys[0].body.local_to_world(v) for v in vs]
                 dict['vertices'].append(np.array([[v.x, v.y] for v in transformed_vertices]))
                 corner_polys.pop(0)
-
-
-        self.ship_body, self.ship_shape = Robot.sim(self.cfg.ship.vertices, self.start, body_type=pymunk.Body.DYNAMIC)
-        self.ship_shape.label = 'robot'
-        self.ship_shape.collision_type = 1
-        self.space.add(self.ship_body, self.ship_shape)
 
         # Initialize configuration space (only need to compute once)
         self.update_configuration_space()
@@ -330,28 +327,24 @@ class ObjectPushing(gym.Env):
 
         return inside
     
-    def prevent_cube_boundary_intersection(self, cube_shape):
+    def prevent_cube_boundary_intersection(self, cube_shape, boundary_shape):
         cube_body = cube_shape.body
+        boundary_body = boundary_shape.body
         # Check if any vertex of the cube intersects with the boundary
         cube_vertices = [cube_body.local_to_world(v) for v in cube_shape.get_vertices()]
+        boundary_vertices = [boundary_body.local_to_world(v) for v in boundary_shape.get_vertices()]
         new_position = pymunk.Vec2d(cube_body.position.x, cube_body.position.y)
 
         # Check if the cube intersects with any dividers or columns
-        for obstacle in self.boundary_dicts:
-            if obstacle['type'] == 'divider' or obstacle['type'] == 'column' or obstacle['type'] == 'wall':
-                obstacle_vertices = obstacle['vertices']
-                for vertex in cube_vertices:
-                    if self.is_point_inside_polygon(vertex, obstacle_vertices):
-                        # Adjust the position of the cube to prevent intersection with the obstacle
-                        for vertex in cube_vertices:
-                            if self.is_point_inside_polygon(vertex, obstacle_vertices):
-                                # Move the cube away from the obstacle
-                                obstacle_center = np.mean(obstacle_vertices, axis=0)
-                                direction = pymunk.Vec2d(vertex[0], vertex[1]) - pymunk.Vec2d(obstacle_center[0], obstacle_center[1])
-                                direction = direction.normalized()
-                                new_position += direction * 0.1  # Move the cube slightly away from the obstacle
-                        cube_body.position = new_position
-                        break
+        for vertex in cube_vertices:
+            if self.is_point_inside_polygon(vertex, boundary_vertices):
+                # Adjust the position of the cube to prevent intersection with the obstacle
+                obstacle_center = np.mean(boundary_vertices, axis=0)
+                direction = pymunk.Vec2d(vertex[0], vertex[1]) - pymunk.Vec2d(obstacle_center[0], obstacle_center[1])
+                direction = direction.normalized()
+                new_position += direction * 0.1  # Move the cube slightly away from the obstacle
+                cube_body.position = new_position
+                break
 
     def get_receptacle_position_and_size(self):
         size = self.cfg.env.receptacle_width
@@ -616,9 +609,9 @@ class ObjectPushing(gym.Env):
 
         # get updated cubes
         updated_cubes = CostMap.get_obs_from_poly(self.polygons)
-        info = {'state': (round(self.ship_body.position.x, 2),
-                                round(self.ship_body.position.y, 2),
-                                round(self.ship_body.angle, 2)), 
+        info = {'state': (round(self.agent.body.position.x, 2),
+                                round(self.agent.body.position.y, 2),
+                                round(self.agent.body.angle, 2)), 
                 'total_work': self.total_work[0], 
                 'cubes': updated_cubes, 
                 'box_count': 0}
@@ -674,28 +667,20 @@ class ObjectPushing(gym.Env):
         else:
 
             # constant forward speed in global frame
-            global_velocity = R(self.ship_body.angle) @ [self.target_speed, 0]
+            global_velocity = R(self.agent.body.angle) @ [self.target_speed, 0]
 
             # apply velocity controller
-            self.ship_body.angular_velocity = action
-            self.ship_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
+            self.agent.body.angular_velocity = action
+            self.agent.body.velocity = Vec2d(global_velocity[0], global_velocity[1])
 
         # move simulation forward
         boundary_constraint_violated = False
         boundary_violation_terminal = False      # if out of boundary for too much, terminate and truncate the episode
         for _ in range(self.steps):
             self.space.step(self.dt / self.steps)
-
-            # apply boundary constraints
-        #     if self.ship_body.position.x < 0 or self.ship_body.position.x > self.cfg.occ.map_width:
-        #         boundary_constraint_violated = True
-        # if self.ship_body.position.x < 0 and abs(self.ship_body.position.x - 0) >= self.boundary_violation_limit:
-        #     boundary_violation_terminal = True
-        # if self.ship_body.position.x > self.cfg.occ.map_width and abs(self.ship_body.position.x - self.cfg.occ.map_width) >= self.boundary_violation_limit:
-        #     boundary_violation_terminal = True
-            
+    
         # get updated cubes
-        all_boxes_completed = self.boxes_completed()
+        # all_cubes_completed = self.cubes_completed()
         updated_cubes = CostMap.get_obs_from_poly(self.polygons)
 
         # compute work done
@@ -703,10 +688,10 @@ class ObjectPushing(gym.Env):
         self.total_work[0] += work
         self.total_work[1].append(work)
         self.prev_obs = updated_cubes
-        self.cubes = updated_cubes
+        # self.cubes = updated_cubes
 
         # check episode terminal condition
-        if all_boxes_completed:
+        if self.cumulative_cubes == self.num_box:
             terminated = True
         elif boundary_violation_terminal:
             terminated = True
@@ -714,7 +699,7 @@ class ObjectPushing(gym.Env):
             terminated = False
 
         # compute reward
-        if self.ship_body.position.y < self.goal[1]:
+        if self.agent.body.position.y < self.goal[1]:
             dist_reward = -1
         else:
             dist_reward = 0
@@ -731,9 +716,9 @@ class ObjectPushing(gym.Env):
             reward += TERMINAL_REWARD
 
         # Optionally, we can add additional info
-        info = {'state': (round(self.ship_body.position.x, 2),
-                                round(self.ship_body.position.y, 2),
-                                round(self.ship_body.angle, 2)), 
+        info = {'state': (round(self.agent.body.position.x, 2),
+                                round(self.agent.body.position.y, 2),
+                                round(self.agent.body.angle, 2)), 
                 'total_work': self.total_work[0], 
                 'collision reward': collision_reward, 
                 'scaled collision reward': collision_reward * self.beta, 
@@ -790,8 +775,8 @@ class ObjectPushing(gym.Env):
         occupancy = np.copy(self.occupancy.occ_map)         # (H, W)
 
         # compute footprint observation  NOTE: here we want unscaled, unpadded vertices
-        ship_pose = (self.ship_body.position.x, self.ship_body.position.y, self.ship_body.angle)
-        self.occupancy.compute_ship_footprint_planner(ship_state=ship_pose, ship_vertices=self.cfg.ship.vertices)
+        ship_pose = (self.agent.body.position.x, self.agent.body.position.y, self.agent.body.angle)
+        self.occupancy.compute_ship_footprint_planner(ship_state=ship_pose, ship_vertices=self.cfg.agent.vertices)
         footprint = np.copy(self.occupancy.footprint)       # (H, W)
 
         observation = np.concatenate((np.array([occupancy]), np.array([footprint])))          # (2, H, W)
@@ -805,18 +790,18 @@ class ObjectPushing(gym.Env):
         
         # Overhead map
         channels = []
-        channels.append(self.get_local_map(self.global_overhead_map, self.ship_body.position, self.ship_body.angle))
+        channels.append(self.get_local_map(self.global_overhead_map, self.agent.body.position, self.agent.body.angle))
         channels.append(self.robot_state_channel)
-        channels.append(self.get_local_distance_map(self.create_global_shortest_path_to_receptacle_map(), self.ship_body.position, self.ship_body.angle))
-        channels.append(self.get_local_distance_map(self.create_global_shortest_path_map(self.ship_body.position), self.ship_body.position, self.ship_body.angle))
+        channels.append(self.get_local_distance_map(self.create_global_shortest_path_to_receptacle_map(), self.agent.body.position, self.agent.body.angle))
+        channels.append(self.get_local_distance_map(self.create_global_shortest_path_map(self.agent.body.position), self.agent.body.position, self.agent.body.angle))
 
         observation = np.stack(channels)
         return observation
     
     def get_local_overhead_map(self):
-        rotation_angle = -np.degrees(self.ship_body.angle) + 90
-        pos_y = int(np.floor(self.global_overhead_map.shape[0] / 2 - self.ship_body.position.y * LOCAL_MAP_PIXELS_PER_METER))
-        pos_x = int(np.floor(self.global_overhead_map.shape[1] / 2 + self.ship_body.position.x * LOCAL_MAP_PIXELS_PER_METER))
+        rotation_angle = -np.degrees(self.agent.body.angle) + 90
+        pos_y = int(np.floor(self.global_overhead_map.shape[0] / 2 - self.agent.body.position.y * LOCAL_MAP_PIXELS_PER_METER))
+        pos_x = int(np.floor(self.global_overhead_map.shape[1] / 2 + self.agent.body.position.x * LOCAL_MAP_PIXELS_PER_METER))
         mask = rotate_image(np.zeros((LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH), dtype=np.float32), rotation_angle, order=0)
         y_start = pos_y - int(mask.shape[0] / 2)
         y_end = y_start + mask.shape[0]
@@ -890,17 +875,17 @@ class ObjectPushing(gym.Env):
         small_obstacle_map = np.zeros((LOCAL_MAP_PIXEL_WIDTH+20, LOCAL_MAP_PIXEL_WIDTH+20), dtype=np.float32)
 
         for poly in self.boundaries:
-            # Get world coordinates of vertices
+            # get world coordinates of vertices
             vertices = [poly.body.local_to_world(v) for v in poly.get_vertices()]
             vertices_np = np.array([[v.x, v.y] for v in vertices])
 
-            # Convert world coordinates to pixel coordinates
+            # convert world coordinates to pixel coordinates
             vertices_px = (vertices_np * LOCAL_MAP_PIXELS_PER_METER).astype(np.int32)
             vertices_px[:, 0] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
             vertices_px[:, 1] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
             vertices_px[:, 1] = small_obstacle_map.shape[0] - vertices_px[:, 1]
 
-            # Draw the boundary on the small_obstacle_map
+            # draw the boundary on the small_obstacle_map
             if poly.label in ['wall', 'divider', 'column', 'corner']:
                 fillPoly(small_obstacle_map, [vertices_px], color=1)
         
@@ -908,19 +893,17 @@ class ObjectPushing(gym.Env):
         obstacle_map[start_i:start_i + small_obstacle_map.shape[0], start_j:start_j + small_obstacle_map.shape[1]] = small_obstacle_map
 
         # Dilate obstacles and walls based on robot size
-        robot_pixel_width = int(np.ceil(self.cfg.ship.length * LOCAL_MAP_PIXELS_PER_METER))
+        robot_pixel_width = int(np.ceil(self.cfg.agent.length * LOCAL_MAP_PIXELS_PER_METER))
         selem = disk(np.floor(robot_pixel_width / 2))
         self.configuration_space = 1 - binary_dilation(obstacle_map, selem).astype(np.float32)
         self.small_obstacle_map = 1 - small_obstacle_map
-        # self.spy = self.small_obstacle_map
 
     def update_global_overhead_map(self):
-        # small_overhead_map = np.ones((LOCAL_MAP_PIXEL_WIDTH+20, LOCAL_MAP_PIXEL_WIDTH+20), dtype=np.float32) * FLOOR_SEG_INDEX/MAX_SEG_INDEX
         small_overhead_map = self.small_obstacle_map.copy()
 
-        for poly in self.boundaries + self.polygons + [self.ship_shape]:
+        for poly in self.boundaries + self.polygons + [self.agent]:
             if poly.label in ['wall', 'divider', 'column', 'corner']:
-                continue # Precomputed in update_configuration_space
+                continue # precomputed in update_configuration_space
 
             # get world coordinates of vertices
             vertices = [poly.body.local_to_world(v) for v in poly.get_vertices()]
@@ -933,40 +916,22 @@ class ObjectPushing(gym.Env):
             vertices_px[:, 1] = small_overhead_map.shape[0] - vertices_px[:, 1]
 
             # draw the boundary on the small_overhead_map
-            
-                # fillPoly(small_overhead_map, [vertices_px], color=OBSTACLE_SEG_INDEX/MAX_SEG_INDEX)
             if poly.label == 'receptacle':
                 fillPoly(small_overhead_map, [vertices_px], color=RECEPTACLE_SEG_INDEX/MAX_SEG_INDEX)
             elif poly.label == 'cube':
                 fillPoly(small_overhead_map, [vertices_px], color=CUBE_SEG_INDEX/MAX_SEG_INDEX)
-            elif poly.label == 'robot':
-                # print(vertices_px)
+            elif poly.label == 'agent':
                 fillPoly(small_overhead_map, [vertices_px], color=ROBOT_SEG_INDEX/MAX_SEG_INDEX)
 
         start_i, start_j = int(self.global_overhead_map.shape[0] / 2 - small_overhead_map.shape[0] / 2), int(self.global_overhead_map.shape[1] / 2 - small_overhead_map.shape[1] / 2)
         self.global_overhead_map[start_i:start_i + small_overhead_map.shape[0], start_j:start_j + small_overhead_map.shape[1]] = small_overhead_map
-        # self.spy = small_overhead_map
     
-    def boxes_completed(self):
-        """
-        Returns a tuple: (int: number of boxes completed, bool: whether pushing task is complete)
-        """
-        completed = False
-
-        for cube, vertices in zip(self.polygons, self.cubes):
-            if self.cube_position_in_receptacle(vertices):
-                self.cumulative_cubes += 1
-                self.space.remove(cube, cube.body)
-                self.polygons.remove(cube)
-                self.plot.update_obstacles(obstacles=CostMap.get_obs_from_poly(self.polygons), obs_idx=cube.idx, update_patch=True)
-
-        
-        if self.cumulative_cubes == self.num_box:
-            completed = True
-        
-        return completed
-
-
+    def cubes_completed(self, cube):
+        if self.cube_position_in_receptacle([cube.body.local_to_world(v) for v in cube.get_vertices()]):
+            self.cumulative_cubes += 1
+            self.space.remove(cube, cube.body)
+            self.polygons.remove(cube)
+            self.plot.update_obstacles(obstacles=CostMap.get_obs_from_poly(self.polygons), obs_idx=cube.idx, update_patch=True)
 
     def render(self, mode='human', close=False):
         """Renders the environment."""
@@ -979,14 +944,13 @@ class ObjectPushing(gym.Env):
             else:
                 self.plot.update_path_scatter(full_path=self.path.T)
 
-        self.plot.update_ship(self.ship_body, self.ship_shape, move_yaxis_threshold=self.cfg.anim.move_yaxis_threshold)
+        self.plot.update_ship(self.agent.body, self.agent, move_yaxis_threshold=self.cfg.anim.move_yaxis_threshold)
         self.plot.update_obstacles(obstacles=CostMap.get_obs_from_poly(self.polygons))
         # get updated obstacles
         self.plot.animate_sim(save_fig_dir=os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
                         if (self.cfg.anim.save and self.cfg.output_dir) else None, suffix=self.t)
-
-        if self.cfg.render.log_obs and not self.low_dim_state:
-            # self.observation[1,:,:] = self.spy[10:106, 10:106]
+        
+        if self.cfg.render.log_obs and not self.low_dim_state and self.t % self.cfg.render.frequency == 1:
             for ax, i in zip(self.state_ax, range(self.num_channels)):
                 ax.clear()
                 ax.set_title(f'Channel {i}')

@@ -1,12 +1,33 @@
-from typing import List
+from typing import List, Tuple
 
 import numpy as np
 import pymunk
 
 from benchnpin.common.ship import Ship
 
+def create_agent(space, vertices: List, start_pos: Tuple[float, float, float], body_type: int):
 
-def create_static(space, boundary, density):
+        x, y, heading = start_pos
+        # setup for pymunk
+        body = pymunk.Body(body_type=body_type)  # mass and moment ignored when kinematic body type
+        body.position = (x, y)
+        body.angle = heading  # rotation of the body in radians
+        dummy_shape = pymunk.Poly(None, vertices)
+        centre_of_g = dummy_shape.center_of_gravity
+        vs = [(x - centre_of_g[0], y - centre_of_g[1]) for x, y in vertices]
+
+        shape = pymunk.Poly(body, vs, radius=0.08)
+        shape.mass = 10.0
+        shape.elasticity = 0.01
+        shape.friction = 1.0
+        shape.label = 'agent'
+        space.add(body, shape)
+        return shape
+
+def generate_sim_agent(space, agent: dict, body_type=pymunk.Body.DYNAMIC):
+    return create_agent(space, agent['vertices'], agent['start_pos'], body_type)
+
+def create_static(space, boundary):
     body = space.static_body
     # body.position = (x, y)
     # dummy_shape = pymunk.Poly(None, vertices)
@@ -15,21 +36,19 @@ def create_static(space, boundary, density):
 
     vs = [(x, y) for x, y in boundary['vertices']]
     shape = pymunk.Poly(body, vs, radius=0.02)
-    shape.density = density
     shape.elasticity = 0.01
     shape.friction = 1.0
     shape.label = boundary['type']
     space.add(shape)
     return shape
 
-def generate_sim_bounds(space, bounds: List[dict], density):
-    shapes = [create_static(space, bound, density=density)
+def generate_sim_bounds(space, bounds: List[dict]):
+    shapes = [create_static(space, bound)
               for bound in bounds if bound['type'] != 'corner']
-    shapes.extend(generate_sim_corners(space, [bound for bound in bounds if bound['type'] == 'corner'], density))
+    shapes.extend(generate_sim_corners(space, [bound for bound in bounds if bound['type'] == 'corner']))
     return shapes
 
-def create_corners(space, corner, density):
-    # body = space.static_body
+def create_corners(space, corner):
     shapes = []
     vs1 = [(0, 0),
            (0, -1),
@@ -50,7 +69,6 @@ def create_corners(space, corner, density):
         body.angle = corner['heading']
 
         shape = pymunk.Poly(body, vs, radius=0.02)
-        shape.density = density
         shape.elasticity = 0.01
         shape.friction = 1.0
         shape.label = 'corner'
@@ -58,10 +76,10 @@ def create_corners(space, corner, density):
         shapes.append(shape)
     return shapes
 
-def generate_sim_corners(space, corners: List[dict], density):
+def generate_sim_corners(space, corners: List[dict]):
     corner_shapes = []
     for corner in corners:
-        cs = create_corners(space, corner, density)
+        cs = create_corners(space, corner)
         for shape in cs:
             corner_shapes.append(shape)
     return corner_shapes
