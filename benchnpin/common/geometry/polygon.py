@@ -5,7 +5,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 from shapely.geometry import LinearRing
 from skimage import draw
-from shapely.geometry import Polygon, Point
+from shapely.geometry import Polygon, Point, LineString
 
 __all__ = [
     'poly_radius',
@@ -172,8 +172,6 @@ def generate_body_points_polygon(vertices: Union[List, np.ndarray], spacing, plo
 
     return np.asarray(body_points)
 
-
-
 def shrink_or_swell_polygon(vertices, factor=0.10, swell=False, plot=False):
     """
     returns the shapely polygon which is smaller or bigger by passed factor.
@@ -200,6 +198,14 @@ def shrink_or_swell_polygon(vertices, factor=0.10, swell=False, plot=False):
         plt.show()
 
     return np.asarray(polygon_resized.exterior.xy).T
+
+def create_polygon_from_line(line_vertices, width=0.2):
+    """
+    Create a polygon from a line with a given width.
+    """
+    line = LineString(line_vertices)
+    polygon = line.buffer(width / 2, cap_style=2, join_style=2)
+    return np.asarray(polygon.exterior.coords)
 
 
 def _shrink_swell_helper(polygon: Polygon, factor: float, swell: bool = False) -> Polygon:

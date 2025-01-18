@@ -332,7 +332,7 @@ class Plot:
                     self.horizon_line.set_visible(False)
 
 
-    def update_ship(self, body, shape, move_yaxis_threshold=20) -> None:
+    def update_robot(self, body, shape, move_yaxis_threshold=20) -> None:
         heading = body.angle
         R = np.asarray([
             [math.cos(heading), -math.sin(heading)], [math.sin(heading), math.cos(heading)]

@@ -33,7 +33,6 @@ class Plot:
             map_figsize=(5, 10),
             sim_figsize=(10, 10),
             target: Tuple[float, float] = None,
-            y_axis_limit=100,
             legend=False,
             scale: float = 1,
             boundary_polygon: float = None,
@@ -207,7 +206,7 @@ class Plot:
 
         # set the axes limits for all plots
         for ax in self.ax:
-            ax.axis([0, costmap.shape[1], 0, y_axis_limit])
+            ax.axis([0, costmap.shape[1], 0, 30])
             ax.set_aspect('equal')
 
         if scale > 1:

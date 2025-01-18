@@ -15,9 +15,10 @@ from benchnpin.common.geometry.polygon import poly_area
 from benchnpin.common.ship import Ship as Robot
 from benchnpin.common.utils.plot_area_clear import Plot
 from benchnpin.common.utils.sim_utils import generate_sim_obs
-from benchnpin.common.geometry.polygon import poly_centroid
+from benchnpin.common.geometry.polygon import poly_centroid, create_polygon_from_line
 from benchnpin.common.utils.utils import DotDict
 from benchnpin.common.occupancy_grid.occupancy_map import OccupancyGrid
+from benchnpin.common.types import ObstacleType
 
 R = lambda theta: np.asarray([
     [np.cos(theta), -np.sin(theta)],
@@ -35,6 +36,7 @@ STOP = 4
 OTHER = 5
 SMALL_LEFT = 6
 SMALL_RIGHT = 7
+
 
 
 class AreaClearingEnv(gym.Env):
@@ -55,11 +57,8 @@ class AreaClearingEnv(gym.Env):
         self.cfg = cfg
 
         self.env_max_trial = 4000
-
         self.beta = 500         # amount to scale the collision reward
-
         self.episode_idx = None
-
         self.path = None
         self.scatter = False
 
@@ -96,11 +95,12 @@ class AreaClearingEnv(gym.Env):
         plt.ion()  # Interactive mode on
 
         self.boundary_polygon = self.cfg.env.boundary
-        
+        self.walls = self.cfg.env.walls
+        self.static_obstacles = self.cfg.env.static_obstacles
 
     def init_area_clearing_sim(self):
 
-        # initialize ship-ice environment
+        # initialize robot clearing environment
         self.steps = self.cfg.sim.steps
         self.t_max = self.cfg.sim.t_max if self.cfg.sim.t_max else np.inf
         self.horizon = self.cfg.a_star.horizon
@@ -133,18 +133,10 @@ class AreaClearingEnv(gym.Env):
         # keep track of contact points
         self.contact_pts = []
 
-        # setup a collision callback to keep track of total ke
-        # def pre_solve_handler(arbiter, space, data):
-        #     nonlocal ship_ke
-        #     ship_ke = arbiter.shapes[0].body.kinetic_energy
-        #     print('ship_ke', ship_ke, 'mass', arbiter.shapes[0].body.mass, 'velocity', arbiter.shapes[0].body.velocity)
-        #     return True
-        # # http://www.pymunk.org/en/latest/pymunk.html#pymunk.Body.each_arbiter
-
         # setup pymunk collision callbacks
         def pre_solve_handler(arbiter, space, data):
-            ice_body = arbiter.shapes[1].body
-            ice_body.pre_collision_KE = ice_body.kinetic_energy  # hacky, adding a field to pymunk body object
+            obs_body = arbiter.shapes[1].body
+            obs_body.pre_collision_KE = obs_body.kinetic_energy  # hacky, adding a field to pymunk body object
             return True
 
         def post_solve_handler(arbiter, space, data):
@@ -171,7 +163,6 @@ class AreaClearingEnv(gym.Env):
         self.handler.pre_solve = pre_solve_handler
         self.handler.post_solve = post_solve_handler
         
-        
     def init_area_clearing_env(self):
 
         # generate random start point, if specified
@@ -181,19 +172,21 @@ class AreaClearingEnv(gym.Env):
         else:
             self.start = (5, 1.0, np.pi / 2)
 
-        # if self.cfg.randomize_obstacles:
-        #     self.randomize_obstacles()
-
         self.obs_dicts = self.generate_obstacles()
+        obs_dicts = self.generate_static_obstacles()
+        self.obs_dicts.extend(obs_dicts)
+        obs_dicts = self.generate_walls()
+        self.obs_dicts.extend(obs_dicts)
         
         # filter out obstacles that have zero area
-        self.obs_dicts[:] = [ob for ob in self.obs_dicts if poly_area(ob['vertices']) != 0]
+        self.obs_dicts[:] = [ob for ob in self.obs_dicts if (poly_area(ob['vertices']) != 0)]
         self.obstacles = [ob['vertices'] for ob in self.obs_dicts]
 
         self.goal = (0, self.cfg.goal_y)
 
         # initialize ship sim objects
-        self.polygons = generate_sim_obs(self.space, self.obs_dicts, self.cfg.sim.obstacle_density)
+        self.dynamic_obs = [ob for ob in self.obs_dicts if ob['type'] == ObstacleType.DYNAMIC]
+        self.polygons = generate_sim_obs(self.space, self.dynamic_obs, self.cfg.sim.obstacle_density)
         for p in self.polygons:
             p.collision_type = 2
 
@@ -206,8 +199,41 @@ class AreaClearingEnv(gym.Env):
         self.prev_obs = CostMap.get_obs_from_poly(self.polygons)
 
     def generate_static_obstacles(self):
-        pass
+        obs_dict = []
+        for obstacle in self.static_obstacles:
+            obs_info = {}
+            obs_info['type'] = ObstacleType.STATIC
+            obs_info['vertices'] = np.array(obstacle)
 
+            shape = pymunk.Poly(self.space.static_body, obstacle, radius=1)
+            shape.collision_type = 2
+            shape.friction = 0.99
+
+            self.space.add(shape)
+            obs_dict.append(obs_info)
+        return obs_dict
+
+    def generate_walls(self):
+        obs_dict = []
+        for wall_vertices in self.walls:
+            # convert line to polygon
+            wall_poly = create_polygon_from_line(wall_vertices)
+
+            obs_info = {}
+            obs_info['type'] = ObstacleType.BOUNDARY
+            obs_info['vertices'] = wall_poly
+
+            # convert np array to list
+            wall_poly = [(x, y) for x, y in wall_poly]
+
+            shape = pymunk.Poly(self.space.static_body, wall_poly, radius=1)
+            shape.collision_type = 2
+            shape.friction = 0.99
+
+            self.space.add(shape)
+
+            obs_dict.append(obs_info)
+        return obs_dict
     
     def generate_obstacles(self):
         obs_size = self.cfg.obstacle_size
@@ -248,6 +274,7 @@ class AreaClearingEnv(gym.Env):
         obs_dict = []
         for obs_x, obs_y in obstacles:
             obs_info = {}
+            obs_info['type'] = ObstacleType.DYNAMIC
             obs_info['centre'] = np.array([obs_x, obs_y])
             obs_info['vertices'] = np.array([[obs_x + obs_size, obs_y + obs_size], 
                                     [obs_x - obs_size, obs_y + obs_size], 
@@ -277,7 +304,7 @@ class AreaClearingEnv(gym.Env):
         self.plot = Plot(
                 np.zeros((self.cfg.costmap.m, self.cfg.costmap.n)), self.obs_dicts,
                 robot_pos=self.start, robot_vertices=np.asarray(self.robot_shape.get_vertices()),
-                map_figsize=None, y_axis_limit=self.cfg.plot.y_axis_limit, inf_stream=False, 
+                map_figsize=None, inf_stream=False, 
                 path=np.zeros((3, 50)), boundary_polygon=self.boundary_polygon,
             )
 
