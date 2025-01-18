@@ -12,9 +12,8 @@ from matplotlib import pyplot as plt
 from benchnpin.common.cost_map import CostMap
 from benchnpin.common.evaluation.metrics import total_work_done
 from benchnpin.common.geometry.polygon import poly_area
-from benchnpin.common.ship import Ship as Robot
 from benchnpin.common.utils.plot_area_clear import Plot
-from benchnpin.common.utils.sim_utils import generate_sim_obs
+from benchnpin.common.utils.sim_utils import generate_sim_obs, generate_sim_agent
 from benchnpin.common.geometry.polygon import poly_centroid, create_polygon_from_line
 from benchnpin.common.utils.utils import DotDict
 from benchnpin.common.occupancy_grid.occupancy_map import OccupancyGrid
@@ -33,11 +32,9 @@ STOP_TURNING = 1
 LEFT = 2
 RIGHT = 3
 STOP = 4
-OTHER = 5
+BACKWARD = 5
 SMALL_LEFT = 6
 SMALL_RIGHT = 7
-
-
 
 class AreaClearingEnv(gym.Env):
     """Custom Environment that follows gym interface"""
@@ -172,6 +169,9 @@ class AreaClearingEnv(gym.Env):
         else:
             self.start = (5, 1.0, np.pi / 2)
 
+        self.agent_info = self.cfg.agent
+        self.agent_info['start_pos'] = self.start
+
         self.obs_dicts = self.generate_obstacles()
         obs_dicts = self.generate_static_obstacles()
         self.obs_dicts.extend(obs_dicts)
@@ -190,10 +190,9 @@ class AreaClearingEnv(gym.Env):
         for p in self.polygons:
             p.collision_type = 2
 
-        self.robot_body, self.robot_shape = Robot.sim(self.cfg.ship.vertices, self.start)
-        self.robot_shape.collision_type = 1
-        self.space.add(self.robot_body, self.robot_shape)
-        # run initial simulation steps to let environment settle
+        self.agent = generate_sim_agent(self.space, self.agent_info)
+        self.agent.collision_type = 1
+
         for _ in range(1000):
             self.space.step(self.dt / self.steps)
         self.prev_obs = CostMap.get_obs_from_poly(self.polygons)
@@ -205,7 +204,7 @@ class AreaClearingEnv(gym.Env):
             obs_info['type'] = ObstacleType.STATIC
             obs_info['vertices'] = np.array(obstacle)
 
-            shape = pymunk.Poly(self.space.static_body, obstacle, radius=1)
+            shape = pymunk.Poly(self.space.static_body, obstacle, radius=0.1)
             shape.collision_type = 2
             shape.friction = 0.99
 
@@ -226,7 +225,7 @@ class AreaClearingEnv(gym.Env):
             # convert np array to list
             wall_poly = [(x, y) for x, y in wall_poly]
 
-            shape = pymunk.Poly(self.space.static_body, wall_poly, radius=1)
+            shape = pymunk.Poly(self.space.static_body, wall_poly, radius=0.1)
             shape.collision_type = 2
             shape.friction = 0.99
 
@@ -303,16 +302,16 @@ class AreaClearingEnv(gym.Env):
 
         self.plot = Plot(
                 np.zeros((self.cfg.costmap.m, self.cfg.costmap.n)), self.obs_dicts,
-                robot_pos=self.start, robot_vertices=np.asarray(self.robot_shape.get_vertices()),
+                robot_pos=self.start, robot_vertices=np.asarray(self.agent.get_vertices()),
                 map_figsize=None, inf_stream=False, 
                 path=np.zeros((3, 50)), boundary_polygon=self.boundary_polygon,
             )
 
         # get updated obstacles
         updated_obstacles = CostMap.get_obs_from_poly(self.polygons)
-        info = {'state': (round(self.robot_body.position.x, 2),
-                                round(self.robot_body.position.y, 2),
-                                round(self.robot_body.angle, 2)), 
+        info = {'state': (round(self.agent.body.position.x, 2),
+                                round(self.agent.body.position.y, 2),
+                                round(self.agent.body.angle, 2)), 
                 'total_work': self.total_work[0], 
                 'obs': updated_obstacles, 
                 'box_count': 0}
@@ -333,6 +332,8 @@ class AreaClearingEnv(gym.Env):
 
             if action == FORWARD:
                 self.linear_speed = 0.01
+            elif action == BACKWARD:
+                self.linear_speed = -0.01
             elif action == STOP_TURNING:
                 self.angular_speed = 0.0
 
@@ -348,29 +349,25 @@ class AreaClearingEnv(gym.Env):
 
             elif action == STOP:
                 self.linear_speed = 0.0
-                self.angular_speed = 0.0
 
-            # check speed boundary
-            if self.linear_speed <= 0:
-                self.linear_speed = 0
-            elif self.linear_speed >= self.target_speed:
-                self.linear_speed = self.target_speed
+            if abs(self.linear_speed) >= self.target_speed:
+                self.linear_speed = self.target_speed*np.sign(self.linear_speed)
 
             # apply linear and angular speeds
-            global_velocity = R(self.robot_body.angle) @ [self.linear_speed, 0]
+            global_velocity = R(self.agent.body.angle) @ [self.linear_speed, 0]
 
             # apply velocity controller
-            self.robot_body.angular_velocity = self.angular_speed
-            self.robot_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
+            self.agent.body.angular_velocity = self.angular_speed * 200
+            self.agent.body.velocity = Vec2d(global_velocity[0], global_velocity[1]) * 200
 
         else:
 
             # constant forward speed in global frame
-            global_velocity = R(self.robot_body.angle) @ [self.target_speed, 0]
+            global_velocity = R(self.agent.body.angle) @ [self.target_speed, 0]
 
             # apply velocity controller
-            self.robot_body.angular_velocity = action
-            self.robot_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
+            self.agent.body.angular_velocity = action
+            self.agent.body.velocity = Vec2d(global_velocity[0], global_velocity[1])
 
         # move simulation forward
         boundary_constraint_violated = False
@@ -379,11 +376,11 @@ class AreaClearingEnv(gym.Env):
             self.space.step(self.dt / self.steps)
 
             # apply boundary constraints
-            if self.robot_body.position.x < 0 or self.robot_body.position.x > self.cfg.occ.map_width:
+            if self.agent.body.position.x < 0 or self.agent.body.position.x > self.cfg.occ.map_width:
                 boundary_constraint_violated = True
-        if self.robot_body.position.x < 0 and abs(self.robot_body.position.x - 0) >= self.boundary_violation_limit:
+        if self.agent.body.position.x < 0 and abs(self.agent.body.position.x - 0) >= self.boundary_violation_limit:
             boundary_violation_terminal = True
-        if self.robot_body.position.x > self.cfg.occ.map_width and abs(self.robot_body.position.x - self.cfg.occ.map_width) >= self.boundary_violation_limit:
+        if self.agent.body.position.x > self.cfg.occ.map_width and abs(self.agent.body.position.x - self.cfg.occ.map_width) >= self.boundary_violation_limit:
             boundary_violation_terminal = True
             
         # get updated obstacles
@@ -406,7 +403,7 @@ class AreaClearingEnv(gym.Env):
             terminated = False
 
         # compute reward
-        if self.robot_body.position.y < self.goal[1]:
+        if self.agent.body.position.y < self.goal[1]:
             dist_reward = -1
         else:
             dist_reward = 0
@@ -423,9 +420,9 @@ class AreaClearingEnv(gym.Env):
             reward += TERMINAL_REWARD
 
         # Optionally, we can add additional info
-        info = {'state': (round(self.robot_body.position.x, 2),
-                                round(self.robot_body.position.y, 2),
-                                round(self.robot_body.angle, 2)), 
+        info = {'state': (round(self.agent.body.position.x, 2),
+                                round(self.agent.body.position.y, 2),
+                                round(self.agent.body.angle, 2)), 
                 'total_work': self.total_work[0], 
                 'collision reward': collision_reward, 
                 'scaled collision reward': collision_reward * self.beta, 
@@ -471,7 +468,7 @@ class AreaClearingEnv(gym.Env):
         occupancy = np.copy(self.occupancy.occ_map)         # (H, W)
 
         # compute footprint observation  NOTE: here we want unscaled, unpadded vertices
-        ship_pose = (self.robot_body.position.x, self.robot_body.position.y, self.robot_body.angle)
+        ship_pose = (self.agent.body.position.x, self.agent.body.position.y, self.agent.body.angle)
         self.occupancy.compute_ship_footprint_planner(ship_state=ship_pose, ship_vertices=self.cfg.ship.vertices)
         footprint = np.copy(self.occupancy.footprint)       # (H, W)
 
@@ -507,7 +504,7 @@ class AreaClearingEnv(gym.Env):
             else:
                 self.plot.update_path_scatter(full_path=self.path.T)
 
-        self.plot.update_robot(self.robot_body, self.robot_shape, move_yaxis_threshold=self.cfg.anim.move_yaxis_threshold)
+        self.plot.update_robot(self.agent.body, self.agent, move_yaxis_threshold=self.cfg.anim.move_yaxis_threshold)
         self.plot.update_obstacles(obstacles=CostMap.get_obs_from_poly(self.polygons))
         # get updated obstacles
         self.plot.animate_sim(save_fig_dir=os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))

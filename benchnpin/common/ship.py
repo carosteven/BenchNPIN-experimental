@@ -81,7 +81,7 @@ class Ship:
         x, y, theta = start_pos
         # setup for pymunk
         if body_type is None:
-            body_type = Body.KINEMATIC  # Body.DYNAMIC
+            body_type = Body.DYNAMIC  # Body.DYNAMIC
         body = Body(body_type=body_type)  # mass and moment ignored when kinematic body type
         body.position = (x, y)
         body.velocity = Vec2d(*velocity)

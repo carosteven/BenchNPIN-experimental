@@ -82,7 +82,7 @@ prim:
   num_headings: 8  # number of headings in the discretized heading space
   step_size: 0.1   # step size for sampling points on the path
   turning_radius: 2.0  # turning radius of the ship in lattice units
-ship:
+agent:
   mass: 1  # mass of the NRC ship in kg
   padding: 0.25  # adds padding to ship footprint
 

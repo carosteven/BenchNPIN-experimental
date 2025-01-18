@@ -602,7 +602,7 @@ class ObjectPushing(gym.Env):
 
         self.plot = Plot(
                 np.zeros((self.cfg.costmap.m, self.cfg.costmap.n)), self.cubes_dicts,
-                robot_pos=self.start, robot_vertices=np.asarray(self.ship_shape.get_vertices()),
+                robot_pos=self.start, robot_vertices=np.asarray(self.agent.get_vertices()),
                 map_figsize=None, y_axis_limit=self.cfg.plot.y_axis_limit, inf_stream=False, goal=self.goal[1], 
                 path=np.zeros((3, 50)), boundaries=self.boundary_dicts
             )
@@ -658,11 +658,11 @@ class ObjectPushing(gym.Env):
                 self.linear_speed = self.target_speed*np.sign(self.linear_speed)
 
             # apply linear and angular speeds
-            global_velocity = R(self.ship_body.angle) @ [self.linear_speed, 0]
+            global_velocity = R(self.agent.body.angle) @ [self.linear_speed, 0]
 
             # apply velocity controller
-            self.ship_body.angular_velocity = self.angular_speed * 200
-            self.ship_body.velocity = Vec2d(global_velocity[0], global_velocity[1]) * 200
+            self.agent.body.angular_velocity = self.angular_speed * 200
+            self.agent.body.velocity = Vec2d(global_velocity[0], global_velocity[1]) * 200
 
         else:
 
