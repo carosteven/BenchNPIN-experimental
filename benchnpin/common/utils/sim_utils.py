@@ -6,7 +6,7 @@ import pymunk
 from benchnpin.common.ship import Ship
 
 
-def create_polygon(space, vertices, x, y, density):
+def create_polygon(space, vertices, x, y, density, color=None):
     body = pymunk.Body(body_type=pymunk.Body.DYNAMIC)
     body.position = (x, y)
     dummy_shape = pymunk.Poly(None, vertices)
@@ -18,14 +18,17 @@ def create_polygon(space, vertices, x, y, density):
     shape.elasticity = 0.01
     shape.friction = 1.0
     space.add(body, shape)
+
+    if color is not None:
+        shape.color = color
     return shape
 
 
-def generate_sim_obs(space, obstacles: List[dict], density):
+def generate_sim_obs(space, obstacles: List[dict], density, color=None):
     return [
         create_polygon(
             space, (obs['vertices'] - np.array(obs['centre'])).tolist(),
-            *obs['centre'], density=density
+            *obs['centre'], density=density, color=color
         )
         for obs in obstacles
     ]
