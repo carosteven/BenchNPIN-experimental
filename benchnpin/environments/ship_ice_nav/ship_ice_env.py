@@ -46,13 +46,12 @@ class ShipIceEnv(gym.Env):
         self.occupancy = OccupancyGrid(grid_width=cfg.occ.grid_size, grid_height=cfg.occ.grid_size, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, ship_body=None)
         self.cfg = cfg
 
-        self.beta = 500         # amount to scale the collision reward
+        self.beta = 50         # amount to scale the collision reward
 
         self.episode_idx = None     # the increment of this index is handled in reset()
 
         self.goal = (0, self.cfg.goal_y)
         self.path = None
-        self.scatter = False
 
         self.low_dim_state = self.cfg.low_dim_state
 
@@ -361,9 +360,7 @@ class ShipIceEnv(gym.Env):
         return observation
 
 
-    def update_path(self, new_path, scatter=False):
-        if scatter:
-            self.scatter = True
+    def update_path(self, new_path):
         self.path = new_path
         self.renderer.update_path(path=self.path)
     
