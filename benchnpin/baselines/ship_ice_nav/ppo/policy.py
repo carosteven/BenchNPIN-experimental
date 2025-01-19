@@ -32,7 +32,7 @@ class ShipIcePPO(BasePolicy):
             gamma=0.97,
             verbose=2,
             total_timesteps=int(2e5), 
-            checkpoint_freq=100) -> None:
+            checkpoint_freq=10000) -> None:
 
         env = gym.make('ship-ice-v0')
         env = env.unwrapped
@@ -97,10 +97,18 @@ class ShipIcePPO(BasePolicy):
 
     
     def act(self, observation, **kwargs):
+
+        # parameters for planners
+        model_eps = kwargs.get('model_eps', None)
         
         # load trained model for the first time
         if self.model is None:
-            self.model = PPO.load(os.path.join(self.model_path, self.model_name))
+
+            if model_eps is None:
+                self.model = PPO.load(os.path.join(self.model_path, self.model_name))
+            else:
+                model_checkpoint = self.model_name + '_' + model_eps + '_steps'
+                self.model = PPO.load(os.path.join(self.model_path, model_checkpoint))
 
         action, _ = self.model.predict(observation)
         return action

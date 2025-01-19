@@ -162,11 +162,12 @@ class ShipIceEnv(gym.Env):
         self.handler.pre_solve = pre_solve_handler
         self.handler.post_solve = post_solve_handler
 
-        if self.renderer is None:
-            self.renderer = Renderer(self.space, env_width=self.cfg.occ.map_width, env_height=self.cfg.occ.map_height, render_scale=40, 
-                    background_color=(28, 107, 160), caption="ASV Navigation", goal_line=self.cfg.goal_y)
-        else:
-            self.renderer.reset(new_space=self.space)
+        if self.cfg.render.show:
+            if self.renderer is None:
+                self.renderer = Renderer(self.space, env_width=self.cfg.occ.map_width, env_height=self.cfg.occ.map_height, render_scale=40, 
+                        background_color=(28, 107, 160), caption="ASV Navigation", goal_line=self.cfg.goal_y)
+            else:
+                self.renderer.reset(new_space=self.space)
         
         
     def init_ship_ice_env(self):
