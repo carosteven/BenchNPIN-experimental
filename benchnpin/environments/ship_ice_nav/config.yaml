@@ -20,7 +20,7 @@ max_obs_y: 9
 
 ### PLANNER PARAMS
 #max_replan: 1        # max number of replans
-concentration: 0.2    # options are 0.1, 0.2, 0.3, 0.4, 0.5
+concentration: 0.1    # options are 0.1, 0.2, 0.3, 0.4, 0.5
 planner: 'predictive'    # options are 'skeleton', 'straight', or 'lattice'
 goal_y: 39
 threshold_dist: 0.5   # fraction of path length for deciding whether to update planned path
@@ -74,6 +74,7 @@ ship:
 ### SIMULATION PARAMS
 render:
   log_obs: true       # whether to log occupancy observation
+  show: true                # if true show animation plots
 sim:
   t_max: 500  # max number of iterations in simulation loop (originally 5000)
   steps: 400    # number of simulation steps per iteration (originally 10)
@@ -85,7 +86,6 @@ sim:
   obstacle_density: 0.001
 anim:
   save: true               # if true save to disk animation plots
-  show: true                # if true show animation plots
   plot_steps: 30            # steps between plot updates
   plan_steps: 10            # steps between obstacle and planner updates
   inf_stream: false         # if true then infinite obstacle stream mode is enabled
