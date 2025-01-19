@@ -75,8 +75,8 @@ class Ship:
         plt.show()
 
     @staticmethod
-    def sim(vertices: List, start_pos: Tuple[float, float, float], body_type=None, velocity=(0, 0)):
-        from pymunk import Vec2d, Body, Poly, moment_for_box
+    def sim(vertices: List, start_pos: Tuple[float, float, float], body_type=None, velocity=(0, 0), color=None):
+        from pymunk import Vec2d, Body, Poly
 
         x, y, theta = start_pos
         # setup for pymunk
@@ -86,10 +86,11 @@ class Ship:
         body.position = (x, y)
         body.velocity = Vec2d(*velocity)
         body.angle = theta  # Rotation of the body in radians
-        shape = Poly(body, [tuple(item) for item in vertices], radius=0.08)
-        shape.mass = 10.0
-        shape.elasticity = 0.01
-        shape.friction = 1.0
+        shape = Poly(body, [tuple(item) for item in vertices], radius=0.02)
+        # shape.mass = 100
+
+        if color is not None:
+            shape.color = color
 
         return body, shape
 
