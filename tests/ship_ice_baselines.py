@@ -9,10 +9,10 @@ from benchnpin.baselines.ship_ice_nav.td3.policy import ShipIceTD3
 from benchnpin.baselines.ship_ice_nav.planning_based.policy import PlanningBasedPolicy
 
 # ========================= PPO Policy =====================================
-# ppo_policy = ShipIcePPO()
-# ppo_policy.train(total_timesteps=500)
-# evaluations = ppo_policy.evaluate(num_eps=5, model_eps='300')
-# print("PPO Eval: ", evaluations)
+ppo_policy = ShipIcePPO()
+ppo_policy.train(total_timesteps=int(2e5), checkpoint_freq=10000)
+evaluations = ppo_policy.evaluate(num_eps=5, model_eps='300')
+print("PPO Eval: ", evaluations)
 
 
 # ========================= SAC Policy =====================================
@@ -30,6 +30,6 @@ from benchnpin.baselines.ship_ice_nav.planning_based.policy import PlanningBased
 
 
 # ========================= Planning-based Policy =====================================
-planning_policy = PlanningBasedPolicy(planner_type='lattice')
-evaluations = planning_policy.evaluate(num_eps=5)
-print("Plannning Based Eval: ", evaluations)
+# planning_policy = PlanningBasedPolicy(planner_type='lattice')
+# evaluations = planning_policy.evaluate(num_eps=5)
+# print("Plannning Based Eval: ", evaluations)

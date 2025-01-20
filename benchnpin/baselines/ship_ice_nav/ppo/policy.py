@@ -1,4 +1,5 @@
 from benchnpin.baselines.base_class import BasePolicy
+from benchnpin.baselines.feature_extractors import ResNet18
 import benchnpin.environments
 import gymnasium as gym
 from stable_baselines3 import PPO
@@ -21,7 +22,9 @@ class ShipIcePPO(BasePolicy):
         self.model = None
 
 
-    def train(self, policy_kwargs=dict(net_arch=dict(pi=[256, 256], vf=[256, 256])),
+    def train(self, policy_kwargs=dict(features_extractor_class=ResNet18,
+                                        features_extractor_kwargs=dict(features_dim=512),
+                                        net_arch=dict(pi=[512, 256], vf=[512, 256])),
             n_steps=256,
             batch_size=64,
             n_epochs=10,
@@ -29,7 +32,7 @@ class ShipIcePPO(BasePolicy):
             gamma=0.97,
             verbose=2,
             total_timesteps=int(2e5), 
-            checkpoint_freq=100) -> None:
+            checkpoint_freq=10000) -> None:
 
         env = gym.make('ship-ice-v0')
         env = env.unwrapped
@@ -94,10 +97,18 @@ class ShipIcePPO(BasePolicy):
 
     
     def act(self, observation, **kwargs):
+
+        # parameters for planners
+        model_eps = kwargs.get('model_eps', None)
         
         # load trained model for the first time
         if self.model is None:
-            self.model = PPO.load(os.path.join(self.model_path, self.model_name))
+
+            if model_eps is None:
+                self.model = PPO.load(os.path.join(self.model_path, self.model_name))
+            else:
+                model_checkpoint = self.model_name + '_' + model_eps + '_steps'
+                self.model = PPO.load(os.path.join(self.model_path, model_checkpoint))
 
         action, _ = self.model.predict(observation)
         return action

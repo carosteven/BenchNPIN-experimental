@@ -14,7 +14,7 @@ from benchnpin.common.cost_map import CostMap
 from benchnpin.common.evaluation.metrics import total_work_done
 from benchnpin.common.geometry.polygon import poly_area
 from benchnpin.common.ship import Ship
-from benchnpin.common.utils.plot import Plot
+from benchnpin.common.utils.renderer import Renderer
 from benchnpin.common.utils.sim_utils import generate_sim_obs
 from benchnpin.common.geometry.polygon import poly_centroid
 from benchnpin.common.utils.utils import DotDict
@@ -46,13 +46,12 @@ class ShipIceEnv(gym.Env):
         self.occupancy = OccupancyGrid(grid_width=cfg.occ.grid_size, grid_height=cfg.occ.grid_size, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, ship_body=None)
         self.cfg = cfg
 
-        self.beta = 500         # amount to scale the collision reward
+        self.beta = 50         # amount to scale the collision reward
 
         self.episode_idx = None     # the increment of this index is handled in reset()
 
         self.goal = (0, self.cfg.goal_y)
         self.path = None
-        self.scatter = False
 
         self.low_dim_state = self.cfg.low_dim_state
 
@@ -82,10 +81,9 @@ class ShipIceEnv(gym.Env):
         self.yaw_lim = (0, np.pi)       # lower and upper limit of ship yaw  
         self.boundary_violation_limit = 0.0       # if the ship is out of boundary more than this limit, terminate and truncate the episode 
 
-        self.plot = None
         self.con_fig, self.con_ax = plt.subplots(figsize=(10, 10))
 
-        plt.ion()  # Interactive mode on
+        self.renderer = None
         
 
     def init_ship_ice_sim(self):
@@ -163,6 +161,13 @@ class ShipIceEnv(gym.Env):
         # post_solve: two shapes are touching and collision response processed
         self.handler.pre_solve = pre_solve_handler
         self.handler.post_solve = post_solve_handler
+
+        if self.cfg.render.show:
+            if self.renderer is None:
+                self.renderer = Renderer(self.space, env_width=self.cfg.occ.map_width, env_height=self.cfg.occ.map_height, render_scale=40, 
+                        background_color=(28, 107, 160), caption="ASV Navigation", goal_line=self.cfg.goal_y)
+            else:
+                self.renderer.reset(new_space=self.space)
         
         
     def init_ship_ice_env(self):
@@ -192,11 +197,11 @@ class ShipIceEnv(gym.Env):
         self.obstacles = [ob['vertices'] for ob in self.obs_dicts]
 
         # initialize ship sim objects
-        self.polygons = generate_sim_obs(self.space, self.obs_dicts, self.cfg.sim.obstacle_density)
+        self.polygons = generate_sim_obs(self.space, self.obs_dicts, self.cfg.sim.obstacle_density, color=(173, 216, 230, 255))
         for p in self.polygons:
             p.collision_type = 2
 
-        self.ship_body, self.ship_shape = Ship.sim(self.cfg.ship.vertices, self.start)
+        self.ship_body, self.ship_shape = Ship.sim(self.cfg.ship.vertices, self.start, color=(64, 64, 64, 255))
         self.ship_shape.collision_type = 1
         self.space.add(self.ship_body, self.ship_shape)
         # run initial simulation steps to let environment settle
@@ -217,17 +222,6 @@ class ShipIceEnv(gym.Env):
         self.init_ship_ice_env()
 
         self.t = 0
-
-        # close figure before opening new ones
-        if self.plot is not None:
-            self.plot.close()
-
-        self.plot = Plot(
-                np.zeros((self.cfg.costmap.m, self.cfg.costmap.n)), self.obs_dicts,
-                robot_pos=self.start, robot_vertices=np.asarray(self.ship_shape.get_vertices()),
-                map_figsize=None, y_axis_limit=self.cfg.plot.y_axis_limit, inf_stream=False, goal=self.goal[1], 
-                path=np.zeros((3, 50))
-            )
 
         # get updated obstacles
         updated_obstacles = CostMap.get_obs_from_poly(self.polygons)
@@ -367,10 +361,9 @@ class ShipIceEnv(gym.Env):
         return observation
 
 
-    def update_path(self, new_path, scatter=False):
-        if scatter:
-            self.scatter = True
+    def update_path(self, new_path):
         self.path = new_path
+        self.renderer.update_path(path=self.path)
     
 
     def generate_observation(self):
@@ -393,19 +386,10 @@ class ShipIceEnv(gym.Env):
     def render(self, mode='human', close=False):
         """Renders the environment."""
 
-        # update animation
-        if self.path is not None:
-
-            if not self.scatter:
-                self.plot.update_path(full_path=self.path.T)
-            else:
-                self.plot.update_path_scatter(full_path=self.path.T)
-
-        self.plot.update_ship(self.ship_body, self.ship_shape, move_yaxis_threshold=self.cfg.anim.move_yaxis_threshold)
-        self.plot.update_obstacles(obstacles=CostMap.get_obs_from_poly(self.polygons))
         if self.t % self.cfg.anim.plot_steps == 0:
-            self.plot.animate_sim(save_fig_dir=os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
-                            if (self.cfg.anim.save and self.cfg.output_dir) else None, suffix=self.t)
+
+            path = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx), str(self.t) + '.png')
+            self.renderer.render(save=True, path=path)
 
             # whether to also log occupancy observation
             if self.cfg.render.log_obs and not self.low_dim_state:
@@ -431,9 +415,9 @@ class ShipIceEnv(gym.Env):
                 self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
 
         else:
-            self.plot.animate_sim(suffix=self.t)
+            self.renderer.render(save=False)
 
 
     def close(self):
         plt.close('all')
-        self.plot.close()
+        self.renderer.close()

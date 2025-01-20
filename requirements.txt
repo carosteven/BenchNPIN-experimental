@@ -10,9 +10,9 @@ numba
 casadi
 shapely
 scikit-image
-pymunk==6.5.1
+pymunk
 pycpd
-opencv-python-headless==4.9.0.80
+opencv-python-headless
 packcircles
 torch
 torchsummary
@@ -20,6 +20,7 @@ torchvision
 gymnasium
 stable-baselines3
 tensorboard
+pygame
 git+https://github.com/rdesc/pydubins.git
 
 # cd benchnpin/common/spfa
