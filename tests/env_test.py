@@ -7,8 +7,8 @@ import gymnasium as gym
 import numpy as np
 
 
-#env = gym.make('ship-ice-v0')
-env = gym.make('maze-NAMO-v0')
+env = gym.make('ship-ice-v0')
+#env = gym.make('maze-NAMO-v0')
 env.reset()
 
 for i in range(500):

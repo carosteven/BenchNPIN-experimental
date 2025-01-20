@@ -75,7 +75,7 @@ class Robot:
         plt.show()
 
     @staticmethod
-    def sim(vertices: List, start_pos: Tuple[float, float, float], body_type=None, velocity=(0, 0)):
+    def sim(vertices: List, start_pos: Tuple[float, float, float], body_type=None, velocity=(0, 0), color=None):
         from pymunk import Vec2d, Body, Poly
 
         x, y, theta = start_pos
@@ -90,6 +90,9 @@ class Robot:
         shape.mass = 1
         shape.elasticity = 0.01
         # shape.mass = 100
+
+        if color is not None:
+            shape.color = color
 
         return body, shape
 

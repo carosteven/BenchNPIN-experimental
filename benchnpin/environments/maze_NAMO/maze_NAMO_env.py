@@ -14,7 +14,7 @@ from benchnpin.common.cost_map import CostMap
 from benchnpin.common.evaluation.metrics import total_work_done
 from benchnpin.common.geometry.polygon import poly_area
 from benchnpin.common.robot import Robot
-from benchnpin.common.utils.plot_pushing import Plot
+from benchnpin.common.utils.renderer import Renderer
 from benchnpin.common.utils.sim_utils import generate_sim_obs, generate_sim_maze
 from benchnpin.common.geometry.polygon import poly_centroid
 from benchnpin.common.utils.utils import DotDict
@@ -97,7 +97,7 @@ class MazeNAMO(gym.Env):
         self.yaw_lim = (0, np.pi)       # lower and upper limit of ship yaw  
         self.boundary_violation_limit = 0.0       # if the ship is out of boundary more than this limit, terminate and truncate the episode 
 
-        self.plot = None
+        self.renderer = None
         self.con_fig, self.con_ax = plt.subplots(figsize=(10, 10))
 
 
@@ -110,8 +110,6 @@ class MazeNAMO(gym.Env):
         #robot and obstacles occupancy grid
         self.occupancy_plot = plt
         self.occupancy_plot.ion()
-
-        plt.ion()  # Interactive mode on
         
    
     def init_maze_NAMO_sim(self):
@@ -189,7 +187,12 @@ class MazeNAMO(gym.Env):
         # post_solve: two shapes are touching and collision response processed
         self.handler.pre_solve = pre_solve_handler
         self.handler.post_solve = post_solve_handler
-    
+
+        if self.renderer is None:
+            self.renderer = Renderer(self.space, env_width=self.cfg.occ.map_width, env_height=self.cfg.occ.map_height, render_scale=40, 
+                    background_color=(28, 107, 160), caption="ASV Navigation", goal_point= (self.cfg.goal_x, self.cfg.goal_y))
+        else:
+            self.renderer.reset(new_space=self.space)
         
     def init_maze_NAMO_env(self):
 
@@ -225,11 +228,11 @@ class MazeNAMO(gym.Env):
         self.goal = (self.cfg.goal_x, self.cfg.goal_y)
         
         # initialize ship sim objects
-        self.polygons = generate_sim_obs(self.space, self.obs_dicts, self.cfg.sim.obstacle_density)
+        self.polygons = generate_sim_obs(self.space, self.obs_dicts, self.cfg.sim.obstacle_density, color=(173, 216, 230, 255))
         for p in self.polygons:
             p.collision_type = 2
 
-        self.robot_body, self.robot_shape = Robot.sim(self.cfg.robot.vertices, self.start, body_type=pymunk.Body.DYNAMIC)
+        self.robot_body, self.robot_shape = Robot.sim(self.cfg.robot.vertices, self.start, body_type=pymunk.Body.DYNAMIC, color=(64, 64, 64, 255))
         self.robot_shape.collision_type = 1
         self.space.add(self.robot_body, self.robot_shape)
         # run initial simulation steps to let environment settle
@@ -298,17 +301,6 @@ class MazeNAMO(gym.Env):
 
         self.t = 0
 
-        # close figure before opening new ones
-        if self.plot is not None:
-            self.plot.close()
-
-        self.plot = Plot(
-                np.zeros((self.cfg.costmap.m, self.cfg.costmap.n)), self.obs_dicts,
-                robot_pos=self.start, robot_vertices=np.asarray(self.robot_shape.get_vertices()),
-                map_figsize=None, y_axis_limit=self.cfg.plot.y_axis_limit, inf_stream=False, goal_point = self.goal , 
-                path=np.zeros((3, 50)) , maze= self.maze_walls
-            )
-
         # get updated obstacles
         updated_obstacles = CostMap.get_obs_from_poly(self.polygons)
         info = {'state': (round(self.robot_body.position.x, 2),
@@ -358,15 +350,15 @@ class MazeNAMO(gym.Env):
         if self.cfg.demo_mode:
 
             if action == FORWARD:
-                self.linear_speed = 10
+                self.linear_speed = 1
             elif action == STOP_TURNING:
                 self.angular_speed = 0
             elif action == BACKWARD:
-                self.linear_speed = -10
+                self.linear_speed = -1
             elif action == LEFT:
-                self.angular_speed = 5
+                self.angular_speed = 0.5
             elif action == RIGHT:
-                self.angular_speed = -5
+                self.angular_speed = -0.5
 
             elif action == SMALL_LEFT:
                 self.angular_speed = 0.05
@@ -486,6 +478,7 @@ class MazeNAMO(gym.Env):
         if scatter:
             self.scatter = True
         self.path = new_path
+        self.renderer.update_path(path=self.path)
     
 
     def generate_observation(self):
@@ -530,41 +523,36 @@ class MazeNAMO(gym.Env):
     def render(self, mode='human', close=False):
         """Renders the environment."""
 
-        # update animation
-        if self.path is not None:
+        if self.t % self.cfg.anim.plot_steps == 0:
 
-            if not self.scatter:
-                self.plot.update_path(full_path=self.path.T)
-            else:
-                self.plot.update_path_scatter(full_path=self.path.T)
-        self.plot.plot_maze(self.maze_walls, 5)
-        self.plot.update_ship(self.robot_body, self.robot_shape, move_yaxis_threshold=self.cfg.anim.move_yaxis_threshold)
-        self.plot.update_obstacles(obstacles=CostMap.get_obs_from_poly(self.polygons))
-        # get updated obstacles
-        self.plot.animate_sim(save_fig_dir=os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
-                        if (self.cfg.anim.save and self.cfg.output_dir) else None, suffix=self.t)
+            path = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx), str(self.t) + '.png')
+            self.renderer.render(save=True, path=path)
 
-        if self.cfg.render.log_obs and not self.low_dim_state:
+            # whether to also log occupancy observation
+            if self.cfg.render.log_obs and not self.low_dim_state:
 
-            # visualize occupancy map
-            self.con_ax.clear()
-            occ_map_render = np.copy(self.occupancy.occ_map)
-            occ_map_render = np.flip(occ_map_render, axis=0)
-            self.con_ax.imshow(occ_map_render, cmap='gray')
-            self.con_ax.axis('off')
-            save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
-            fp = os.path.join(save_fig_dir, str(self.t) + '_con.png')
-            self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
+                # visualize occupancy map
+                self.con_ax.clear()
+                occ_map_render = np.copy(self.occupancy.occ_map)
+                occ_map_render = np.flip(occ_map_render, axis=0)
+                self.con_ax.imshow(occ_map_render, cmap='gray')
+                self.con_ax.axis('off')
+                save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
+                fp = os.path.join(save_fig_dir, str(self.t) + '_con.png')
+                self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
 
-            # visualize footprint
-            self.con_ax.clear()
-            occ_map_render = np.copy(self.occupancy.footprint)
-            occ_map_render = np.flip(occ_map_render, axis=0)
-            self.con_ax.imshow(occ_map_render, cmap='gray')
-            self.con_ax.axis('off')
-            save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
-            fp = os.path.join(save_fig_dir, str(self.t) + '_footprint.png')
-            self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
+                # visualize footprint
+                self.con_ax.clear()
+                occ_map_render = np.copy(self.occupancy.footprint)
+                occ_map_render = np.flip(occ_map_render, axis=0)
+                self.con_ax.imshow(occ_map_render, cmap='gray')
+                self.con_ax.axis('off')
+                save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
+                fp = os.path.join(save_fig_dir, str(self.t) + '_footprint.png')
+                self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
+
+        else:
+            self.renderer.render(save=False)
 
     def close(self):
         """Optional: close any resources or cleanup if necessary."""
