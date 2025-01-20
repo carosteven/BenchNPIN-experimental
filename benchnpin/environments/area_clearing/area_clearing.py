@@ -12,12 +12,12 @@ from matplotlib import pyplot as plt
 from benchnpin.common.cost_map import CostMap
 from benchnpin.common.evaluation.metrics import total_work_done
 from benchnpin.common.geometry.polygon import poly_area
-from benchnpin.common.utils.plot_area_clear import Plot
 from benchnpin.common.utils.sim_utils import generate_sim_obs, generate_sim_agent
 from benchnpin.common.geometry.polygon import poly_centroid, create_polygon_from_line
 from benchnpin.common.utils.utils import DotDict
 from benchnpin.common.occupancy_grid.occupancy_map import OccupancyGrid
 from benchnpin.common.types import ObstacleType
+from benchnpin.common.utils.renderer import Renderer
 
 R = lambda theta: np.asarray([
     [np.cos(theta), -np.sin(theta)],
@@ -80,7 +80,6 @@ class AreaClearingEnv(gym.Env):
         self.yaw_lim = (0, np.pi)       # lower and upper limit of ship yaw  
         self.boundary_violation_limit = 0.0       # if the ship is out of boundary more than this limit, terminate and truncate the episode 
 
-        self.plot = None
         self.con_fig, self.con_ax = plt.subplots(figsize=(10, 10))
 
         if self.cfg.demo_mode:
@@ -89,11 +88,11 @@ class AreaClearingEnv(gym.Env):
             self.linear_speed = 0.0
             self.linear_speed_increment = 0.02
 
-        plt.ion()  # Interactive mode on
-
         self.boundary_polygon = self.cfg.env.boundary
         self.walls = self.cfg.env.walls
         self.static_obstacles = self.cfg.env.static_obstacles
+
+        self.renderer = None
 
     def init_area_clearing_sim(self):
 
@@ -159,6 +158,13 @@ class AreaClearingEnv(gym.Env):
         # post_solve: two shapes are touching and collision response processed
         self.handler.pre_solve = pre_solve_handler
         self.handler.post_solve = post_solve_handler
+
+        if self.cfg.render.show:
+            if self.renderer is None:
+                self.renderer = Renderer(self.space, env_width=self.cfg.occ.map_width, env_height=self.cfg.occ.map_height, render_scale=20, 
+                        background_color=(255, 255, 255), caption="Area Clearing")
+            else:
+                self.renderer.reset(new_space=self.space)
         
     def init_area_clearing_env(self):
 
@@ -295,17 +301,6 @@ class AreaClearingEnv(gym.Env):
         self.init_area_clearing_env()
 
         self.t = 0
-        
-        # close figure before opening new ones
-        if self.plot is not None:
-            self.plot.close()
-
-        self.plot = Plot(
-                np.zeros((self.cfg.costmap.m, self.cfg.costmap.n)), self.obs_dicts,
-                robot_pos=self.start, robot_vertices=np.asarray(self.agent.get_vertices()),
-                map_figsize=None, inf_stream=False, 
-                path=np.zeros((3, 50)), boundary_polygon=self.boundary_polygon,
-            )
 
         # get updated obstacles
         updated_obstacles = CostMap.get_obs_from_poly(self.polygons)
@@ -453,10 +448,9 @@ class AreaClearingEnv(gym.Env):
         return observation
 
 
-    def update_path(self, new_path, scatter=False):
-        if scatter:
-            self.scatter = True
+    def update_path(self, new_path):
         self.path = new_path
+        self.renderer.update_path(path=self.path)
     
 
     def generate_observation(self):
@@ -496,41 +490,32 @@ class AreaClearingEnv(gym.Env):
     def render(self, mode='human', close=False):
         """Renders the environment."""
 
-        # update animation
-        if self.path is not None:
+        if self.t % self.cfg.anim.plot_steps == 0:
 
-            if not self.scatter:
-                self.plot.update_path(full_path=self.path.T)
-            else:
-                self.plot.update_path_scatter(full_path=self.path.T)
+            path = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx), str(self.t) + '.png')
+            self.renderer.render(save=True, path=path)
 
-        self.plot.update_robot(self.agent.body, self.agent, move_yaxis_threshold=self.cfg.anim.move_yaxis_threshold)
-        self.plot.update_obstacles(obstacles=CostMap.get_obs_from_poly(self.polygons))
-        # get updated obstacles
-        self.plot.animate_sim(save_fig_dir=os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
-                        if (self.cfg.anim.save and self.cfg.output_dir) else None, suffix=self.t)
+            if self.cfg.render.log_obs and not self.low_dim_state:
 
-        if self.cfg.render.log_obs and not self.low_dim_state:
+                # visualize occupancy map
+                self.con_ax.clear()
+                occ_map_render = np.copy(self.occupancy.occ_map)
+                occ_map_render = np.flip(occ_map_render, axis=0)
+                self.con_ax.imshow(occ_map_render, cmap='gray')
+                self.con_ax.axis('off')
+                save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
+                fp = os.path.join(save_fig_dir, str(self.t) + '_con.png')
+                self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
 
-            # visualize occupancy map
-            self.con_ax.clear()
-            occ_map_render = np.copy(self.occupancy.occ_map)
-            occ_map_render = np.flip(occ_map_render, axis=0)
-            self.con_ax.imshow(occ_map_render, cmap='gray')
-            self.con_ax.axis('off')
-            save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
-            fp = os.path.join(save_fig_dir, str(self.t) + '_con.png')
-            self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
-
-            # visualize footprint
-            self.con_ax.clear()
-            occ_map_render = np.copy(self.occupancy.footprint)
-            occ_map_render = np.flip(occ_map_render, axis=0)
-            self.con_ax.imshow(occ_map_render, cmap='gray')
-            self.con_ax.axis('off')
-            save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
-            fp = os.path.join(save_fig_dir, str(self.t) + '_footprint.png')
-            self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
+                # visualize footprint
+                self.con_ax.clear()
+                occ_map_render = np.copy(self.occupancy.footprint)
+                occ_map_render = np.flip(occ_map_render, axis=0)
+                self.con_ax.imshow(occ_map_render, cmap='gray')
+                self.con_ax.axis('off')
+                save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
+                fp = os.path.join(save_fig_dir, str(self.t) + '_footprint.png')
+                self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
 
 
     def close(self):

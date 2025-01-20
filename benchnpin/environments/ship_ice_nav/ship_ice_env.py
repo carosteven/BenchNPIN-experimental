@@ -164,7 +164,7 @@ class ShipIceEnv(gym.Env):
 
         if self.cfg.render.show:
             if self.renderer is None:
-                self.renderer = Renderer(self.space, env_width=self.cfg.occ.map_width, env_height=self.cfg.occ.map_height, render_scale=40, 
+                self.renderer = Renderer(self.space, env_width=self.cfg.occ.map_width, env_height=self.cfg.occ.map_height, render_scale=10, 
                         background_color=(28, 107, 160), caption="ASV Navigation", goal_line=self.cfg.goal_y)
             else:
                 self.renderer.reset(new_space=self.space)

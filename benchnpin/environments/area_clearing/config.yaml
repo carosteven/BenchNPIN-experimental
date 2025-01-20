@@ -62,8 +62,8 @@ threshold_cost: 0.95  # fraction of path cost for deciding whether to update pla
 occ:
   grid_size: 0.2       # occupancy map grid size
   m_to_pix_scale: 19.5   # number of pixels per meter when generating the raw occupancy map
-  map_height: 28       # occupancy map height (in meter)
-  map_width: 16        # occupancy map width (in meter)
+  map_height: 20       # occupancy map height (in meter)
+  map_width: 20        # occupancy map width (in meter)
 a_star:
   horizon: 30  # receding horizon in metres (needs to be an int for it to be enabled)
   replan: true
@@ -73,8 +73,8 @@ a_star:
   weight: 1        # static weighting for weighed A* f(n) = g(n) + w * h(n) where weight > 1
 #  h_baseline: True  # if true, then heuristic is simply euclidean distance to goal
 costmap:
-  m: 40       # height of ice channel in metres, can set to large number for 'infinite' ice channel
-  n: 16       # width of ice channel in metres
+  m: 20       # height of ice channel in metres, can set to large number for 'infinite' ice channel
+  n: 20       # width of ice channel in metres
   scale: 5    # this gives a resolution of 1/scale x 1/scale metres
   alpha: 10   # collision cost multiplier
 prim:
@@ -106,6 +106,7 @@ agent:
 ### SIMULATION PARAMS
 render:
   log_obs: true       # whether to log occupancy observation
+  show: true                # if true show animation plots
 sim:
   t_max: 2000  # max number of iterations in simulation loop (originally 5000)
   steps: 100    # number of simulation steps per iteration (originally 10)
@@ -117,8 +118,7 @@ sim:
   obstacle_density: 0.001
 anim:
   save: true               # if true save to disk animation plots
-  show: true                # if true show animation plots
-  plot_steps: 50            # steps between plot updates
+  plot_steps: 30            # steps between plot updates
   plan_steps: 10            # steps between obstacle and planner updates
   inf_stream: false         # if true then infinite obstacle stream mode is enabled
   move_yaxis_threshold: 10  # distance traveled before y-axis moves
