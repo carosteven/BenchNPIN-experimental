@@ -18,6 +18,8 @@ class Renderer():
         # get parameters
         self.goal_line = kwargs.get('goal_line', None)
 
+        self.goal_point = kwargs.get('goal_point', None)
+
         # scale to convert from pymunk meter unit to pygame pixel unit
         self.render_scale = render_scale
         self.background_color = background_color
@@ -98,7 +100,17 @@ class Renderer():
         """
         raise NotImplementedError
 
-
+    def display_goal_point(self):
+        """
+        Display goal point for navigation tasks
+        """
+        pygame.draw.circle(
+            self.window,
+            (255, 255, 255),  # Circle color (white)
+            self.to_pygame(self.goal_point),  # Circle center
+            5,  # Circle radius
+            0   # Circle thickness
+        )
 
     def render(self, save=False, path=None):
         self.window.fill(self.background_color)
@@ -109,9 +121,14 @@ class Renderer():
         
         if self.goal_line is not None:
             self.display_goal_line()
+        
 
         ### could add goal region display here
         ###
+
+        ### Goal point display
+        if self.display_goal_point is not None:
+            self.display_goal_point()
 
         pygame.display.update()
 
