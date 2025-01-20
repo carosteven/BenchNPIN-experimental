@@ -33,6 +33,14 @@ def generate_sim_obs(space, obstacles: List[dict], density, color=None):
         for obs in obstacles
     ]
 
+def generate_sim_maze(space, maze_walls):
+    for pos in maze_walls:
+        print(pos)
+        body = pymunk.Body(body_type=pymunk.Body.STATIC)
+        shape = pymunk.Segment(body, pos[0], pos[1], 1)
+        shape.elasticity = 0.5
+        shape.friction = 0.5
+        space.add(body, shape)
 
 def simulate_ship_ice_collision(path, ship_vertices, obs_dicts, ship_vel=1, dt=0.25, steps=10):
     """
