@@ -164,7 +164,7 @@ class ShipIceEnv(gym.Env):
 
         if self.cfg.render.show:
             if self.renderer is None:
-                self.renderer = Renderer(self.space, env_width=self.cfg.occ.map_width, env_height=self.cfg.occ.map_height, render_scale=10, 
+                self.renderer = Renderer(self.space, env_width=self.cfg.occ.map_width, env_height=self.cfg.occ.map_height, render_scale=25, 
                         background_color=(28, 107, 160), caption="ASV Navigation", goal_line=self.cfg.goal_y)
             else:
                 self.renderer.reset(new_space=self.space)
@@ -260,6 +260,8 @@ class ShipIceEnv(gym.Env):
         self.t += 1
 
         action = action * self.max_yaw_rate_step
+
+        self.target_speed = self.cfg.controller.target_speed * 20
 
         # constant forward speed in global frame
         global_velocity = R(self.ship_body.angle) @ [self.target_speed, 0]

@@ -454,6 +454,9 @@ class AreaClearingEnv(gym.Env):
     
 
     def generate_observation(self):
+        ### TODO: Add a timer as this is super slow
+        ### Compoare with ship ice navigation
+
         # compute occupancy map observation  (40, 12)
         raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, 
                         ice_binary_w=int(self.occupancy.map_width * self.cfg.occ.m_to_pix_scale), 
@@ -462,8 +465,8 @@ class AreaClearingEnv(gym.Env):
         occupancy = np.copy(self.occupancy.occ_map)         # (H, W)
 
         # compute footprint observation  NOTE: here we want unscaled, unpadded vertices
-        ship_pose = (self.agent.body.position.x, self.agent.body.position.y, self.agent.body.angle)
-        self.occupancy.compute_ship_footprint_planner(ship_state=ship_pose, ship_vertices=self.cfg.ship.vertices)
+        agent_pose = (self.agent.body.position.x, self.agent.body.position.y, self.agent.body.angle)
+        self.occupancy.compute_ship_footprint_planner(ship_state=agent_pose, ship_vertices=self.cfg.agent.vertices)
         footprint = np.copy(self.occupancy.footprint)       # (H, W)
 
         observation = np.concatenate((np.array([occupancy]), np.array([footprint])))          # (2, H, W)

@@ -10,9 +10,11 @@ import numpy as np
 env = gym.make('area-clearing-v0')
 env.reset()
 
-for i in range(10000000):
+for i in range(1000):
 
     action = 0
     observation, reward, terminated, truncated, info = env.step(action)
 
-    print(observation.shape)
+    env.render()
+
+    # print(observation.shape)
