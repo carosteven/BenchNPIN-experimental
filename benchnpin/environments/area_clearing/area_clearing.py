@@ -326,21 +326,21 @@ class AreaClearingEnv(gym.Env):
         if self.cfg.demo_mode:
 
             if action == FORWARD:
-                self.linear_speed = 0.01
+                self.linear_speed = 0.3
             elif action == BACKWARD:
-                self.linear_speed = -0.01
+                self.linear_speed = -0.3
             elif action == STOP_TURNING:
                 self.angular_speed = 0.0
 
             elif action == LEFT:
-                self.angular_speed = 0.01
+                self.angular_speed = 0.1
             elif action == RIGHT:
-                self.angular_speed = -0.01
+                self.angular_speed = -0.1
 
             elif action == SMALL_LEFT:
-                self.angular_speed = 0.005
+                self.angular_speed = 0.05
             elif action == SMALL_RIGHT:
-                self.angular_speed = -0.005
+                self.angular_speed = -0.05
 
             elif action == STOP:
                 self.linear_speed = 0.0
@@ -360,12 +360,11 @@ class AreaClearingEnv(gym.Env):
             # constant forward speed in global frame
             global_velocity = R(self.agent.body.angle) @ [self.target_speed, 0]
 
+            # TODO: add a second action with forward and reverse
+
             # apply velocity controller
             self.agent.body.angular_velocity = action
             self.agent.body.velocity = Vec2d(global_velocity[0], global_velocity[1])
-
-        self.agent.body.angular_velocity *= 10
-        self.agent.body.velocity *= 10
 
         # move simulation forward
         boundary_constraint_violated = False
@@ -383,7 +382,7 @@ class AreaClearingEnv(gym.Env):
             
         # get updated obstacles
         updated_obstacles = CostMap.get_obs_from_poly(self.polygons)
-        # num_completed, all_boxes_completed = self.boxes_completed(updated_obstacles=updated_obstacles)
+        num_completed, all_boxes_completed = self.boxes_completed(updated_obstacles=updated_obstacles)
 
         # compute work done
         work = total_work_done(self.prev_obs, updated_obstacles)
@@ -426,7 +425,8 @@ class AreaClearingEnv(gym.Env):
                 'collision reward': collision_reward, 
                 'scaled collision reward': collision_reward * self.beta, 
                 'dist reward': dist_reward, 
-                'obs': updated_obstacles}
+                'obs': updated_obstacles,
+                'box_count': num_completed}
         
         # generate observation
         if self.low_dim_state:
@@ -520,6 +520,8 @@ class AreaClearingEnv(gym.Env):
                 save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
                 fp = os.path.join(save_fig_dir, str(self.t) + '_footprint.png')
                 self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
+        else:
+            self.renderer.render(save=False)
 
 
     def close(self):

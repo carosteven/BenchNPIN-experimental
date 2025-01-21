@@ -261,7 +261,7 @@ class ShipIceEnv(gym.Env):
 
         action = action * self.max_yaw_rate_step
 
-        self.target_speed = self.cfg.controller.target_speed * 20
+        self.target_speed = self.cfg.controller.target_speed
 
         # constant forward speed in global frame
         global_velocity = R(self.ship_body.angle) @ [self.target_speed, 0]

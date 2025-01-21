@@ -118,7 +118,7 @@ sim:
   obstacle_density: 0.001
 anim:
   save: true               # if true save to disk animation plots
-  plot_steps: 1            # steps between plot updates
+  plot_steps: 30            # steps between plot updates
   plan_steps: 10            # steps between obstacle and planner updates
   inf_stream: false         # if true then infinite obstacle stream mode is enabled
   move_yaxis_threshold: 10  # distance traveled before y-axis moves
