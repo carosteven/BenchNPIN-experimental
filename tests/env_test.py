@@ -19,3 +19,5 @@ for i in range(500):
     env.render()
 
     print(observation.shape)
+    
+    env.render()

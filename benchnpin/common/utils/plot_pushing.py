@@ -31,6 +31,7 @@ class Plot:
             turning_radius: float = None,
             horizon: float = None,
             goal: float = None,
+            goal_point: Tuple[float, float] = None,
             inf_stream=False,
             map_figsize=(5, 10),
             sim_figsize=(10, 10),
@@ -39,6 +40,7 @@ class Plot:
             legend=False,
             scale: float = 1,
             boundaries: List = None,
+            maze =  None
             # corners: List = None
     ):
         R = lambda theta: np.asarray([
@@ -50,6 +52,7 @@ class Plot:
         self.full_path = path  # shape is 3 x n
         self.horizon = horizon if horizon != np.inf else None
         self.goal = goal
+        self.goal_point = goal_point
         self.inf_stream = inf_stream
         self.target = target
         self.node_scat = None
@@ -123,6 +126,9 @@ class Plot:
                                                      linewidth=3.0, label='final goal')
                 self.sim_fig.canvas.draw()
 
+            if self.goal_point:
+                self.goal_line, *_ = self.sim_ax.plot(*self.goal_point, 'go', label='goal', zorder=3)
+
             self.ship_state_line = None
             self.past_path_line = None
 
@@ -137,8 +143,8 @@ class Plot:
 
         # set the axes limits for all plots
         for ax in self.ax:
-            # ax.axis([0, costmap.shape[1], 0, y_axis_limit])
-            ax.axis([-costmap.shape[1] / 2, costmap.shape[1] / 2, -y_axis_limit / 2, y_axis_limit / 2])
+            ax.axis([0, costmap.shape[1], 0, y_axis_limit])
+            #ax.axis([-costmap.shape[1] / 2, costmap.shape[1] / 2, -y_axis_limit / 2, y_axis_limit / 2])
             ax.set_aspect('equal')
 
         if scale > 1:
@@ -282,6 +288,10 @@ class Plot:
                             self.sim_obs_patches[i].set_facecolor('lightblue')  # Change fill color
             
 
+    def plot_maze(self, maze_walls: List, width) -> None:
+        for wall in maze_walls:
+            self.sim_ax.plot([wall[0][0], wall[1][0]], [wall[0][1], wall[1][1]], 'k-', linewidth=width)
+        
 
     def animate_map(self, save_fig_dir=None, suffix=0):
         # draw artists for map plot
