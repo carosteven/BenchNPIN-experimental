@@ -10,7 +10,7 @@ import numpy as np
 env = gym.make('area-clearing-v0')
 env.reset()
 
-for i in range(1000):
+for i in range(100000000):
 
     action = 0
     observation, reward, terminated, truncated, info = env.step(action)
