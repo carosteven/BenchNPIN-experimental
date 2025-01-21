@@ -17,7 +17,6 @@ class Renderer():
 
         # get parameters
         self.goal_line = kwargs.get('goal_line', None)
-
         self.goal_point = kwargs.get('goal_point', None)
 
         # scale to convert from pymunk meter unit to pygame pixel unit
@@ -127,7 +126,7 @@ class Renderer():
         ###
 
         ### Goal point display
-        if self.display_goal_point is not None:
+        if self.goal_point is not None:
             self.display_goal_point()
 
         pygame.display.update()

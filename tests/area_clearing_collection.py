@@ -89,7 +89,7 @@ def collect_demos():
             while listener.running:  # While the listener is active
                 global command
                 print("command: ", command, "; step: ", t, \
-                    "; num completed: ", info['box_count'],  end="\r")
+                    ";",  end="\r")
                 observation, reward, terminated, truncated, info = env.step(command)
 
                 env.render()
