@@ -99,13 +99,17 @@ def create_polygon(space, vertices, x, y, density, heading=0, label='poly', idx=
     shape.label = label
     shape.idx = idx
     space.add(body, shape)
+
+    if color is not None:
+        shape.color = color
     return shape
 
-def generate_sim_obs(space, obstacles: List[dict], density):
+
+def generate_sim_obs(space, obstacles: List[dict], density, color=None):
     return [
         create_polygon(
             space, (obs['vertices'] - np.array(obs['centre'])).tolist(),
-            *obs['centre'], density=density
+            *obs['centre'], density=density, color=color
         )
         for obs in obstacles
     ]
