@@ -34,7 +34,7 @@ env:
     - [ [7.0, 9.0], [7.0, 11.0], [9.0, 11.0], [9.0, 9.0] ]
     - [ [7.0, 14.0], [7.0, 16.0], [9.0, 16.0], [9.0, 14.0] ]
 
-demo_mode: false     # when using demo mode, control both forward and angular speed
+demo_mode: true     # when using demo mode, control both forward and angular speed
 
 # obstacles information
 randomize_obstacles: true
@@ -47,7 +47,7 @@ max_obs_y: 12
 min_obs_y: 4.5
 
 # parameters for low-dim environment
-low_dim_state: true
+low_dim_state: false
 fixed_trial_idx: 1
 random_start: true
 start_x_range: 15
@@ -118,7 +118,7 @@ sim:
   obstacle_density: 0.001
 anim:
   save: true               # if true save to disk animation plots
-  plot_steps: 30            # steps between plot updates
+  plot_steps: 1            # steps between plot updates
   plan_steps: 10            # steps between obstacle and planner updates
   inf_stream: false         # if true then infinite obstacle stream mode is enabled
   move_yaxis_threshold: 10  # distance traveled before y-axis moves

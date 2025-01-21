@@ -92,9 +92,11 @@ def collect_demos():
                     "; num completed: ", info['box_count'],  end="\r")
                 observation, reward, terminated, truncated, info = env.step(command)
 
-                # command = OTHER
-                if t % 5 == 0:
-                    env.render()
+                env.render()
+
+                # # command = OTHER
+                # if t % 5 == 0:
+                #     env.render()
 
                 if (((info['state'][0] - prev_state[0])**2 + (info['state'][1] - prev_state[1])**2)**(0.5) >= step_size) or terminated or truncated:
                     record_transition(observation, [info['state'][0], info['state'][1]], reward, terminated, truncated)

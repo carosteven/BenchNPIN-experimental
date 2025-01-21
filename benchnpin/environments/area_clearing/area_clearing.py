@@ -196,7 +196,7 @@ class AreaClearingEnv(gym.Env):
         for p in self.polygons:
             p.collision_type = 2
 
-        self.agent = generate_sim_agent(self.space, self.agent_info)
+        self.agent = generate_sim_agent(self.space, self.agent_info, body_type=pymunk.Body.KINEMATIC)
         self.agent.collision_type = 1
 
         for _ in range(1000):
@@ -352,8 +352,8 @@ class AreaClearingEnv(gym.Env):
             global_velocity = R(self.agent.body.angle) @ [self.linear_speed, 0]
 
             # apply velocity controller
-            self.agent.body.angular_velocity = self.angular_speed * 200
-            self.agent.body.velocity = Vec2d(global_velocity[0], global_velocity[1]) * 200
+            self.agent.body.angular_velocity = self.angular_speed
+            self.agent.body.velocity = Vec2d(global_velocity[0], global_velocity[1])
 
         else:
 
@@ -363,6 +363,9 @@ class AreaClearingEnv(gym.Env):
             # apply velocity controller
             self.agent.body.angular_velocity = action
             self.agent.body.velocity = Vec2d(global_velocity[0], global_velocity[1])
+
+        self.agent.body.angular_velocity *= 10
+        self.agent.body.velocity *= 10
 
         # move simulation forward
         boundary_constraint_violated = False
@@ -380,7 +383,7 @@ class AreaClearingEnv(gym.Env):
             
         # get updated obstacles
         updated_obstacles = CostMap.get_obs_from_poly(self.polygons)
-        num_completed, all_boxes_completed = self.boxes_completed(updated_obstacles=updated_obstacles)
+        # num_completed, all_boxes_completed = self.boxes_completed(updated_obstacles=updated_obstacles)
 
         # compute work done
         work = total_work_done(self.prev_obs, updated_obstacles)
@@ -389,10 +392,11 @@ class AreaClearingEnv(gym.Env):
         self.prev_obs = updated_obstacles
         self.obstacles = updated_obstacles
 
-        # check episode terminal condition
-        if all_boxes_completed:
-            terminated = True
-        elif boundary_violation_terminal:
+        # # check episode terminal condition
+        # if all_boxes_completed:
+        #     terminated = True
+        # el
+        if boundary_violation_terminal:
             terminated = True
         else:
             terminated = False
@@ -422,8 +426,7 @@ class AreaClearingEnv(gym.Env):
                 'collision reward': collision_reward, 
                 'scaled collision reward': collision_reward * self.beta, 
                 'dist reward': dist_reward, 
-                'obs': updated_obstacles, 
-                'box_count': num_completed}
+                'obs': updated_obstacles}
         
         # generate observation
         if self.low_dim_state:
@@ -454,9 +457,6 @@ class AreaClearingEnv(gym.Env):
     
 
     def generate_observation(self):
-        ### TODO: Add a timer as this is super slow
-        ### Compoare with ship ice navigation
-
         # compute occupancy map observation  (40, 12)
         raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, 
                         ice_binary_w=int(self.occupancy.map_width * self.cfg.occ.m_to_pix_scale), 
@@ -470,6 +470,7 @@ class AreaClearingEnv(gym.Env):
         footprint = np.copy(self.occupancy.footprint)       # (H, W)
 
         observation = np.concatenate((np.array([occupancy]), np.array([footprint])))          # (2, H, W)
+
         return observation
 
     

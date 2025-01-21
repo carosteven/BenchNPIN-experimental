@@ -164,7 +164,7 @@ class ShipIceEnv(gym.Env):
 
         if self.cfg.render.show:
             if self.renderer is None:
-                self.renderer = Renderer(self.space, env_width=self.cfg.occ.map_width, env_height=self.cfg.occ.map_height, render_scale=25, 
+                self.renderer = Renderer(self.space, env_width=self.cfg.occ.map_width, env_height=self.cfg.occ.map_height, render_scale=15, 
                         background_color=(28, 107, 160), caption="ASV Navigation", goal_line=self.cfg.goal_y)
             else:
                 self.renderer.reset(new_space=self.space)
@@ -369,6 +369,8 @@ class ShipIceEnv(gym.Env):
     
 
     def generate_observation(self):
+
+
         raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, 
                         ice_binary_w=int(self.occupancy.map_width * self.cfg.occ.m_to_pix_scale), 
                         ice_binary_h=int(self.occupancy.map_height * self.cfg.occ.m_to_pix_scale))
