@@ -118,7 +118,7 @@ class Renderer():
         """
         pygame.draw.polygon(
             self.window,
-            (0, 255, 0),  # Line color (green)
+            '#20FE20',  # Line color (green)
             [self.to_pygame(point) for point in self.clearance_boundary],  # Convert boundary to Pygame coordinates
             2  # Line width
         )
