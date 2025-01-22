@@ -53,6 +53,13 @@ class AreaClearingEnv(gym.Env):
         self.occupancy = OccupancyGrid(grid_width=cfg.occ.grid_size, grid_height=cfg.occ.grid_size, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, ship_body=None)
         self.cfg = cfg
 
+        env_cfg_file_path = os.path.join(self.current_dir, 'envs/' + cfg.env + '.yaml')
+
+        if not os.path.exists(env_cfg_file_path):
+            raise FileNotFoundError(f"Environment config file {env_cfg_file_path} not found")
+
+        self.env_cfg = DotDict.load_from_file(env_cfg_file_path)
+
         self.env_max_trial = 4000
         self.beta = 500         # amount to scale the collision reward
         self.episode_idx = None
@@ -88,9 +95,9 @@ class AreaClearingEnv(gym.Env):
             self.linear_speed = 0.0
             self.linear_speed_increment = 0.02
 
-        self.boundary_polygon = self.cfg.env.boundary
-        self.walls = self.cfg.env.walls
-        self.static_obstacles = self.cfg.env.static_obstacles
+        self.boundary_polygon = self.env_cfg.boundary
+        self.walls = self.env_cfg.walls if 'walls' in self.env_cfg else []
+        self.static_obstacles = self.env_cfg.static_obstacles if 'static_obstacles' in self.env_cfg else []
 
         self.renderer = None
 
