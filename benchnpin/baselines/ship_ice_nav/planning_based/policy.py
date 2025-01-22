@@ -95,3 +95,6 @@ class PlanningBasedPolicy(BasePolicy):
     
     def reset(self):
         self.path = None
+
+pbp = PlanningBasedPolicy('lattice')
+rewards = pbp.evaluate(1)

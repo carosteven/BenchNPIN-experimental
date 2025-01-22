@@ -8,7 +8,7 @@ plot:
   y_axis_limit: 18  # limits the y-axis of the plot
   show: false       # true will show planner plots
 
-demo_mode: true     # when using demo mode, control both forward and angular speed
+demo_mode: false     # when using demo mode, control both forward and angular speed
 
 # cubes information
 randomize_cubes: true
@@ -85,7 +85,8 @@ agent:
 
 ### SIMULATION PARAMS
 render:
-  log_obs: true       # whether to log occupancy observation
+  log_obs: false       # whether to log occupancy observation
+  show: true          # if true show animation plots
   frequency: 20       # frequency of rendering
 sim:
   t_max: 2000  # max number of iterations in simulation loop (originally 5000)
