@@ -186,9 +186,9 @@ class AreaClearingEnv(gym.Env):
         self.agent_info['start_pos'] = self.start
 
         self.obs_dicts = self.generate_obstacles()
-        obs_dicts = self.generate_static_obstacles()
+        obs_dicts, self.static_obs_shapes = self.generate_static_obstacles()
         self.obs_dicts.extend(obs_dicts)
-        obs_dicts = self.generate_walls()
+        obs_dicts, self.wall_shapes = self.generate_walls()
         self.obs_dicts.extend(obs_dicts)
         
         # filter out obstacles that have zero area
@@ -212,6 +212,7 @@ class AreaClearingEnv(gym.Env):
 
     def generate_static_obstacles(self):
         obs_dict = []
+        static_obs_shapes = []
         for obstacle in self.static_obstacles:
             obs_info = {}
             obs_info['type'] = ObstacleType.STATIC
@@ -223,10 +224,13 @@ class AreaClearingEnv(gym.Env):
 
             self.space.add(shape)
             obs_dict.append(obs_info)
-        return obs_dict
+            static_obs_shapes.append(shape)
+
+        return obs_dict, static_obs_shapes
 
     def generate_walls(self):
         obs_dict = []
+        wall_shapes = []
         for wall_vertices in self.walls:
             # convert line to polygon
             wall_poly = create_polygon_from_line(wall_vertices)
@@ -243,9 +247,10 @@ class AreaClearingEnv(gym.Env):
             shape.friction = 0.99
 
             self.space.add(shape)
-
             obs_dict.append(obs_info)
-        return obs_dict
+            wall_shapes.append(shape)
+
+        return obs_dict, wall_shapes
     
     def generate_obstacles(self):
         obs_size = self.cfg.obstacle_size
@@ -367,8 +372,6 @@ class AreaClearingEnv(gym.Env):
             # constant forward speed in global frame
             global_velocity = R(self.agent.body.angle) @ [self.target_speed, 0]
 
-            # TODO: add a second action with forward and reverse
-
             # apply velocity controller
             self.agent.body.angular_velocity = action
             self.agent.body.velocity = Vec2d(global_velocity[0], global_velocity[1])
@@ -376,16 +379,30 @@ class AreaClearingEnv(gym.Env):
         # move simulation forward
         boundary_constraint_violated = False
         boundary_violation_terminal = False      # if out of boundary for too much, terminate and truncate the episode
+        collision_with_static_or_walls = False
         for _ in range(self.steps):
             self.space.step(self.dt / self.steps)
 
             # apply boundary constraints
             if self.agent.body.position.x < 0 or self.agent.body.position.x > self.cfg.occ.map_width:
                 boundary_constraint_violated = True
+
+            for obs in self.static_obs_shapes + self.wall_shapes:
+                contact_pts = self.agent.shapes_collide(obs)
+                if len(contact_pts.points) > 0:
+                    collision_with_static_or_walls = True
+                    break
+                
         if self.agent.body.position.x < 0 and abs(self.agent.body.position.x - 0) >= self.boundary_violation_limit:
             boundary_violation_terminal = True
         if self.agent.body.position.x > self.cfg.occ.map_width and abs(self.agent.body.position.x - self.cfg.occ.map_width) >= self.boundary_violation_limit:
             boundary_violation_terminal = True
+
+        for obs in self.static_obs_shapes + self.wall_shapes:
+            contact_pts = self.agent.shapes_collide(obs)
+            if len(contact_pts.points) > 0:
+                collision_with_static_or_walls = True
+                break
             
         # get updated obstacles
         updated_obstacles = CostMap.get_obs_from_poly(self.polygons)
@@ -398,11 +415,12 @@ class AreaClearingEnv(gym.Env):
         self.prev_obs = updated_obstacles
         self.obstacles = updated_obstacles
 
+        failure = boundary_constraint_violated or collision_with_static_or_walls or boundary_violation_terminal
+
         # # check episode terminal condition
-        # if all_boxes_completed:
-        #     terminated = True
-        # el
-        if boundary_violation_terminal:
+        if all_boxes_completed:
+            terminated = True
+        elif failure:
             terminated = True
         else:
             terminated = False
@@ -417,11 +435,11 @@ class AreaClearingEnv(gym.Env):
         reward = self.beta * collision_reward + dist_reward
 
         # apply constraint penalty
-        if boundary_constraint_violated:
+        if failure:
             reward += BOUNDARY_PENALTY
 
         # apply terminal reward
-        if terminated and not boundary_violation_terminal:
+        if terminated and not failure:
             reward += TERMINAL_REWARD
 
         # Optionally, we can add additional info
