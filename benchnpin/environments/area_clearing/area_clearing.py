@@ -19,6 +19,8 @@ from benchnpin.common.occupancy_grid.occupancy_map import OccupancyGrid
 from benchnpin.common.types import ObstacleType
 from benchnpin.common.utils.renderer import Renderer
 
+from shapely.geometry import Polygon
+
 R = lambda theta: np.asarray([
     [np.cos(theta), -np.sin(theta)],
     [np.sin(theta), np.cos(theta)]
@@ -85,7 +87,7 @@ class AreaClearingEnv(gym.Env):
             self.observation_space = spaces.Box(low=0, high=1, shape=self.observation_shape, dtype=np.float64)
 
         self.yaw_lim = (0, np.pi)       # lower and upper limit of ship yaw  
-        self.boundary_violation_limit = 0.0       # if the ship is out of boundary more than this limit, terminate and truncate the episode 
+        self.boundary_violation_limit = self.occupancy.occ_map_width / 4       # if the ship is out of boundary more than this limit, terminate and truncate the episode 
 
         self.con_fig, self.con_ax = plt.subplots(figsize=(10, 10))
 
@@ -95,11 +97,15 @@ class AreaClearingEnv(gym.Env):
             self.linear_speed = 0.0
             self.linear_speed_increment = 0.02
 
-        self.boundary_polygon = self.env_cfg.boundary
+        self.boundary_vertices = self.env_cfg.boundary
         self.walls = self.env_cfg.walls if 'walls' in self.env_cfg else []
         self.static_obstacles = self.env_cfg.static_obstacles if 'static_obstacles' in self.env_cfg else []
 
+        self.boundary_polygon = Polygon(self.boundary_vertices)
+
         self.renderer = None
+
+        self.cleared_box_count = 0
 
     def init_area_clearing_sim(self):
 
@@ -169,7 +175,7 @@ class AreaClearingEnv(gym.Env):
         if self.cfg.render.show:
             if self.renderer is None:
                 self.renderer = Renderer(self.space, env_width=self.cfg.occ.map_width, env_height=self.cfg.occ.map_height, render_scale=20, 
-                        background_color=(255, 255, 255), caption="Area Clearing")
+                        background_color=(255, 255, 255), caption="Area Clearing", clearance_boundary=self.boundary_vertices)
             else:
                 self.renderer.reset(new_space=self.space)
         
@@ -406,7 +412,11 @@ class AreaClearingEnv(gym.Env):
             
         # get updated obstacles
         updated_obstacles = CostMap.get_obs_from_poly(self.polygons)
-        num_completed, all_boxes_completed = self.boxes_completed(updated_obstacles=updated_obstacles)
+        num_completed, all_boxes_completed = self.boxes_completed(updated_obstacles, self.boundary_polygon)
+        
+        if(self.cleared_box_count < num_completed):
+            print("Boxes completed: ", num_completed)
+            self.cleared_box_count = num_completed
 
         # compute work done
         work = total_work_done(self.prev_obs, updated_obstacles)
@@ -499,7 +509,7 @@ class AreaClearingEnv(gym.Env):
         return observation
 
     
-    def boxes_completed(self, updated_obstacles):
+    def boxes_completed(self, updated_obstacles, boundary_polygon):
         """
         Returns a tuple: (int: number of boxes completed, bool: whether pushing task is complete)
         """
@@ -507,8 +517,8 @@ class AreaClearingEnv(gym.Env):
         completed = False
 
         for obs in updated_obstacles:
-            center = np.abs(poly_centroid(obs))
-            if center[1] - self.cfg.obstacle_size >= self.cfg.goal_y:
+            # if center[1] - self.cfg.obstacle_size >= self.cfg.goal_y:
+            if not(boundary_polygon.intersects(Polygon(obs))):
                 completed_count += 1
         
         if completed_count == self.num_box:
