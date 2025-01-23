@@ -70,17 +70,13 @@ class MazeNAMO(gym.Env):
         self.env_max_trial = 4000
 
         # Define action space
+        max_linear_speed = 1.0
         max_yaw_rate_step = (np.pi/2) / 15        # rad/sec
         print("max yaw rate per step: ", max_yaw_rate_step)
-        self.action_space = spaces.Box(low=-max_yaw_rate_step, high=max_yaw_rate_step, dtype=np.float64)
+        self.action_space = spaces.Box(low= np.array([0, -max_yaw_rate_step]), 
+                                       high=np.array([max_linear_speed, max_yaw_rate_step]),
+                                       dtype=np.float64)
         
-        
-        # Define observation space
-                # Define action space
-        max_yaw_rate_step = (np.pi/2) / 15        # rad/sec
-        print("max yaw rate per step: ", max_yaw_rate_step)
-        self.action_space = spaces.Box(low=-max_yaw_rate_step, high=max_yaw_rate_step, dtype=np.float64)
-
         # Define observation space
         self.low_dim_state = self.cfg.low_dim_state
         if self.low_dim_state:
@@ -400,10 +396,10 @@ class MazeNAMO(gym.Env):
         else:
 
             # constant forward speed in global frame
-            global_velocity = R(self.robot_body.angle) @ [self.target_speed, 0]
+            global_velocity = R(self.robot_body.angle) @ [action[0], 0]
 
             # apply velocity controller
-            self.robot_body.angular_velocity = action
+            self.robot_body.angular_velocity = action[1]
             self.robot_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
 
         # move simulation forward
