@@ -88,9 +88,6 @@ class ObjectPushing(gym.Env):
         # self.occupancy = OccupancyGrid(grid_width=cfg.occ.grid_size, grid_height=cfg.occ.grid_size, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, robot.body=None)
         self.cfg = cfg
 
-        # self.center_origin = lambda p: (p[0] + WALL_THICKNESS / 4 + self.cfg.env.room_length / 2,
-        #                                 p[1] + WALL_THICKNESS / 4 + self.cfg.env.room_width / 2)
-        self.center_origin = lambda p: p
         # state
         self.num_channels = 4
         self.observation = None
@@ -287,7 +284,6 @@ class ObjectPushing(gym.Env):
             x_start = random.uniform(-self.cfg.env.room_length / 2 + size, self.cfg.env.room_length / 2 - size)
             y_start = random.uniform(-self.cfg.env.room_width / 2 + size, self.cfg.env.room_width / 2 - size)
             heading = random.uniform(0, 2 * np.pi)
-            x_start, y_start = self.center_origin((x_start, y_start))
             self.start = (x_start, y_start, heading)
         else:
             self.start = (5, 1.5, np.pi*3/2)
@@ -296,13 +292,6 @@ class ObjectPushing(gym.Env):
         self.boundary_dicts = self.generate_boundary()
         self.cubes_dicts = self.generate_cubes()
 
-        # shift coordinates to center of room
-        for obj in self.boundary_dicts + self.cubes_dicts:
-            obj['position'] = self.center_origin(obj['position'])
-            if obj['type'] != 'corner':
-                for vertex in obj['vertices']:
-                    vertex[:] = self.center_origin(vertex)
-        
         # filter out cubes that have zero area NOTE probably not needed
         # self.cubes_dicts[:] = [c for c in self.cubes_dicts if poly_area(c['vertices']) != 0]
         # self.cubes = [c['vertices'] for c in self.cubes_dicts]
@@ -426,22 +415,31 @@ class ObjectPushing(gym.Env):
             column_length = 1
             column_width = 1
             buffer_width = 0.8
-            col_min_dist = 1.2
+            col_min_dist = 2
             cols_dict = []
 
             new_cols = []
             for _ in range(num_columns):
-                for _ in range(100): # try 100 times to generate a column that doesn't overlap with existing columns
+                for _ in range(100): # try 100 times to generate a column that doesn't overlap with existing polygons
                     x = random.uniform(-self.cfg.env.room_length / 2 + 2 * buffer_width + column_length / 2,
                                         self.cfg.env.room_length / 2 - 2 * buffer_width - column_length / 2)
                     y = random.uniform(-self.cfg.env.room_width / 2 + 2 * buffer_width + column_width / 2,
                                         self.cfg.env.room_width / 2 - 2 * buffer_width - column_width / 2)
                     
                     overlapped = False
+                    # check if column overlaps with receptacle
                     (rx, ry), size = self.get_receptacle_position_and_size()
                     if ((x - rx)**2 + (y - ry)**2)**(0.5) <= col_min_dist / 2 + size / 2:
                         overlapped = True
                         break
+
+                    # check if column overlaps with robot
+                    rob_x, rob_y, _ = self.robot_info['start_pos']
+                    if ((x - rob_x)**2 + (y - rob_y)**2)**(0.5) <= col_min_dist / 2 + self.robot_radius:
+                        overlapped = True
+                        break
+
+                    # check if column overlaps with other columns
                     for prev_col in new_cols:
                         if ((x - prev_col[0])**2 + (y - prev_col[1])**2)**(0.5) <= col_min_dist:
                             overlapped = True
@@ -476,11 +474,20 @@ class ObjectPushing(gym.Env):
                 if len(new_divider) == 1:
                     break
 
+                overlapped = False
                 x = self.cfg.env.room_length / 2 - divider_length / 2
                 y = random.uniform(-self.cfg.env.room_width / 2 + buffer_width + divider_width / 2,
                                     self.cfg.env.room_width / 2 - buffer_width - divider_width / 2)
-
-                new_divider.append([x, y])
+                
+                # check if divider overlaps with robot
+                rob_x, rob_y, _ = self.robot_info['start_pos']
+                if ((x - rob_x)**2 + (y - rob_y)**2)**(0.5) <= 3 * self.robot_radius:
+                    overlapped = True
+                    break
+                
+                if not overlapped:
+                    new_divider.append([x, y])
+                    break
             
             divider_dicts = []
             for x, y in new_divider:
@@ -611,7 +618,6 @@ class ObjectPushing(gym.Env):
 
     def cube_position_in_receptacle(self, cube_vertices):
         (x, y), size = self.get_receptacle_position_and_size()
-        (x, y) = self.center_origin((x, y))
         receptacle_min_x = x - size / 2
         receptacle_max_x = x + size / 2
         receptacle_min_y = y - size / 2
@@ -827,7 +833,6 @@ class ObjectPushing(gym.Env):
                 # stop moving if robot collided with obstacle
                 if distance(robot_prev_waypoint_position, robot_position) > MOVE_STEP_SIZE:
                     if self.robot_hit_obstacle:
-                        print('hit obstacle')
                         self.robot_hit_obstacle = False
                         robot_is_moving = False
                         break  # Note: self.robot_distance does not get not updated
