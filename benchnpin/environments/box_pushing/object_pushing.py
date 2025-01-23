@@ -1096,6 +1096,7 @@ class ObjectPushing(gym.Env):
         global_map = self.create_padded_room_zeros() + np.inf
         (rx, ry), _ = self.get_receptacle_position_and_size()
         pixel_i, pixel_j = position_to_pixel_indices(rx, ry, self.configuration_space.shape)
+        pixel_i, pixel_j = self.closest_valid_cspace_indices(pixel_i, pixel_j)
         shortest_path_image, _ = spfa.spfa(self.configuration_space, (pixel_i, pixel_j))
         shortest_path_image /= LOCAL_MAP_PIXELS_PER_METER
         global_map = np.minimum(global_map, shortest_path_image)
@@ -1105,6 +1106,7 @@ class ObjectPushing(gym.Env):
     
     def create_global_shortest_path_map(self, robot_position):
         pixel_i, pixel_j = position_to_pixel_indices(robot_position[0], robot_position[1], self.configuration_space.shape)
+        pixel_i, pixel_j = self.closest_valid_cspace_indices(pixel_i, pixel_j)
         global_map, _ = spfa.spfa(self.configuration_space, (pixel_i, pixel_j))
         global_map /= LOCAL_MAP_PIXELS_PER_METER
         global_map /= (np.sqrt(2) * LOCAL_MAP_PIXEL_WIDTH) / LOCAL_MAP_PIXELS_PER_METER
