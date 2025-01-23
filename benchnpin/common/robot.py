@@ -6,21 +6,21 @@ from scipy.spatial import ConvexHull
 from matplotlib import patches
 
 
-class Ship:
+class Robot:
     def __init__(self, scale: float, vertices: List, padding: float = 0, mass: float = 1):
         """
         :param scale: scale factor for vertices
-        :param vertices: list of vertices that define the ship. Assumes vertices are defined symmetrically
-                         about the origin (0, 0) and the ship is facing right (i.e. along the x-axis)
+        :param vertices: list of vertices that define the robot. Assumes vertices are defined symmetrically
+                         about the origin (0, 0) and the robot is facing right (i.e. along the x-axis)
         :param padding: padding to add to the vertices
-        :param mass: mass of the ship
+        :param mass: mass of the robot
         """
         self.vertices = np.asarray(
             [[np.sign(a) * (abs(a) + padding), np.sign(b) * (abs(b) + padding)] for a, b in vertices]
         ) * scale
         dist = lambda a, b: np.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2)
-        self.max_ship_length = np.ceil(max(dist(a, b) for a in self.vertices for b in self.vertices)).astype(int)
-        assert self.max_ship_length != 0, 'ship length cannot be 0'
+        self.max_robot_length = np.ceil(max(dist(a, b) for a in self.vertices for b in self.vertices)).astype(int)
+        assert self.max_robot_length != 0, 'robot length cannot be 0'
         self.mass = mass
         self.width = self.vertices[:, 1].max() - self.vertices[:, 1].min()
         self.right_half, self.left_half = self.split_vertices()  # mainly used in the swath generation step
@@ -44,8 +44,8 @@ class Ship:
             ax.plot(v[0], v[1], 'k.')
 
         # plot line to show initial heading
-        ax.plot([x, x + self.max_ship_length * np.cos(theta)],
-                [y, y + self.max_ship_length * np.sin(theta)], 'r')
+        ax.plot([x, x + self.max_robot_length * np.cos(theta)],
+                [y, y + self.max_robot_length * np.sin(theta)], 'r')
 
         # plot lines to show minimal turning radius
         a = np.arange(0, 2 * np.pi, 0.01)
@@ -76,21 +76,20 @@ class Ship:
 
     @staticmethod
     def sim(vertices: List, start_pos: Tuple[float, float, float], body_type=None, velocity=(0, 0), color=None):
-        from pymunk import Vec2d, Body, Poly, moment_for_box
+        from pymunk import Vec2d, Body, Poly
 
         x, y, theta = start_pos
         # setup for pymunk
         if body_type is None:
             body_type = Body.KINEMATIC  # Body.DYNAMIC
-        body = Body(body_type=body_type)  # mass and moment ignored when kinematic body type
+        body = Body()  # mass and moment ignored when kinematic body type
         body.position = (x, y)
         body.velocity = Vec2d(*velocity)
         body.angle = theta  # Rotation of the body in radians
         shape = Poly(body, [tuple(item) for item in vertices], radius=0.02)
-        # shape.mass = 100
-        shape.mass = 10.0
+        shape.mass = 1
         shape.elasticity = 0.01
-        shape.friction = 1.0
+        # shape.mass = 100
 
         if color is not None:
             shape.color = color
@@ -133,15 +132,13 @@ class Ship:
 
 if __name__ == '__main__':
     # run main to test ship config
-    ship = Ship(
+    robot = Robot(
         padding=0.15,
         scale=1,
-        vertices=[[1., -0.],
-                  [0.9, 0.10],
-                  [0.5, 0.25],
-                  [-1., 0.25],
-                  [-1., -0.25],
-                  [0.5, -0.25],
-                  [0.9, -0.10]]
+      vertices= [[0.69, -1.2],
+              [-0.69, -0.89],
+              [-0.69, 0.89],
+              [0.69, 1.2], ]
+              
     )
-    ship.plot(turning_radius=2)
+    robot.plot(turning_radius=2)

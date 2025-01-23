@@ -26,8 +26,8 @@ class Plot:
             smoothing_nodes: Tuple[List, List] = tuple(),
             swath: np.ndarray = None,
             swath_cost: float = None,
-            ship_pos: Union[Tuple, np.ndarray] = None,
-            ship_vertices: np.ndarray = None,
+            robot_pos: Union[Tuple, np.ndarray] = None,
+            robot_vertices: np.ndarray = None,
             turning_radius: float = None,
             horizon: float = None,
             goal: float = None,
@@ -128,26 +128,26 @@ class Plot:
                     patches.Polygon(obs['vertices'], True, fill=False)
                 )
 
-            if ship_vertices is not None:
-                assert ship_pos is not None
-                if len(np.shape(ship_pos)) > 1:
+            if robot_vertices is not None:
+                assert robot_pos is not None
+                if len(np.shape(robot_pos)) > 1:
                     # we have a list of poses
-                    self.map_ax.plot(ship_pos[0], ship_pos[1], 'b-', label='ship path')
-                    ship_pos = ship_pos[:, -1]
+                    self.map_ax.plot(robot_pos[0], robot_pos[1], 'b-', label='ship path')
+                    robot_pos = robot_pos[:, -1]
 
                 self.map_ax.add_patch(
-                    patches.Polygon(ship_vertices @ R(ship_pos[2]).T + ship_pos[:2], True, fill=False, color='red')
+                    patches.Polygon(robot_vertices @ R(robot_pos[2]).T + robot_pos[:2], True, fill=False, color='red')
                 )
 
                 if turning_radius is not None:
                     x = np.arange(0, 2 * np.pi, 0.01)
                     self.map_ax.plot(
-                        (ship_pos[0] - turning_radius * np.sin(ship_pos[2]) + turning_radius * np.cos(x)).tolist(),
-                        (ship_pos[1] + turning_radius * np.cos(ship_pos[2]) + turning_radius * np.sin(x)).tolist(), 'g'
+                        (robot_pos[0] - turning_radius * np.sin(robot_pos[2]) + turning_radius * np.cos(x)).tolist(),
+                        (robot_pos[1] + turning_radius * np.cos(robot_pos[2]) + turning_radius * np.sin(x)).tolist(), 'g'
                     )
                     self.map_ax.plot(
-                        (ship_pos[0] + turning_radius * np.sin(ship_pos[2]) + turning_radius * np.cos(x)).tolist(),
-                        (ship_pos[1] - turning_radius * np.cos(ship_pos[2]) + turning_radius * np.sin(x)).tolist(), 'g'
+                        (robot_pos[0] + turning_radius * np.sin(robot_pos[2]) + turning_radius * np.cos(x)).tolist(),
+                        (robot_pos[1] - turning_radius * np.cos(robot_pos[2]) + turning_radius * np.sin(x)).tolist(), 'g'
                     )
 
         self.sim = bool(sim_figsize)
@@ -162,7 +162,7 @@ class Plot:
             self.ax.append(self.sim_ax)
 
             # show the ship poses
-            self.sim_ax.plot(ship_pos[0], ship_pos[1], 'b-', label='ship path')
+            self.sim_ax.plot(robot_pos[0], robot_pos[1], 'b-', label='ship path')
 
             if self.full_path is not None:
                 self.path_line.append(
@@ -179,9 +179,9 @@ class Plot:
                 )
 
             #  add patch for ship
-            if ship_vertices is not None:
+            if robot_vertices is not None:
                 self.ship_patch = self.sim_ax.add_patch(
-                    patches.Polygon(ship_vertices @ R(ship_pos[2]).T + ship_pos[:2], True, fill=True,
+                    patches.Polygon(robot_vertices @ R(robot_pos[2]).T + robot_pos[:2], True, fill=True,
                                     edgecolor='black', facecolor='white', linewidth=2)
                 )
 
@@ -197,7 +197,7 @@ class Plot:
             self.past_path_line = None
 
             # keeps track of how far ship has traveled in subsequent steps
-            self.prev_ship_pos = ship_pos
+            self.prev_ship_pos = robot_pos
 
             # display target on path
             if target:
@@ -332,7 +332,7 @@ class Plot:
                     self.horizon_line.set_visible(False)
 
 
-    def update_ship(self, body, shape, move_yaxis_threshold=20) -> None:
+    def update_robot(self, body, shape, move_yaxis_threshold=20) -> None:
         heading = body.angle
         R = np.asarray([
             [math.cos(heading), -math.sin(heading)], [math.sin(heading), math.cos(heading)]

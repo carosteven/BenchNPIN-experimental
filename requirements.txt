@@ -10,9 +10,8 @@ numba
 casadi
 shapely
 scikit-image
-pymunk
+pymunk==6.5.1
 pycpd
-opencv-python-headless
 packcircles
 torch
 torchsummary
