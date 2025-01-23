@@ -208,7 +208,8 @@ class MazeNAMO(gym.Env):
                 x_start = 1 + random.random() * (self.cfg.start_x_range - 1)
                 y_start = 1 + random.random() * (self.cfg.start_y_range - 1)
                 #check if the start and goal points are not in the maze walls
-                if not self.space.point_query((x_start, y_start), 0, pymunk.ShapeFilter()): 
+                min_dist = self.cfg.robot.min_obstacle_dist
+                if not self.space.point_query((x_start, y_start), min_dist, pymunk.ShapeFilter()): 
                     print("start point: ", x_start, y_start)
                     break
 
@@ -258,10 +259,13 @@ class MazeNAMO(gym.Env):
                 center_x = random.random() * (max_x - min_x) + min_x
                 center_y = random.random() * (max_y - min_y) + min_y
 
-                # loop through previous obstacles to check for overlap
+                # loop through previous obstacles to check for overlap with other obstacles or maze walls
                 overlapped = False
                 for prev_obs_x, pre_obs_y in obstacles:
                     if ((center_x - prev_obs_x)**2 + (center_y - pre_obs_y)**2)**(0.5) <= obs_min_dist:
+                        overlapped = True
+                        break
+                    if self.space.point_query((center_x, center_y), obs_min_dist, pymunk.ShapeFilter()):
                         overlapped = True
                         break
                 
@@ -337,7 +341,7 @@ class MazeNAMO(gym.Env):
             #abort the program
             print("Invalid maze version")
             exit(1)
-            
+
     def randomize_obstacles(self):
         """
         NOTE this function is called only when using low-dimensional observation
