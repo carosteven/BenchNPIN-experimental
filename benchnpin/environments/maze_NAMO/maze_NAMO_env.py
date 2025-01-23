@@ -321,12 +321,23 @@ class MazeNAMO(gym.Env):
     def construct_maze_walls(self):
         self.length = self.cfg.env.length
         self.width = self.cfg.env.width
-        self.maze_walls = [[(0,0),(self.width,0)] , [(0,0),(0,self.length)],
+        self.maze_version = self.cfg.env.maze_version
+        if self.maze_version == 1:
+            self.maze_walls = [[(0,0),(self.width,0)] , [(0,0),(0,self.length)],
                     [(self.width,0),(self.width,self.length)], 
                     [(0,self.length),(self.width,self.length)],
-                    [(self.width/3,0),(self.width/3,self.length/3)], [(2*self.width/3,self.length),(2*self.width/3,5)]]
-       
-    
+                     [(2*self.width/2,self.length),(2*self.width/2,5)],
+                    [(self.width/2,0),(self.width/2,self.length - self.length/3)]]
+        elif self.maze_version == 2:
+            self.maze_walls = [[(0,0),(self.width,0)] , [(0,0),(0,self.length)],
+                    [(self.width,0),(self.width,self.length)], 
+                    [(0,self.length),(self.width,self.length)],
+                    [(self.width/3,0),(self.width/3,2*self.length/3)], [(2*self.width/3,self.length),(2*self.width/3, self.length/3)]]
+        else:
+            #abort the program
+            print("Invalid maze version")
+            exit(1)
+            
     def randomize_obstacles(self):
         """
         NOTE this function is called only when using low-dimensional observation
