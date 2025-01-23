@@ -12,9 +12,9 @@ demo_mode: true     # when using demo mode, control both forward and angular spe
 
 # obstacles information
 randomize_obstacles: true
-num_obstacles: 3
+num_obstacles: 10
 obstacle_size: 0.5
-min_obs_dist: 3.5       # minimum obstacle distance during random initialization
+min_obs_dist: 0.62       # minimum obstacle distance during random initialization
 max_obs_x: 14
 min_obs_x: 2.5
 max_obs_y: 8
