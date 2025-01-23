@@ -13,7 +13,7 @@ import numpy as np
 import pickle
 from pynput import keyboard
 
-env = gym.make('object-pushing-v0')
+env = gym.make('area-clearing-v0')
 
 observations = []
 actions = []                # this is actually the states (i.e. 3 dof pose)
@@ -92,9 +92,11 @@ def collect_demos():
                     "; num completed: ", info['box_count'],  end="\r")
                 observation, reward, terminated, truncated, info = env.step(command)
 
-                # command = OTHER
-                if t % 5 == 0:
-                    env.render()
+                env.render()
+
+                # # command = OTHER
+                # if t % 5 == 0:
+                #     env.render()
 
                 if (((info['state'][0] - prev_state[0])**2 + (info['state'][1] - prev_state[1])**2)**(0.5) >= step_size) or terminated or truncated:
                     record_transition(observation, [info['state'][0], info['state'][1]], reward, terminated, truncated)
@@ -124,77 +126,6 @@ def collect_demos():
     if manual_stop:
         print("\nDemo manually stopped. Ignored")
         return
-    ''' 
-    global observations, actions, rewards, terminals, timeouts
-    observations = np.array(observations).astype(np.float32)
-    actions = np.array(actions).astype(np.float32)
-    rewards = np.array(rewards).astype(np.float32)
-    terminals = np.array(terminals)
-    timeouts = np.array(timeouts)
-    path_lengths = np.array([path_length])
-
-    print("observation shape: ", observations.shape)
-    print("actions shape: ", actions.shape)
-    print("rewards shape: ", rewards.shape)
-    print("terminals shape: ", terminals.shape)
-    print("timeouts shape: ", timeouts.shape)
-    print("current path length: ", path_length)
-
-
-    try:
-        # load previous demos
-        with open('pushing_demo.pkl', 'rb') as file:
-            pickle_dict = pickle.load(file)
-
-        with open('pushing_demo_info.pkl', 'rb') as f:
-            pickle_dict_info = pickle.load(f)
-        
-        # append current demonstration data
-        pickle_dict['observations'] = np.concatenate((pickle_dict['observations'], observations))
-        pickle_dict['actions'] = np.concatenate((pickle_dict['actions'], actions))
-        pickle_dict['rewards'] = np.concatenate((pickle_dict['rewards'], rewards))
-        pickle_dict['terminals'] = np.concatenate((pickle_dict['terminals'], terminals))
-        pickle_dict['timeouts'] = np.concatenate((pickle_dict['timeouts'], timeouts))
-
-        # append current meta-info data
-        pickle_dict_info['path_lengths'] = np.concatenate((pickle_dict_info['path_lengths'], path_lengths))
-        pickle_dict_info['demo_count'] = pickle_dict_info['demo_count'] + 1
-
-    except:
-        # if pushing_demo file not exist, create one with current demos
-        pickle_dict = {
-            'observations': observations, 
-            'actions': actions, 
-            'rewards': rewards, 
-            'terminals': terminals,
-            'timeouts': timeouts
-        }
-
-        pickle_dict_info = {
-            'path_lengths': path_lengths,
-            'demo_count': 1
-        }
-
-    print("Total Demonstration Data ======== \n")
-    print("observation shape: ", pickle_dict['observations'].shape)
-    print("actions shape: ", pickle_dict['actions'].shape)
-    print("rewards shape: ", pickle_dict['rewards'].shape)
-    print("terminals shape: ", pickle_dict['terminals'].shape)
-    print("timeouts shape: ", pickle_dict['timeouts'].shape)
-
-    print("max path lengths: ", np.max(pickle_dict_info['path_lengths']), "; min path length: ", np.min(pickle_dict_info['path_lengths']), "; average path length: ", np.mean(pickle_dict_info['path_lengths']))
-    print("Total number of demos: ", pickle_dict_info['demo_count'])
-
-    
-    # save demo data
-    with open('pushing_demo.pkl', 'wb') as f:
-        pickle.dump(pickle_dict, f)
-
-    # save demo info data
-    with open('pushing_demo_info.pkl', 'wb') as f:
-        pickle.dump(pickle_dict_info, f)
-    '''
-
 
 if __name__ == "__main__":
     collect_demos()

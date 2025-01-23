@@ -10,34 +10,36 @@ plot:
 
 demo_mode: true     # when using demo mode, control both forward and angular speed
 
-# cubes information
-randomize_cubes: true
-num_cubes: 10
-cube_size: 0.44
-min_cube_dist: 0.62       # minimum cube distance during random initialization
-max_cube_x: 4
-min_cube_x: -4
-max_cube_y: 2
-min_cube_y: -2
+# obstacles information
+randomize_obstacles: true
+num_obstacles: 3
+obstacle_size: 0.5
+min_obs_dist: 3.5       # minimum obstacle distance during random initialization
+max_obs_x: 14
+min_obs_x: 2.5
+max_obs_y: 8
+min_obs_y: 4.5
 
 # parameters for low-dim environment
-low_dim_state: false
+low_dim_state: true
 fixed_trial_idx: 1
 random_start: true
 start_x_range: 15
+start_y_range: 15
 
 ### PLANNER PARAMS
 #max_replan: 1        # max number of replans
 concentration: 0.1    # options are 0.2, 0.3, 0.4, 0.5
 planner: 'predictive'    # options are 'skeleton', 'straight', or 'lattice'
-goal_y: 15
+goal_x: 2
+goal_y: 10
 threshold_dist: 0.5   # fraction of path length for deciding whether to update planned path
 threshold_cost: 0.95  # fraction of path cost for deciding whether to update planned path
 occ:
   grid_size: 0.2       # occupancy map grid size
   m_to_pix_scale: 19.5   # number of pixels per meter when generating the raw occupancy map
-  map_height: 28       # occupancy map height (in meter)
-  map_width: 16        # occupancy map width (in meter)
+  map_height: 20       # occupancy map height (in meter)
+  map_width: 20       # occupancy map width (in meter)
 a_star:
   horizon: 30  # receding horizon in metres (needs to be an int for it to be enabled)
   replan: true
@@ -56,11 +58,10 @@ prim:
   num_headings: 8  # number of headings in the discretized heading space
   step_size: 0.1   # step size for sampling points on the path
   turning_radius: 2.0  # turning radius of the ship in lattice units
-agent:
+robot:
   mass: 1  # mass of the NRC ship in kg
   padding: 0.25  # adds padding to ship footprint
-  length: 0.8
-  width: 0.7
+
   vertices: [
 
               # [0.69, -0.89],
@@ -69,16 +70,11 @@ agent:
               # [-0.69, 0.89],
               # [0.69, 0.89], 
 
-              # [0.69, -1.2],
-              # [-0.69, -0.89],
+              [0.69, -1.2],
+              [-0.69, -0.89],
 
-              # [-0.69, 0.89],
-              # [0.69, 1.2], 
-
-              [0.4, -0.35],
-              [0.4, 0.35],
-              [-0.4, 0.25],
-              [-0.4, -0.25]
+              [-0.69, 0.89],
+              [0.69, 1.2], 
 
               
               ]
@@ -86,7 +82,6 @@ agent:
 ### SIMULATION PARAMS
 render:
   log_obs: true       # whether to log occupancy observation
-  frequency: 20       # frequency of rendering
 sim:
   t_max: 2000  # max number of iterations in simulation loop (originally 5000)
   steps: 100    # number of simulation steps per iteration (originally 10)
@@ -95,7 +90,7 @@ sim:
     - 0
   iterations: 10  # controls accuracy of pymunk solver i.e. simulation accuracy, default is 10
   damping: 0      # damping to body velocities
-  cube_density: 0.001
+  obstacle_density: 0.001
 anim:
   save: true               # if true save to disk animation plots
   show: true                # if true show animation plots
@@ -124,16 +119,15 @@ controller:
   # look ahead distance
   Lfc: 0.5
   # target speed
-  target_speed: 0.3  # m/s
+  target_speed: 10  # m/s
   PID_gains:  # gains for 3 PIDs
     - [ 5, 0, 5 ]
     - [ 10, 0, 20 ]
     - [ 10, 0, 20 ]
 
-### ENVIRONMENT PARAMS
+#env parameters
 env:
-  obstacle_config: large_divider # options are small_empty, small_columns, large_columns, large_divider
-  room_length: 10
-  room_width: 10 # 5 for small, 10 for large
-  receptacle_width: 1.5
-  shortest_path_channel_scale: 0.25
+  length: 20
+  width: 20
+
+  

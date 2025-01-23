@@ -1,3 +1,6 @@
+# TODO rename from ship to robot (can't do it yet - 
+#   TypeError: __init__() got an unexpected keyword argument 'robot_body' was raised from the environment creator for object-pushing-v0 with kwargs ({}))
+
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
@@ -12,12 +15,18 @@ from matplotlib import pyplot as plt
 from benchnpin.common.cost_map import CostMap
 from benchnpin.common.evaluation.metrics import total_work_done
 from benchnpin.common.geometry.polygon import poly_area
-from benchnpin.common.ship import Ship as Robot
+# from benchnpin.common.ship import Ship as Robot
 from benchnpin.common.utils.plot_pushing import Plot
-from benchnpin.common.utils.sim_utils import generate_sim_obs
+from benchnpin.common.utils.sim_utils import generate_sim_cubes, generate_sim_bounds, generate_sim_agent
 from benchnpin.common.geometry.polygon import poly_centroid
 from benchnpin.common.utils.utils import DotDict
 from benchnpin.common.occupancy_grid.occupancy_map import OccupancyGrid
+
+# SAM imports
+from scipy.ndimage import rotate as rotate_image
+from cv2 import fillPoly
+from skimage.morphology import disk, binary_dilation
+import spfa
 
 R = lambda theta: np.asarray([
     [np.cos(theta), -np.sin(theta)],
@@ -32,10 +41,23 @@ STOP_TURNING = 1
 LEFT = 2
 RIGHT = 3
 STOP = 4
-OTHER = 5
+BACKWARD = 5
 SMALL_LEFT = 6
 SMALL_RIGHT = 7
 
+CUBE_MASS = 0.01
+WALL_THICKNESS = 1.4*10
+
+LOCAL_MAP_PIXEL_WIDTH = 96
+LOCAL_MAP_WIDTH = 10 # 10 meters
+LOCAL_MAP_PIXELS_PER_METER = LOCAL_MAP_PIXEL_WIDTH / LOCAL_MAP_WIDTH
+
+OBSTACLE_SEG_INDEX = 0
+FLOOR_SEG_INDEX = 1
+RECEPTACLE_SEG_INDEX = 3
+CUBE_SEG_INDEX = 4
+ROBOT_SEG_INDEX = 5
+MAX_SEG_INDEX = 8
 
 class ObjectPushing(gym.Env):
     """Custom Environment that follows gym interface"""
@@ -51,8 +73,25 @@ class ObjectPushing(gym.Env):
         cfg_file = os.path.join(self.current_dir, 'config.yaml')
 
         cfg = DotDict.load_from_file(cfg_file)
-        self.occupancy = OccupancyGrid(grid_width=cfg.occ.grid_size, grid_height=cfg.occ.grid_size, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, ship_body=None)
+        # self.occupancy = OccupancyGrid(grid_width=cfg.occ.grid_size, grid_height=cfg.occ.grid_size, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, agent.body=None)
         self.cfg = cfg
+
+        # State
+        self.num_channels = 4
+        self.observation = None
+        self.global_overhead_map = None
+        self.small_obstacle_map = None
+        self.configuration_space = None
+
+        # Robot state
+        robot_pixel_width = int(np.ceil(self.cfg.agent.length * LOCAL_MAP_PIXELS_PER_METER))
+        self.robot_state_channel = np.zeros((LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH), dtype=np.float32)
+        start = int(np.floor(LOCAL_MAP_PIXEL_WIDTH / 2 - robot_pixel_width / 2))
+        for i in range(start, start + robot_pixel_width):
+            for j in range(start, start + robot_pixel_width):
+                # Circular robot mask
+                if (((i + 0.5) - LOCAL_MAP_PIXEL_WIDTH / 2)**2 + ((j + 0.5) - LOCAL_MAP_PIXEL_WIDTH / 2)**2)**0.5 < robot_pixel_width / 2:
+                    self.robot_state_channel[i, j] = 1
 
         self.env_max_trial = 4000
 
@@ -72,20 +111,22 @@ class ObjectPushing(gym.Env):
         self.low_dim_state = self.cfg.low_dim_state
         if self.low_dim_state:
             self.fixed_trial_idx = self.cfg.fixed_trial_idx
-            if self.cfg.randomize_obstacles:
-                self.observation_space = spaces.Box(low=-10, high=30, shape=(self.cfg.num_obstacles * 2,), dtype=np.float64)
+            if self.cfg.randomize_cubes:
+                self.observation_space = spaces.Box(low=-10, high=30, shape=(self.cfg.num_cubes * 2,), dtype=np.float64)
             else:
                 self.observation_space = spaces.Box(low=-10, high=30, shape=(6,), dtype=np.float64)
 
         else:
-            self.observation_shape = (2, self.occupancy.occ_map_height, self.occupancy.occ_map_width)
-            self.observation_space = spaces.Box(low=0, high=1, shape=self.observation_shape, dtype=np.float64)
+            # self.observation_shape = (2, self.occupancy.occ_map_height, self.occupancy.occ_map_width)
+            # self.observation_space = spaces.Box(low=0, high=1, shape=self.observation_shape, dtype=np.float64)
+            self.observation_shape = (self.num_channels, LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH)
+            self.observation_space = spaces.Box(low=0, high=1, shape=self.observation_shape, dtype=np.float32)
 
         self.yaw_lim = (0, np.pi)       # lower and upper limit of ship yaw  
         self.boundary_violation_limit = 0.0       # if the ship is out of boundary more than this limit, terminate and truncate the episode 
 
         self.plot = None
-        self.con_fig, self.con_ax = plt.subplots(figsize=(10, 10))
+        # self.con_fig, self.con_ax = plt.subplots(figsize=(10, 10))
 
 
         if self.cfg.demo_mode:
@@ -94,7 +135,14 @@ class ObjectPushing(gym.Env):
             self.linear_speed = 0.0
             self.linear_speed_increment = 0.02
 
-        plt.ion()  # Interactive mode on
+            # show state
+            num_plots = self.num_channels
+            self.state_plot = plt
+            self.state_fig, self.state_ax = self.state_plot.subplots(1, num_plots, figsize=(4 * num_plots, 6))
+            self.colorbars = [None] * num_plots
+            self.state_plot.ion()  # Interactive mode on
+
+        # plt.ion()  # Interactive mode on
         
 
     def init_ship_ice_sim(self):
@@ -106,6 +154,7 @@ class ObjectPushing(gym.Env):
         self.replan = self.cfg.a_star.replan
         self.dt = self.cfg.controller.dt
         self.target_speed = self.cfg.controller.target_speed
+        self.normal_cancelled_velocity = Vec2d(0, 0)
 
         # setup pymunk environment
         self.space = pymunk.Space()  # threaded=True causes some issues
@@ -132,6 +181,9 @@ class ObjectPushing(gym.Env):
         # keep track of contact points
         self.contact_pts = []
 
+        # keep track of cubes pushed into receptacle
+        self.cumulative_cubes = 0
+
         # setup a collision callback to keep track of total ke
         # def pre_solve_handler(arbiter, space, data):
         #     nonlocal ship_ke
@@ -148,7 +200,7 @@ class ObjectPushing(gym.Env):
 
         def post_solve_handler(arbiter, space, data):
             # nonlocal self.total_ke, self.system_ke_loss, self.total_impulse, self.clln_obs
-            ship_shape, ice_shape = arbiter.shapes
+            agent, ice_shape = arbiter.shapes
 
             self.system_ke_loss.append(arbiter.total_ke)
 
@@ -166,96 +218,366 @@ class ObjectPushing(gym.Env):
             for i in arbiter.contact_point_set.points:
                 self.contact_pts.append(list(arbiter.shapes[0].body.world_to_local((i.point_b + i.point_a) / 2)))
 
+        def boundary_collision_begin(arbiter, space, data):
+            return True
+        
+        def cube_boundary_pre_solve(arbiter, space, data):
+            cube_shape = arbiter.shapes[0]
+            boundary_shape = arbiter.shapes[1]
+            self.prevent_cube_boundary_intersection(cube_shape, boundary_shape)
+            return True
+        
+        def recept_collision_begin(arbiter, space, data):
+            if arbiter.shapes[0].label == 'cube':
+                self.cubes_completed(arbiter.shapes[0])
+            return False
+
         # handler = space.add_default_collision_handler()
         self.handler = self.space.add_collision_handler(1, 2)
         # from pymunk docs
         # post_solve: two shapes are touching and collision response processed
         self.handler.pre_solve = pre_solve_handler
         self.handler.post_solve = post_solve_handler
+
+        self.boundary_handler = self.space.add_collision_handler(1, 3)
+        self.boundary_handler.begin = boundary_collision_begin
         
-        
+        self.cube_boundary_handler = self.space.add_collision_handler(2, 3)
+        self.cube_boundary_handler.pre_solve = cube_boundary_pre_solve
+
+        self.robot_recept_handler = self.space.add_collision_handler(1, 4)
+        self.robot_recept_handler.begin = recept_collision_begin
+
+        self.cube_recept_handler = self.space.add_collision_handler(2, 4)
+        self.cube_recept_handler.pre_solve = recept_collision_begin
+
     def init_ship_ice_env(self):
 
         # generate random start point, if specified
         if self.cfg.random_start:
-            x_start = 1 + random.random() * (self.cfg.start_x_range - 1)    # [1, start_x_range]
-            self.start = (x_start, 1.0, np.pi / 2)
+            length = self.cfg.agent.length
+            width = self.cfg.agent.width
+            size = max(length, width)
+            x_start = random.uniform(-self.cfg.env.room_length / 2 + size, self.cfg.env.room_length / 2 - size)
+            y_start = random.uniform(-self.cfg.env.room_width / 2 + size, self.cfg.env.room_width / 2 - size)
+            heading = random.uniform(0, 2 * np.pi)
+            self.start = (x_start, y_start, heading)
         else:
-            self.start = (5, 1.0, np.pi / 2)
+            self.start = (5, 1.5, np.pi*3/2)
+        self.agent_info = self.cfg.agent
+        self.agent_info['start_pos'] = self.start
 
-        # if self.cfg.randomize_obstacles:
-        #     self.randomize_obstacles()
-
-        self.obs_dicts = self.generate_obstacles()
+        self.boundary_dicts = self.generate_boundary()
+        self.cubes_dicts = self.generate_cubes()
         
-        # filter out obstacles that have zero area
-        self.obs_dicts[:] = [ob for ob in self.obs_dicts if poly_area(ob['vertices']) != 0]
-        self.obstacles = [ob['vertices'] for ob in self.obs_dicts]
+        # filter out cubes that have zero area NOTE probably not needed
+        # self.cubes_dicts[:] = [c for c in self.cubes_dicts if poly_area(c['vertices']) != 0]
+        # self.cubes = [c['vertices'] for c in self.cubes_dicts]
 
-        self.goal = (0, self.cfg.goal_y)
+        self.goal = (0, self.cfg.goal_y) # TODO remove
 
         # initialize ship sim objects
-        self.polygons = generate_sim_obs(self.space, self.obs_dicts, self.cfg.sim.obstacle_density)
+        self.polygons = generate_sim_cubes(self.space, self.cubes_dicts, self.cfg.sim.cube_density)
+        self.boundaries = generate_sim_bounds(self.space, self.boundary_dicts)
+        self.agent = generate_sim_agent(self.space, self.agent_info)
+        self.agent.collision_type = 1
         for p in self.polygons:
             p.collision_type = 2
+        for b in self.boundaries:
+            b.collision_type = 3
+            if b.label == 'receptacle':
+                b.collision_type = 4
 
-        self.ship_body, self.ship_shape = Robot.sim(self.cfg.ship.vertices, self.start)
-        self.ship_shape.collision_type = 1
-        self.space.add(self.ship_body, self.ship_shape)
+        # Get vertices of corners (after they have been moved to proper spots)
+        corner_dicts = [obstacle for obstacle in self.boundary_dicts if obstacle['type'] == 'corner']
+        corner_polys = [shape for shape in self.boundaries if getattr(shape, 'label', None) == 'corner']
+        for dict in corner_dicts:
+            dict['vertices'] = []
+            for _ in range(3):
+                vs = corner_polys[0].get_vertices()
+                transformed_vertices = [corner_polys[0].body.local_to_world(v) for v in vs]
+                dict['vertices'].append(np.array([[v.x, v.y] for v in transformed_vertices]))
+                corner_polys.pop(0)
+
+        # Initialize configuration space (only need to compute once)
+        self.update_configuration_space()
+
         # run initial simulation steps to let environment settle
         for _ in range(1000):
             self.space.step(self.dt / self.steps)
         self.prev_obs = CostMap.get_obs_from_poly(self.polygons)
 
+    def is_point_inside_polygon(self, point, polygon_vertices):
+        # Ray-casting algorithm to check if a point is inside a polygon
+        x, y = point
+        n = len(polygon_vertices)
+        inside = False
+
+        p1x, p1y = polygon_vertices[0][:2]  # Unpack only the first two elements
+        for i in range(n + 1):
+            p2x, p2y = polygon_vertices[i % n][:2]  # Unpack only the first two elements
+            if y > min(p1y, p2y):
+                if y <= max(p1y, p2y):
+                    if x <= max(p1x, p2x):
+                        if p1y != p2y:
+                            xinters = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
+                        if p1x == p2x or x <= xinters:
+                            inside = not inside
+            p1x, p1y = p2x, p2y
+
+        return inside
     
-    def generate_obstacles(self):
-        obs_size = self.cfg.obstacle_size
-        obstacles = []          # a list storing non-overlappin obstacle centers
+    def prevent_cube_boundary_intersection(self, cube_shape, boundary_shape):
+        cube_body = cube_shape.body
+        boundary_body = boundary_shape.body
+        # Check if any vertex of the cube intersects with the boundary
+        cube_vertices = [cube_body.local_to_world(v) for v in cube_shape.get_vertices()]
+        boundary_vertices = [boundary_body.local_to_world(v) for v in boundary_shape.get_vertices()]
+        new_position = pymunk.Vec2d(cube_body.position.x, cube_body.position.y)
 
-        if self.cfg.randomize_obstacles:
-            total_obs_required = self.cfg.num_obstacles
-            self.num_box = self.cfg.num_obstacles
-            obs_min_dist = self.cfg.min_obs_dist
-            min_x = self.cfg.min_obs_x
-            max_x = self.cfg.max_obs_x
-            min_y = self.cfg.min_obs_y
-            max_y = self.cfg.max_obs_y
+        # Check if the cube intersects with any dividers or columns
+        for vertex in cube_vertices:
+            if self.is_point_inside_polygon(vertex, boundary_vertices):
+                # Adjust the position of the cube to prevent intersection with the obstacle
+                obstacle_center = np.mean(boundary_vertices, axis=0)
+                direction = pymunk.Vec2d(vertex[0], vertex[1]) - pymunk.Vec2d(obstacle_center[0], obstacle_center[1])
+                direction = direction.normalized()
+                new_position += direction * 0.1  # Move the cube slightly away from the obstacle
+                cube_body.position = new_position
+                break
 
-            obs_count = 0
-            while obs_count < total_obs_required:
-                center_x = random.random() * (max_x - min_x) + min_x
-                center_y = random.random() * (max_y - min_y) + min_y
+    def get_receptacle_position_and_size(self):
+        size = self.cfg.env.receptacle_width
+        return [self.cfg.env.room_length / 2 - size / 2, self.cfg.env.room_width / 2 - size / 2, size]
 
-                # loop through previous obstacles to check for overlap
+    def generate_boundary(self):
+        boundary_dicts = []
+        # generate receptacle
+        x, y, size = self.get_receptacle_position_and_size()
+        boundary_dicts.append(
+            {'type': 'receptacle',
+             'position': (x, y),
+             'vertices': np.array([
+                [x - size / 2, y - size / 2],  # bottom-left
+                [x + size / 2, y - size / 2],  # bottom-right
+                [x + size / 2, y + size / 2],  # top-right
+                [x - size / 2, y + size / 2],  # top-left
+            ]),
+            'length': size,
+            'width': size
+        })
+        
+        # generate walls
+        for x, y, length, width in [
+            (-self.cfg.env.room_length / 2 - WALL_THICKNESS / 2, 0, WALL_THICKNESS, self.cfg.env.room_width),
+            (self.cfg.env.room_length / 2 + WALL_THICKNESS / 2, 0, WALL_THICKNESS, self.cfg.env.room_width),
+            (0, -self.cfg.env.room_width / 2 - WALL_THICKNESS / 2, self.cfg.env.room_length + 2 * WALL_THICKNESS, WALL_THICKNESS),
+            (0, self.cfg.env.room_width / 2 + WALL_THICKNESS / 2, self.cfg.env.room_length + 2 * WALL_THICKNESS, WALL_THICKNESS),
+            ]:
+
+            boundary_dicts.append(
+                {'type': 'wall',
+                 'vertices': np.array([
+                    [x - length / 2, y - width / 2],  # bottom-left
+                    [x + length / 2, y - width / 2],  # bottom-right
+                    [x + length / 2, y + width / 2],  # top-right
+                    [x - length / 2, y + width / 2],  # top-left
+                ])
+            })
+        
+        def add_random_columns(obstacles, max_num_columns):
+            num_columns = random.randint(1, max_num_columns) # NOTE need to be able to manually set seed
+            column_length = 1
+            column_width = 1
+            buffer_width = 0.8
+            col_min_dist = 1.2
+            cols_dict = []
+
+            new_cols = []
+            for _ in range(num_columns):
+                for _ in range(100): # try 100 times to generate a column that doesn't overlap with existing columns
+                    x = random.uniform(-self.cfg.env.room_length / 2 + 2 * buffer_width + column_length / 2,
+                                        self.cfg.env.room_length / 2 - 2 * buffer_width - column_length / 2)
+                    y = random.uniform(-self.cfg.env.room_width / 2 + 2 * buffer_width + column_width / 2,
+                                        self.cfg.env.room_width / 2 - 2 * buffer_width - column_width / 2)
+                    
+                    overlapped = False
+                    rx, ry, size = self.get_receptacle_position_and_size()
+                    if ((x - rx)**2 + (y - ry)**2)**(0.5) <= col_min_dist / 2 + size / 2:
+                        overlapped = True
+                        break
+                    for prev_col in new_cols:
+                        if ((x - prev_col[0])**2 + (y - prev_col[1])**2)**(0.5) <= col_min_dist:
+                            overlapped = True
+                            break
+
+                    if not overlapped:
+                        new_cols.append([x, y])
+                        break
+
+            for x, y in new_cols:
+                cols_dict.append({'type': 'column',
+                                  'position': (x, y),
+                                  'vertices': np.array([
+                                      [x - column_length / 2, y - column_width / 2],  # bottom-left
+                                      [x + column_length / 2, y - column_width / 2],  # bottom-right
+                                      [x + column_length / 2, y + column_width / 2],  # top-right
+                                      [x - column_length / 2, y + column_width / 2],  # top-left
+                                      ]),
+                                  'length': column_length,
+                                  'width': column_width
+                                })
+            return cols_dict
+        
+        def add_random_horiz_divider():
+            divider_length = 8
+            divider_width = 0.5
+            buffer_width = 3.5
+
+            new_divider = []
+            for _ in range(100): # try 100 times to generate a divider that doesn't overlap with existing obstacles
+                if len(new_divider) == 1:
+                    break
+
+                x = self.cfg.env.room_length / 2 - divider_length / 2
+                y = random.uniform(-self.cfg.env.room_width / 2 + buffer_width + divider_width / 2,
+                                    self.cfg.env.room_width / 2 - buffer_width - divider_width / 2)
+
+                new_divider.append([x, y])
+            
+            divider_dicts = []
+            for x, y in new_divider:
+                divider_dicts.append({'type': 'divider',
+                                      'position': (x, y),
+                                      'vertices': np.array([
+                                          [x - divider_length / 2, y - divider_width / 2],  # bottom-left
+                                          [x + divider_length / 2, y - divider_width / 2],  # bottom-right
+                                          [x + divider_length / 2, y + divider_width / 2],  # top-right
+                                          [x - divider_length / 2, y + divider_width / 2],  # top-left
+                                          ]),
+                                        'length': divider_length,
+                                        'width': divider_width
+                                    })
+            return divider_dicts
+                    
+        
+        # generate obstacles
+        if self.cfg.env.obstacle_config == 'small_empty':
+            pass
+        elif self.cfg.env.obstacle_config == 'small_columns':
+            boundary_dicts.extend(add_random_columns(boundary_dicts, 3))
+        elif self.cfg.env.obstacle_config == 'large_columns':
+            boundary_dicts.extend(add_random_columns(boundary_dicts, 8))
+        elif self.cfg.env.obstacle_config == 'large_divider':
+            boundary_dicts.extend(add_random_horiz_divider())
+        else:
+            raise ValueError(f'Invalid obstacle config: {self.cfg.env.obstacle_config}')
+        
+        # generate corners
+        for i, (x, y) in enumerate([
+            (-self.cfg.env.room_length / 2, self.cfg.env.room_width / 2),
+            (self.cfg.env.room_length / 2, self.cfg.env.room_width / 2),
+            (self.cfg.env.room_length / 2, -self.cfg.env.room_width / 2),
+            (-self.cfg.env.room_length / 2, -self.cfg.env.room_width / 2),
+            ]):
+            if i == 1: # Skip the receptacle corner
+                continue
+            heading = -np.radians(i * 90)
+            boundary_dicts.append(
+                {'type': 'corner',
+                 'position': (x, y),
+                 'heading': heading,
+                })
+            
+        # generate corners for divider
+        for obstacle in boundary_dicts:
+            if obstacle['type'] == 'divider':
+                (x, y), length, width = obstacle['position'], obstacle['length'], obstacle['width']
+                corner_positions = [(self.cfg.env.room_length / 2, y - width / 2), (self.cfg.env.room_length / 2, y + width / 2)]
+                corner_headings = [-90, 180]
+                for position, heading in zip(corner_positions, corner_headings):
+                    heading = np.radians(heading)
+                    boundary_dicts.append(
+                        {'type': 'corner',
+                        'position': position,
+                        'heading': heading,
+                        })
+
+        return boundary_dicts
+
+    def generate_cubes(self):
+        cubes_size = self.cfg.cube_size / 2
+        cubes = []          # a list storing non-overlapping cube centers
+
+        if self.cfg.randomize_cubes:
+            total_cubes_required = self.cfg.num_cubes
+            self.num_box = self.cfg.num_cubes
+            cube_min_dist = self.cfg.min_cube_dist
+            min_x = self.cfg.min_cube_x
+            max_x = self.cfg.max_cube_x
+            min_y = self.cfg.min_cube_y
+            max_y = self.cfg.max_cube_y
+
+            cube_count = 0
+            while cube_count < total_cubes_required:
+                center_x = random.uniform(min_x, max_x)
+                center_y = random.uniform(min_y, max_y)
+                heading = random.uniform(0, 2 * np.pi)
+
+                # loop through previous cubes to check for overlap
                 overlapped = False
-                for prev_obs_x, pre_obs_y in obstacles:
-                    if ((center_x - prev_obs_x)**2 + (center_y - pre_obs_y)**2)**(0.5) <= obs_min_dist:
+                for obstacle in self.boundary_dicts:
+                    if obstacle['type'] == 'corner' or obstacle['type'] == 'wall':
+                        continue
+                    elif obstacle['type'] == 'divider':
+                        # just check y distance
+                        if abs(center_y - obstacle['position'][1]) <= (cube_min_dist / 2 + obstacle['width'] / 2) * 1.2:
+                            overlapped = True
+                            break
+                    elif ((center_x - obstacle['position'][0])**2 + (center_y - obstacle['position'][1])**2)**(0.5) <= (cube_min_dist / 2 + obstacle['width'] / 2) * 1.2:
+                        overlapped = True
+                        break
+                for prev_cube_x, pre_cube_y, _ in cubes:
+                    if ((center_x - prev_cube_x)**2 + (center_y - pre_cube_y)**2)**(0.5) <= cube_min_dist:
                         overlapped = True
                         break
                 
                 if not overlapped:
-                    obstacles.append([center_x, center_y])
-                    obs_count += 1
+                    cubes.append([center_x, center_y, heading])
+                    cube_count += 1
         
         else:
-            obstacles.append([8, 5.5])
-            obstacles.append([3, 7])
-            obstacles.append([13, 8])
-            self.num_box = 3
+            cubes.append([3, 2, 0])
+            cubes.append([3, 1.5, 0])
+            cubes.append([3, 1, 0])
+            cubes.append([3, 3, 0])
+            self.num_box = 4
         
-        # convert to obs dict
-        obs_dict = []
-        for obs_x, obs_y in obstacles:
-            obs_info = {}
-            obs_info['centre'] = np.array([obs_x, obs_y])
-            obs_info['vertices'] = np.array([[obs_x + obs_size, obs_y + obs_size], 
-                                    [obs_x - obs_size, obs_y + obs_size], 
-                                    [obs_x - obs_size, obs_y - obs_size], 
-                                    [obs_x + obs_size, obs_y - obs_size]])
-            obs_dict.append(obs_info)
-        return obs_dict
+        # convert to cubes dict
+        cubes_dict = []
+        for i, [cubes_x, cubes_y, cubes_heading] in enumerate(cubes):
+            cubes_info = {}
+            cubes_info['centre'] = np.array([cubes_x, cubes_y])
+            cubes_info['vertices'] = np.array([[cubes_x + cubes_size, cubes_y + cubes_size], 
+                                    [cubes_x - cubes_size, cubes_y + cubes_size], 
+                                    [cubes_x - cubes_size, cubes_y - cubes_size], 
+                                    [cubes_x + cubes_size, cubes_y - cubes_size]])
+            cubes_info['heading'] = cubes_heading
+            cubes_info['idx'] = i
+            cubes_dict.append(cubes_info)
+        return cubes_dict
 
-        
+    def cube_position_in_receptacle(self, cube_vertices):
+        x, y, size = self.get_receptacle_position_and_size()
+        receptacle_min_x = x - size / 2
+        receptacle_max_x = x + size / 2
+        receptacle_min_y = y - size / 2
+        receptacle_max_y = y + size / 2
+    
+        for vertex in cube_vertices:
+            if not (receptacle_min_x <= vertex[0] <= receptacle_max_x and receptacle_min_y <= vertex[1] <= receptacle_max_y):
+                return False
+        return True
 
     def reset(self, seed=None, options=None):
         """Resets the environment to the initial state and returns the initial observation."""
@@ -268,6 +590,10 @@ class ObjectPushing(gym.Env):
         self.init_ship_ice_sim()
         self.init_ship_ice_env()
 
+        # reset map
+        self.global_overhead_map = self.create_padded_room_zeros()
+        self.update_global_overhead_map()
+
         self.t = 0
         
         # close figure before opening new ones
@@ -275,23 +601,23 @@ class ObjectPushing(gym.Env):
             self.plot.close()
 
         self.plot = Plot(
-                np.zeros((self.cfg.costmap.m, self.cfg.costmap.n)), self.obs_dicts,
-                ship_pos=self.start, ship_vertices=np.asarray(self.ship_shape.get_vertices()),
+                np.zeros((self.cfg.costmap.m, self.cfg.costmap.n)), self.cubes_dicts,
+                robot_pos=self.start, robot_vertices=np.asarray(self.agent.get_vertices()),
                 map_figsize=None, y_axis_limit=self.cfg.plot.y_axis_limit, inf_stream=False, goal=self.goal[1], 
-                path=np.zeros((3, 50))
+                path=np.zeros((3, 50)), boundaries=self.boundary_dicts
             )
 
-        # get updated obstacles
-        updated_obstacles = CostMap.get_obs_from_poly(self.polygons)
-        info = {'state': (round(self.ship_body.position.x, 2),
-                                round(self.ship_body.position.y, 2),
-                                round(self.ship_body.angle, 2)), 
+        # get updated cubes
+        updated_cubes = CostMap.get_obs_from_poly(self.polygons)
+        info = {'state': (round(self.agent.body.position.x, 2),
+                                round(self.agent.body.position.y, 2),
+                                round(self.agent.body.angle, 2)), 
                 'total_work': self.total_work[0], 
-                'obs': updated_obstacles, 
+                'cubes': updated_cubes, 
                 'box_count': 0}
 
         if self.low_dim_state:
-            observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles)
+            observation = self.generate_observation_low_dim(updated_cubes=updated_cubes)
 
         else:
             observation = self.generate_observation()
@@ -306,6 +632,8 @@ class ObjectPushing(gym.Env):
 
             if action == FORWARD:
                 self.linear_speed = 0.01
+            elif action == BACKWARD:
+                self.linear_speed = -0.01
             elif action == STOP_TURNING:
                 self.angular_speed = 0.0
 
@@ -321,57 +649,49 @@ class ObjectPushing(gym.Env):
 
             elif action == STOP:
                 self.linear_speed = 0.0
-                self.angular_speed = 0.0
+                # self.angular_speed = 0.0
 
             # check speed boundary
-            if self.linear_speed <= 0:
-                self.linear_speed = 0
-            elif self.linear_speed >= self.target_speed:
-                self.linear_speed = self.target_speed
+            # if self.linear_speed <= 0:
+            #     self.linear_speed = 0
+            if abs(self.linear_speed) >= self.target_speed:
+                self.linear_speed = self.target_speed*np.sign(self.linear_speed)
 
             # apply linear and angular speeds
-            global_velocity = R(self.ship_body.angle) @ [self.linear_speed, 0]
+            global_velocity = R(self.agent.body.angle) @ [self.linear_speed, 0]
 
             # apply velocity controller
-            self.ship_body.angular_velocity = self.angular_speed
-            self.ship_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
+            self.agent.body.angular_velocity = self.angular_speed * 200
+            self.agent.body.velocity = Vec2d(global_velocity[0], global_velocity[1]) * 200
 
         else:
 
             # constant forward speed in global frame
-            global_velocity = R(self.ship_body.angle) @ [self.target_speed, 0]
+            global_velocity = R(self.agent.body.angle) @ [self.target_speed, 0]
 
             # apply velocity controller
-            self.ship_body.angular_velocity = action
-            self.ship_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
+            self.agent.body.angular_velocity = action
+            self.agent.body.velocity = Vec2d(global_velocity[0], global_velocity[1])
 
         # move simulation forward
         boundary_constraint_violated = False
         boundary_violation_terminal = False      # if out of boundary for too much, terminate and truncate the episode
         for _ in range(self.steps):
             self.space.step(self.dt / self.steps)
-
-            # apply boundary constraints
-            if self.ship_body.position.x < 0 or self.ship_body.position.x > self.cfg.occ.map_width:
-                boundary_constraint_violated = True
-        if self.ship_body.position.x < 0 and abs(self.ship_body.position.x - 0) >= self.boundary_violation_limit:
-            boundary_violation_terminal = True
-        if self.ship_body.position.x > self.cfg.occ.map_width and abs(self.ship_body.position.x - self.cfg.occ.map_width) >= self.boundary_violation_limit:
-            boundary_violation_terminal = True
-            
-        # get updated obstacles
-        updated_obstacles = CostMap.get_obs_from_poly(self.polygons)
-        num_completed, all_boxes_completed = self.boxes_completed(updated_obstacles=updated_obstacles)
+    
+        # get updated cubes
+        # all_cubes_completed = self.cubes_completed()
+        updated_cubes = CostMap.get_obs_from_poly(self.polygons)
 
         # compute work done
-        work = total_work_done(self.prev_obs, updated_obstacles)
+        work = total_work_done(self.prev_obs, updated_cubes)
         self.total_work[0] += work
         self.total_work[1].append(work)
-        self.prev_obs = updated_obstacles
-        self.obstacles = updated_obstacles
+        self.prev_obs = updated_cubes
+        # self.cubes = updated_cubes
 
         # check episode terminal condition
-        if all_boxes_completed:
+        if self.cumulative_cubes == self.num_box:
             terminated = True
         elif boundary_violation_terminal:
             terminated = True
@@ -379,7 +699,7 @@ class ObjectPushing(gym.Env):
             terminated = False
 
         # compute reward
-        if self.ship_body.position.y < self.goal[1]:
+        if self.agent.body.position.y < self.goal[1]:
             dist_reward = -1
         else:
             dist_reward = 0
@@ -396,33 +716,33 @@ class ObjectPushing(gym.Env):
             reward += TERMINAL_REWARD
 
         # Optionally, we can add additional info
-        info = {'state': (round(self.ship_body.position.x, 2),
-                                round(self.ship_body.position.y, 2),
-                                round(self.ship_body.angle, 2)), 
+        info = {'state': (round(self.agent.body.position.x, 2),
+                                round(self.agent.body.position.y, 2),
+                                round(self.agent.body.angle, 2)), 
                 'total_work': self.total_work[0], 
                 'collision reward': collision_reward, 
                 'scaled collision reward': collision_reward * self.beta, 
                 'dist reward': dist_reward, 
-                'obs': updated_obstacles, 
-                'box_count': num_completed}
+                'cubes': updated_cubes, 
+                'box_count': self.cumulative_cubes}
         
         # generate observation
         if self.low_dim_state:
-            observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles)
+            self.observation = self.generate_observation_low_dim(updated_cubes=updated_cubes)
         else:
-            observation = self.generate_observation()
+            self.observation = self.generate_observation()
         
-        return observation, reward, terminated, False, info
+        return self.observation, reward, terminated, False, info
 
 
-    def generate_observation_low_dim(self, updated_obstacles):
+    def generate_observation_low_dim(self, updated_cubes):
         """
-        The observation is a vector of shape (num_obstacles * 2) specifying the 2d position of the obstacles
+        The observation is a vector of shape (num_cubes * 2) specifying the 2d position of the cubes
         <obs1_x, obs1_y, obs2_x, obs2_y, ..., obsn_x, obsn_y>
         """
-        observation = np.zeros((len(updated_obstacles) * 2))
-        for i in range(len(updated_obstacles)):
-            obs = updated_obstacles[i]
+        observation = np.zeros((len(updated_cubes) * 2))
+        for i in range(len(updated_cubes)):
+            obs = updated_cubes[i]
             center = np.abs(poly_centroid(obs))
             observation[i * 2] = center[0]
             observation[i * 2 + 1] = center[1]
@@ -435,41 +755,183 @@ class ObjectPushing(gym.Env):
         self.path = new_path
     
 
-    def generate_observation(self):
+    def generate_observation(self, done=False):
+        '''
         # compute occupancy map observation  (40, 12)
-        raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, 
-                        ice_binary_w=int(self.occupancy.map_width * self.cfg.occ.m_to_pix_scale), 
-                        ice_binary_h=int(self.occupancy.map_height * self.cfg.occ.m_to_pix_scale))
+        if self.occupancy.map_height == 40:
+            raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.cubes, ice_binary_w=235, ice_binary_h=774)
+
+        elif self.occupancy.map_height == 20 and self.occupancy.map_width == 12:
+            raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.cubes, ice_binary_w=235, ice_binary_h=387)
+
+        elif self.occupancy.map_height == 20 and self.occupancy.map_width == 6:
+            raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.cubes, ice_binary_w=118, ice_binary_h=387)
+
+        elif self.occupancy.map_height == 10 and self.occupancy.map_width == 6:
+            raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.cubes, ice_binary_w=118, ice_binary_h=192)
+        else:
+            raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.cubes, ice_binary_w=235, ice_binary_h=1355)
         self.occupancy.compute_con_gridmap(raw_ice_binary=raw_ice_binary, save_fig_dir=None)
         occupancy = np.copy(self.occupancy.occ_map)         # (H, W)
 
         # compute footprint observation  NOTE: here we want unscaled, unpadded vertices
-        ship_pose = (self.ship_body.position.x, self.ship_body.position.y, self.ship_body.angle)
-        self.occupancy.compute_ship_footprint_planner(ship_state=ship_pose, ship_vertices=self.cfg.ship.vertices)
+        ship_pose = (self.agent.body.position.x, self.agent.body.position.y, self.agent.body.angle)
+        self.occupancy.compute_ship_footprint_planner(ship_state=ship_pose, ship_vertices=self.cfg.agent.vertices)
         footprint = np.copy(self.occupancy.footprint)       # (H, W)
 
         observation = np.concatenate((np.array([occupancy]), np.array([footprint])))          # (2, H, W)
         return observation
+        '''
 
+        self.update_global_overhead_map()
+
+        if done:
+            return None
+        
+        # Overhead map
+        channels = []
+        channels.append(self.get_local_map(self.global_overhead_map, self.agent.body.position, self.agent.body.angle))
+        channels.append(self.robot_state_channel)
+        channels.append(self.get_local_distance_map(self.create_global_shortest_path_to_receptacle_map(), self.agent.body.position, self.agent.body.angle))
+        channels.append(self.get_local_distance_map(self.create_global_shortest_path_map(self.agent.body.position), self.agent.body.position, self.agent.body.angle))
+
+        observation = np.stack(channels)
+        return observation
     
-    def boxes_completed(self, updated_obstacles):
+    def get_local_overhead_map(self):
+        rotation_angle = -np.degrees(self.agent.body.angle) + 90
+        pos_y = int(np.floor(self.global_overhead_map.shape[0] / 2 - self.agent.body.position.y * LOCAL_MAP_PIXELS_PER_METER))
+        pos_x = int(np.floor(self.global_overhead_map.shape[1] / 2 + self.agent.body.position.x * LOCAL_MAP_PIXELS_PER_METER))
+        mask = rotate_image(np.zeros((LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH), dtype=np.float32), rotation_angle, order=0)
+        y_start = pos_y - int(mask.shape[0] / 2)
+        y_end = y_start + mask.shape[0]
+        x_start = pos_x - int(mask.shape[1] / 2)
+        x_end = x_start + mask.shape[1]
+        crop = self.global_overhead_map[y_start:y_end, x_start:x_end]
+        crop = rotate_image(crop, rotation_angle, order=0)
+        y_start = int(crop.shape[0] / 2 - LOCAL_MAP_PIXEL_WIDTH / 2)
+        y_end = y_start + LOCAL_MAP_PIXEL_WIDTH
+        x_start = int(crop.shape[1] / 2 - LOCAL_MAP_PIXEL_WIDTH / 2)
+        x_end = x_start + LOCAL_MAP_PIXEL_WIDTH
+        return crop[y_start:y_end, x_start:x_end]
+    
+    def get_local_map(self, global_map, robot_position, robot_heading):
+        w = LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)
+        crop_width = int(2 * np.ceil(w / 2)) # make sure the crop is even (rounds up to even)
+        rotation_angle = 90 - np.degrees(robot_heading)
+        pixel_i = int(np.floor(-robot_position[1] * LOCAL_MAP_PIXELS_PER_METER + global_map.shape[0] / 2))
+        pixel_j = int(np.floor(robot_position[0] * LOCAL_MAP_PIXELS_PER_METER + global_map.shape[1] / 2))
+        crop = global_map[pixel_i - crop_width // 2:pixel_i + crop_width // 2, pixel_j - crop_width // 2:pixel_j + crop_width // 2]
+        rotated_crop = rotate_image(crop, rotation_angle, order=0)
+        local_map = rotated_crop[
+            rotated_crop.shape[0] // 2 - LOCAL_MAP_PIXEL_WIDTH // 2:rotated_crop.shape[0] // 2 + LOCAL_MAP_PIXEL_WIDTH // 2,
+            rotated_crop.shape[1] // 2 - LOCAL_MAP_PIXEL_WIDTH // 2:rotated_crop.shape[1] // 2 + LOCAL_MAP_PIXEL_WIDTH // 2
+        ]
+        return local_map
+    
+    def get_local_distance_map(self, global_map, robot_position, robot_heading):
+        local_map = self.get_local_map(global_map, robot_position, robot_heading)
+        local_map -= local_map.min() # move the min to 0 to make invariant to size of environment
+        return local_map
+
+    def position_to_pixel_indices(self, x, y, image_shape):
+        pixel_i = np.floor(image_shape[0] / 2 - y * LOCAL_MAP_PIXELS_PER_METER).astype(np.int32)
+        pixel_j = np.floor(image_shape[1] / 2 + x * LOCAL_MAP_PIXELS_PER_METER).astype(np.int32)
+        pixel_i = np.clip(pixel_i, 0, image_shape[0] - 1)
+        pixel_j = np.clip(pixel_j, 0, image_shape[1] - 1)
+        return pixel_i, pixel_j
+
+    def create_padded_room_zeros(self):
+        return np.zeros((
+            int(2 * np.ceil((self.cfg.env.room_width * LOCAL_MAP_PIXELS_PER_METER + LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)) / 2)),
+            int(2 * np.ceil((self.cfg.env.room_length * LOCAL_MAP_PIXELS_PER_METER + LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)) / 2))
+        ), dtype=np.float32)
+
+    def create_global_shortest_path_to_receptacle_map(self):
+        global_map = self.create_padded_room_zeros() + np.inf
+        rx, ry, _ = self.get_receptacle_position_and_size()
+        pixel_i, pixel_j = self.position_to_pixel_indices(rx, ry, self.configuration_space.shape)
+        shortest_path_image, _ = spfa.spfa(self.configuration_space, (pixel_i, pixel_j))
+        shortest_path_image /= LOCAL_MAP_PIXELS_PER_METER
+        global_map = np.minimum(global_map, shortest_path_image)
+        global_map /= (np.sqrt(2) * LOCAL_MAP_PIXEL_WIDTH) / LOCAL_MAP_PIXELS_PER_METER
+        global_map *= self.cfg.env.shortest_path_channel_scale
+        return global_map
+    
+    def create_global_shortest_path_map(self, robot_position):
+        pixel_i, pixel_j = self.position_to_pixel_indices(robot_position[0], robot_position[1], self.configuration_space.shape)
+        global_map, _ = spfa.spfa(self.configuration_space, (pixel_i, pixel_j))
+        global_map /= LOCAL_MAP_PIXELS_PER_METER
+        global_map /= (np.sqrt(2) * LOCAL_MAP_PIXEL_WIDTH) / LOCAL_MAP_PIXELS_PER_METER
+        global_map *= self.cfg.env.shortest_path_channel_scale
+        return global_map
+    
+    def update_configuration_space(self):
         """
-        Returns a tuple: (int: number of boxes completed, bool: whether pushing task is complete)
+        Obstacles are dilated based on the robot's radius to define a collision-free space
         """
-        completed_count = 0
-        completed = False
 
-        for obs in updated_obstacles:
-            center = np.abs(poly_centroid(obs))
-            if center[1] - self.cfg.obstacle_size >= self.cfg.goal_y:
-                completed_count += 1
+        obstacle_map = self.create_padded_room_zeros()
+        small_obstacle_map = np.zeros((LOCAL_MAP_PIXEL_WIDTH+20, LOCAL_MAP_PIXEL_WIDTH+20), dtype=np.float32)
+
+        for poly in self.boundaries:
+            # get world coordinates of vertices
+            vertices = [poly.body.local_to_world(v) for v in poly.get_vertices()]
+            vertices_np = np.array([[v.x, v.y] for v in vertices])
+
+            # convert world coordinates to pixel coordinates
+            vertices_px = (vertices_np * LOCAL_MAP_PIXELS_PER_METER).astype(np.int32)
+            vertices_px[:, 0] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
+            vertices_px[:, 1] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
+            vertices_px[:, 1] = small_obstacle_map.shape[0] - vertices_px[:, 1]
+
+            # draw the boundary on the small_obstacle_map
+            if poly.label in ['wall', 'divider', 'column', 'corner']:
+                fillPoly(small_obstacle_map, [vertices_px], color=1)
         
-        if completed_count == self.num_box:
-            completed = True
-        
-        return completed_count, completed
+        start_i, start_j = int(obstacle_map.shape[0] / 2 - small_obstacle_map.shape[0] / 2), int(obstacle_map.shape[1] / 2 - small_obstacle_map.shape[1] / 2)
+        obstacle_map[start_i:start_i + small_obstacle_map.shape[0], start_j:start_j + small_obstacle_map.shape[1]] = small_obstacle_map
 
+        # Dilate obstacles and walls based on robot size
+        robot_pixel_width = int(np.ceil(self.cfg.agent.length * LOCAL_MAP_PIXELS_PER_METER))
+        selem = disk(np.floor(robot_pixel_width / 2))
+        self.configuration_space = 1 - binary_dilation(obstacle_map, selem).astype(np.float32)
+        self.small_obstacle_map = 1 - small_obstacle_map
 
+    def update_global_overhead_map(self):
+        small_overhead_map = self.small_obstacle_map.copy()
+
+        for poly in self.boundaries + self.polygons + [self.agent]:
+            if poly.label in ['wall', 'divider', 'column', 'corner']:
+                continue # precomputed in update_configuration_space
+
+            # get world coordinates of vertices
+            vertices = [poly.body.local_to_world(v) for v in poly.get_vertices()]
+            vertices_np = np.array([[v.x, v.y] for v in vertices])
+
+            # convert world coordinates to pixel coordinates
+            vertices_px = (vertices_np * LOCAL_MAP_PIXELS_PER_METER).astype(np.int32)
+            vertices_px[:, 0] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
+            vertices_px[:, 1] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
+            vertices_px[:, 1] = small_overhead_map.shape[0] - vertices_px[:, 1]
+
+            # draw the boundary on the small_overhead_map
+            if poly.label == 'receptacle':
+                fillPoly(small_overhead_map, [vertices_px], color=RECEPTACLE_SEG_INDEX/MAX_SEG_INDEX)
+            elif poly.label == 'cube':
+                fillPoly(small_overhead_map, [vertices_px], color=CUBE_SEG_INDEX/MAX_SEG_INDEX)
+            elif poly.label == 'agent':
+                fillPoly(small_overhead_map, [vertices_px], color=ROBOT_SEG_INDEX/MAX_SEG_INDEX)
+
+        start_i, start_j = int(self.global_overhead_map.shape[0] / 2 - small_overhead_map.shape[0] / 2), int(self.global_overhead_map.shape[1] / 2 - small_overhead_map.shape[1] / 2)
+        self.global_overhead_map[start_i:start_i + small_overhead_map.shape[0], start_j:start_j + small_overhead_map.shape[1]] = small_overhead_map
+    
+    def cubes_completed(self, cube):
+        if self.cube_position_in_receptacle([cube.body.local_to_world(v) for v in cube.get_vertices()]):
+            self.cumulative_cubes += 1
+            self.space.remove(cube, cube.body)
+            self.polygons.remove(cube)
+            self.plot.update_obstacles(obstacles=CostMap.get_obs_from_poly(self.polygons), obs_idx=cube.idx, update_patch=True)
 
     def render(self, mode='human', close=False):
         """Renders the environment."""
@@ -482,33 +944,43 @@ class ObjectPushing(gym.Env):
             else:
                 self.plot.update_path_scatter(full_path=self.path.T)
 
-        self.plot.update_ship(self.ship_body, self.ship_shape, move_yaxis_threshold=self.cfg.anim.move_yaxis_threshold)
+        self.plot.update_ship(self.agent.body, self.agent, move_yaxis_threshold=self.cfg.anim.move_yaxis_threshold)
         self.plot.update_obstacles(obstacles=CostMap.get_obs_from_poly(self.polygons))
         # get updated obstacles
         self.plot.animate_sim(save_fig_dir=os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
                         if (self.cfg.anim.save and self.cfg.output_dir) else None, suffix=self.t)
+        
+        if self.cfg.render.log_obs and not self.low_dim_state and self.t % self.cfg.render.frequency == 1:
+            for ax, i in zip(self.state_ax, range(self.num_channels)):
+                ax.clear()
+                ax.set_title(f'Channel {i}')
+                im = ax.imshow(self.observation[i,:,:], cmap='hot', interpolation='nearest')
+                if self.colorbars[i] is not None:
+                    self.colorbars[i].update_normal(im)
+                else:
+                    self.colorbars[i] = self.state_fig.colorbar(im, ax=ax)
+            
+            self.state_plot.draw()
+            self.state_plot.pause(0.001)
+            # # visualize occupancy map
+            # self.con_ax.clear()
+            # occ_map_render = np.copy(self.occupancy.occ_map)
+            # occ_map_render = np.flip(occ_map_render, axis=0)
+            # self.con_ax.imshow(occ_map_render, cmap='gray')
+            # self.con_ax.axis('off')
+            # save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
+            # fp = os.path.join(save_fig_dir, str(self.t) + '_con.png')
+            # self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
 
-        if self.cfg.render.log_obs and not self.low_dim_state:
-
-            # visualize occupancy map
-            self.con_ax.clear()
-            occ_map_render = np.copy(self.occupancy.occ_map)
-            occ_map_render = np.flip(occ_map_render, axis=0)
-            self.con_ax.imshow(occ_map_render, cmap='gray')
-            self.con_ax.axis('off')
-            save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
-            fp = os.path.join(save_fig_dir, str(self.t) + '_con.png')
-            self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
-
-            # visualize footprint
-            self.con_ax.clear()
-            occ_map_render = np.copy(self.occupancy.footprint)
-            occ_map_render = np.flip(occ_map_render, axis=0)
-            self.con_ax.imshow(occ_map_render, cmap='gray')
-            self.con_ax.axis('off')
-            save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
-            fp = os.path.join(save_fig_dir, str(self.t) + '_footprint.png')
-            self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
+            # # visualize footprint
+            # self.con_ax.clear()
+            # occ_map_render = np.copy(self.occupancy.footprint)
+            # occ_map_render = np.flip(occ_map_render, axis=0)
+            # self.con_ax.imshow(occ_map_render, cmap='gray')
+            # self.con_ax.axis('off')
+            # save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
+            # fp = os.path.join(save_fig_dir, str(self.t) + '_footprint.png')
+            # self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
 
 
     def close(self):

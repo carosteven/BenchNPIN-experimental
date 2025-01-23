@@ -17,6 +17,8 @@ class Renderer():
 
         # get parameters
         self.goal_line = kwargs.get('goal_line', None)
+        self.goal_point = kwargs.get('goal_point', None)
+        self.clearance_boundary = kwargs.get('clearance_boundary', None)
 
         # scale to convert from pymunk meter unit to pygame pixel unit
         self.render_scale = render_scale
@@ -24,7 +26,7 @@ class Renderer():
 
         # Initialize Pygame
         pygame.init()
-        self.pygame_w , self.pygame_h = env_width * self.render_scale, env_height * self.render_scale
+        self.pygame_w, self.pygame_h = env_width * self.render_scale, env_height * self.render_scale
         self.window = pygame.display.set_mode((self.pygame_w, self.pygame_h))
         pygame.display.set_caption(caption)
 
@@ -98,7 +100,28 @@ class Renderer():
         """
         raise NotImplementedError
 
-
+    def display_goal_point(self):
+        """
+        Display goal point for navigation tasks
+        """
+        pygame.draw.circle(
+            self.window,
+            (255, 255, 255),  # Circle color (white)
+            self.to_pygame(self.goal_point),  # Circle center
+            5,  # Circle radius
+            0   # Circle thickness
+        )
+    
+    def display_clearance_boundary(self):
+        """
+        Display clearance boundary for object pushing tasks
+        """
+        pygame.draw.polygon(
+            self.window,
+            '#20FE20',  # Line color (green)
+            [self.to_pygame(point) for point in self.clearance_boundary],  # Convert boundary to Pygame coordinates
+            2  # Line width
+        )
 
     def render(self, save=False, path=None):
         self.window.fill(self.background_color)
@@ -109,9 +132,16 @@ class Renderer():
         
         if self.goal_line is not None:
             self.display_goal_line()
+        
+        if self.clearance_boundary is not None:
+            self.display_clearance_boundary()
 
         ### could add goal region display here
         ###
+
+        ### Goal point display
+        if self.goal_point is not None:
+            self.display_goal_point()
 
         pygame.display.update()
 

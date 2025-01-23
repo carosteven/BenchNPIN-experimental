@@ -8,17 +8,21 @@ plot:
   y_axis_limit: 18  # limits the y-axis of the plot
   show: false       # true will show planner plots
 
+# env: 'clear_env'
+# env: 'walled_env'
+env: 'walled_env_with_columns'
+
 demo_mode: true     # when using demo mode, control both forward and angular speed
 
-# cubes information
-randomize_cubes: true
-num_cubes: 10
-cube_size: 0.44
-min_cube_dist: 0.62       # minimum cube distance during random initialization
-max_cube_x: 4
-min_cube_x: -4
-max_cube_y: 2
-min_cube_y: -2
+# obstacles information
+randomize_obstacles: true
+num_obstacles: 5
+obstacle_size: 0.5
+min_obs_dist: 3.5       # minimum obstacle distance during random initialization
+max_obs_x: 16
+min_obs_x: 2.5
+max_obs_y: 12
+min_obs_y: 4.5
 
 # parameters for low-dim environment
 low_dim_state: false
@@ -30,14 +34,14 @@ start_x_range: 15
 #max_replan: 1        # max number of replans
 concentration: 0.1    # options are 0.2, 0.3, 0.4, 0.5
 planner: 'predictive'    # options are 'skeleton', 'straight', or 'lattice'
-goal_y: 15
+goal_y: 10
 threshold_dist: 0.5   # fraction of path length for deciding whether to update planned path
 threshold_cost: 0.95  # fraction of path cost for deciding whether to update planned path
 occ:
   grid_size: 0.2       # occupancy map grid size
   m_to_pix_scale: 19.5   # number of pixels per meter when generating the raw occupancy map
-  map_height: 28       # occupancy map height (in meter)
-  map_width: 16        # occupancy map width (in meter)
+  map_height: 20       # occupancy map height (in meter)
+  map_width: 20        # occupancy map width (in meter)
 a_star:
   horizon: 30  # receding horizon in metres (needs to be an int for it to be enabled)
   replan: true
@@ -47,8 +51,8 @@ a_star:
   weight: 1        # static weighting for weighed A* f(n) = g(n) + w * h(n) where weight > 1
 #  h_baseline: True  # if true, then heuristic is simply euclidean distance to goal
 costmap:
-  m: 40       # height of ice channel in metres, can set to large number for 'infinite' ice channel
-  n: 16       # width of ice channel in metres
+  m: 20       # height of ice channel in metres, can set to large number for 'infinite' ice channel
+  n: 20       # width of ice channel in metres
   scale: 5    # this gives a resolution of 1/scale x 1/scale metres
   alpha: 10   # collision cost multiplier
 prim:
@@ -59,8 +63,7 @@ prim:
 agent:
   mass: 1  # mass of the NRC ship in kg
   padding: 0.25  # adds padding to ship footprint
-  length: 0.8
-  width: 0.7
+
   vertices: [
 
               # [0.69, -0.89],
@@ -69,16 +72,11 @@ agent:
               # [-0.69, 0.89],
               # [0.69, 0.89], 
 
-              # [0.69, -1.2],
-              # [-0.69, -0.89],
+              [0.69, -1.2],
+              [-0.69, -0.89],
 
-              # [-0.69, 0.89],
-              # [0.69, 1.2], 
-
-              [0.4, -0.35],
-              [0.4, 0.35],
-              [-0.4, 0.25],
-              [-0.4, -0.25]
+              [-0.69, 0.89],
+              [0.69, 1.2], 
 
               
               ]
@@ -86,7 +84,7 @@ agent:
 ### SIMULATION PARAMS
 render:
   log_obs: true       # whether to log occupancy observation
-  frequency: 20       # frequency of rendering
+  show: true                # if true show animation plots
 sim:
   t_max: 2000  # max number of iterations in simulation loop (originally 5000)
   steps: 100    # number of simulation steps per iteration (originally 10)
@@ -95,11 +93,10 @@ sim:
     - 0
   iterations: 10  # controls accuracy of pymunk solver i.e. simulation accuracy, default is 10
   damping: 0      # damping to body velocities
-  cube_density: 0.001
+  obstacle_density: 0.001
 anim:
   save: true               # if true save to disk animation plots
-  show: true                # if true show animation plots
-  plot_steps: 50            # steps between plot updates
+  plot_steps: 30            # steps between plot updates
   plan_steps: 10            # steps between obstacle and planner updates
   inf_stream: false         # if true then infinite obstacle stream mode is enabled
   move_yaxis_threshold: 10  # distance traveled before y-axis moves
@@ -129,11 +126,3 @@ controller:
     - [ 5, 0, 5 ]
     - [ 10, 0, 20 ]
     - [ 10, 0, 20 ]
-
-### ENVIRONMENT PARAMS
-env:
-  obstacle_config: large_divider # options are small_empty, small_columns, large_columns, large_divider
-  room_length: 10
-  room_width: 10 # 5 for small, 10 for large
-  receptacle_width: 1.5
-  shortest_path_channel_scale: 0.25

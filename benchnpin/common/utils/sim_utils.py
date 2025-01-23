@@ -1,12 +1,91 @@
 from typing import List
+from typing import Tuple
 
 import numpy as np
 import pymunk
 
 from benchnpin.common.ship import Ship
 
+def create_agent(space, vertices: List, start_pos: Tuple[float, float, float], body_type: int):
 
-def create_polygon(space, vertices, x, y, density, color=None):
+        x, y, heading = start_pos
+        # setup for pymunk
+        body = pymunk.Body(body_type=body_type)  # mass and moment ignored when kinematic body type
+        body.position = (x, y)
+        body.angle = heading  # rotation of the body in radians
+        dummy_shape = pymunk.Poly(None, vertices)
+        centre_of_g = dummy_shape.center_of_gravity
+        vs = [(x - centre_of_g[0], y - centre_of_g[1]) for x, y in vertices]
+
+        shape = pymunk.Poly(body, vs, radius=0.08)
+        shape.mass = 10.0
+        shape.elasticity = 0.01
+        shape.friction = 1.0
+        shape.label = 'agent'
+        space.add(body, shape)
+        return shape
+
+def generate_sim_agent(space, agent: dict, body_type=pymunk.Body.DYNAMIC):
+    return create_agent(space, agent['vertices'], agent['start_pos'], body_type)
+
+def create_static(space, boundary):
+    body = space.static_body
+    # body.position = (x, y)
+    # dummy_shape = pymunk.Poly(None, vertices)
+    # centre_of_g = dummy_shape.center_of_gravity
+    # vs = [(x - centre_of_g[0], y - centre_of_g[1]) for x, y in vertices]
+
+    vs = [(x, y) for x, y in boundary['vertices']]
+    shape = pymunk.Poly(body, vs, radius=0.02)
+    shape.elasticity = 0.01
+    shape.friction = 1.0
+    shape.label = boundary['type']
+    space.add(shape)
+    return shape
+
+def generate_sim_bounds(space, bounds: List[dict]):
+    shapes = [create_static(space, bound)
+              for bound in bounds if bound['type'] != 'corner']
+    shapes.extend(generate_sim_corners(space, [bound for bound in bounds if bound['type'] == 'corner']))
+    return shapes
+
+def create_corners(space, corner):
+    shapes = []
+    vs1 = [(0, 0),
+           (0, -1),
+           (0.5*np.sin(22.5*np.pi/180), -1 + 0.5*np.cos(22.5*np.pi/180)),
+           ]
+    vs2 = [(0, 0),
+           (0.5*np.sin(22.5*np.pi/180), -1 + 0.5*np.cos(22.5*np.pi/180)),
+           (1 - 0.5*np.cos(22.5*np.pi/180), -0.5*np.sin(22.5*np.pi/180)),
+           ]
+    vs3 = [(0, 0),
+           (1, 0),
+           (1 - 0.5*np.cos(22.5*np.pi/180), -0.5*np.sin(22.5*np.pi/180)),
+           ]
+    
+    for vs in [vs1, vs2, vs3]:
+        body = pymunk.Body(body_type=pymunk.Body.STATIC)
+        body.position = corner['position']
+        body.angle = corner['heading']
+
+        shape = pymunk.Poly(body, vs, radius=0.02)
+        shape.elasticity = 0.01
+        shape.friction = 1.0
+        shape.label = 'corner'
+        space.add(body, shape)
+        shapes.append(shape)
+    return shapes
+
+def generate_sim_corners(space, corners: List[dict]):
+    corner_shapes = []
+    for corner in corners:
+        cs = create_corners(space, corner)
+        for shape in cs:
+            corner_shapes.append(shape)
+    return corner_shapes
+
+def create_polygon(space, vertices, x, y, density, heading=0, label='poly', idx=None, radius=0.02, color=None):
     body = pymunk.Body(body_type=pymunk.Body.DYNAMIC)
     body.position = (x, y)
     dummy_shape = pymunk.Poly(None, vertices)
@@ -33,6 +112,14 @@ def generate_sim_obs(space, obstacles: List[dict], density, color=None):
         for obs in obstacles
     ]
 
+def generate_sim_maze(space, maze_walls):
+    for pos in maze_walls:
+        print(pos)
+        body = pymunk.Body(body_type=pymunk.Body.STATIC)
+        shape = pymunk.Segment(body, pos[0], pos[1], 0.5)
+        shape.elasticity = 0.5
+        shape.friction = 0.5
+        space.add(body, shape)
 
 def simulate_ship_ice_collision(path, ship_vertices, obs_dicts, ship_vel=1, dt=0.25, steps=10):
     """

@@ -7,17 +7,14 @@ import gymnasium as gym
 import numpy as np
 
 
-env = gym.make('ship-ice-v0')
-# env = gym.make('object-pushing-v0')
+env = gym.make('area-clearing-v0')
 env.reset()
 
-for i in range(500):
+for i in range(1000):
 
     action = 0
     observation, reward, terminated, truncated, info = env.step(action)
 
     env.render()
 
-    print(observation.shape)
-    
-    env.render()
+    # print(observation.shape)
