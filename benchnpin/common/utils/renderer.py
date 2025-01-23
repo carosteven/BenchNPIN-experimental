@@ -123,7 +123,6 @@ class Renderer():
                 pygame.draw.polygon(
                     self.window,
                     shape.color,
-                    # [self.to_pygame((x, y)) for x, y in shape.get_vertices()]
                     [self.to_pygame(shape.body.local_to_world((x, y))) for x, y in shape.get_vertices()]
                 )
 

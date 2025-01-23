@@ -63,7 +63,7 @@ MAX_SEG_INDEX = 8
 MOVE_STEP_SIZE = 0.05
 TURN_STEP_SIZE = np.radians(15)
 
-WAYPOINT_MOVING_THRESHOLD = 0.5
+WAYPOINT_MOVING_THRESHOLD = 0.6
 WAYPOINT_TURNING_THRESHOLD = np.radians(10)
 NOT_MOVING_THRESHOLD = 0.005
 NOT_TURNING_THRESHOLD = np.radians(0.05)
@@ -238,11 +238,11 @@ class ObjectPushing(gym.Env):
                 self.contact_pts.append(list(arbiter.shapes[0].body.world_to_local((i.point_b + i.point_a) / 2)))
 
         def robot_boundary_pre_solve(arbiter, space, data):
-            self.robot_hit_obstacle = self.prevent_boundary_intersection(arbiter.shapes[0], arbiter.shapes[1], adjustment=0.01)
+            self.robot_hit_obstacle = self.prevent_boundary_intersection(arbiter)
             return True
         
         def cube_boundary_pre_solve(arbiter, space, data):
-            self.prevent_boundary_intersection(arbiter.shapes[0], arbiter.shapes[1])
+            self.prevent_boundary_intersection(arbiter)
             return True
         
         def recept_collision_begin(arbiter, space, data):
@@ -360,25 +360,24 @@ class ObjectPushing(gym.Env):
 
         return inside
     
-    def prevent_boundary_intersection(self, dynamic_shape, boundary_shape, adjustment=0.1):
-        d_body = dynamic_shape.body
-        boundary_body = boundary_shape.body
-        # check if any vertex of the body intersects with the boundary
-        d_vertices = [d_body.local_to_world(v) for v in dynamic_shape.get_vertices()]
-        boundary_vertices = [boundary_body.local_to_world(v) for v in boundary_shape.get_vertices()]
-        new_position = pymunk.Vec2d(d_body.position.x, d_body.position.y)
+    def prevent_boundary_intersection(self, arbiter):
+        collision = False
+        normal = arbiter.contact_point_set.normal
+        current_velocity = arbiter.shapes[0].body.velocity
+        reflection = current_velocity - 2 * current_velocity.dot(normal) * normal
 
-        # check if the body intersects with any dividers or columns
-        for vertex in d_vertices:
-            if self.is_point_inside_polygon(vertex, boundary_vertices):
-                # adjust the position of the body to prevent intersection with the obstacle
-                obstacle_center = np.mean(boundary_vertices, axis=0)
-                direction = pymunk.Vec2d(vertex[0], vertex[1]) - pymunk.Vec2d(obstacle_center[0], obstacle_center[1])
-                direction = direction.normalized()
-                new_position += direction * adjustment  # move the body slightly away from the obstacle
-                d_body.position = new_position
-                return True
-        return False
+        elasticity = 0.5
+        new_velocity = reflection * elasticity
+
+        penetration_depth = arbiter.contact_point_set.points[0].distance
+        if penetration_depth < 0:
+            collision = True
+        correction_vector = normal * penetration_depth
+        arbiter.shapes[0].body.position += correction_vector
+
+        arbiter.shapes[0].body.velocity = new_velocity
+
+        return collision
 
     def get_receptacle_position_and_size(self):
         size = self.cfg.env.receptacle_width
@@ -752,6 +751,7 @@ class ObjectPushing(gym.Env):
             for position, heading in zip(robot_waypoint_positions, robot_waypoint_headings):
                 self.path.append([position[0], position[1], heading])
             self.path = np.array(self.path)
+            self.renderer.update_path(self.path)
             # ****************** Make into function ******************
             
             # store the initial configuration space at the start of the step( for partial reward calculation)
@@ -827,6 +827,7 @@ class ObjectPushing(gym.Env):
                 # stop moving if robot collided with obstacle
                 if distance(robot_prev_waypoint_position, robot_position) > MOVE_STEP_SIZE:
                     if self.robot_hit_obstacle:
+                        print('hit obstacle')
                         self.robot_hit_obstacle = False
                         robot_is_moving = False
                         break  # Note: self.robot_distance does not get not updated
