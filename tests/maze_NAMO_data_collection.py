@@ -6,7 +6,6 @@ A simple script to run a teleoperation pipeline for demonstration dataset collec
 'X': stop turning (note: this does not stop linear motion)
 'esc': exit teleoperation
 """
-import random
 
 import benchnpin.environments
 import gymnasium as gym
@@ -14,7 +13,7 @@ import numpy as np
 import pickle
 from pynput import keyboard
 
-env = gym.make('object-pushing-v0')
+env = gym.make('maze-NAMO-v0')
 
 observations = []
 actions = []                # this is actually the states (i.e. 3 dof pose)
@@ -27,9 +26,10 @@ STOP_TURNING = 1
 LEFT = 2
 RIGHT = 3
 STOP = 4
-BACKWARD = 5
+OTHER = 5
 SMALL_LEFT = 6
 SMALL_RIGHT = 7
+BACKWARD = 8
 
 command = STOP
 manual_stop = False
@@ -39,19 +39,19 @@ def on_press(key):
     try:
         if key.char == 'w':  # Move up
             command = FORWARD
+        elif key.char == 'y':  # Stop turning
+            command = STOP_TURNING
         elif key.char == 'x':  # Move down
             command = BACKWARD
         elif key.char == 'a':  # Move left
             command = LEFT
         elif key.char == 'd':  # Move right
             command = RIGHT
-        elif key.char == 't':  # Stop moving
+        elif key.char == 't':  # Move right
             command = STOP
-        elif key.char == 'r':  # Stop turning
-            command = STOP_TURNING
-        elif key.char == 'z':  # Move left slowly
+        elif key.char == 'z':  # Move right
             command = SMALL_LEFT
-        elif key.char == 'c':  # Move right slowly
+        elif key.char == 'c':  # Move right
             command = SMALL_RIGHT
     except AttributeError:
         pass
@@ -90,12 +90,8 @@ def collect_demos():
             while listener.running:  # While the listener is active
                 global command
                 print("command: ", command, "; step: ", t, \
-                    "; num completed: ", info['box_count'],  end="\r")
+                    "; num completed: ",  end="\r")
                 observation, reward, terminated, truncated, info = env.step(command)
-                # random action
-                # action_space = 96*96
-                # action = random.randrange(action_space)
-                # observation, reward, terminated, truncated, info = env.step(action)
 
                 # command = OTHER
                 if t % 5 == 0:
@@ -129,7 +125,7 @@ def collect_demos():
     if manual_stop:
         print("\nDemo manually stopped. Ignored")
         return
-    ''' 
+        
     global observations, actions, rewards, terminals, timeouts
     observations = np.array(observations).astype(np.float32)
     actions = np.array(actions).astype(np.float32)
@@ -198,7 +194,6 @@ def collect_demos():
     # save demo info data
     with open('pushing_demo_info.pkl', 'wb') as f:
         pickle.dump(pickle_dict_info, f)
-    '''
 
 
 if __name__ == "__main__":

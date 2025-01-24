@@ -17,6 +17,9 @@ class Renderer():
 
         # get parameters
         self.goal_line = kwargs.get('goal_line', None)
+        self.goal_point = kwargs.get('goal_point', None)
+        self.clearance_boundary = kwargs.get('clearance_boundary', None)
+        self.centered = kwargs.get('centered', False)
 
         # scale to convert from pymunk meter unit to pygame pixel unit
         self.render_scale = render_scale
@@ -24,7 +27,7 @@ class Renderer():
 
         # Initialize Pygame
         pygame.init()
-        self.pygame_w , self.pygame_h = env_width * self.render_scale, env_height * self.render_scale
+        self.pygame_w, self.pygame_h = env_width * self.render_scale, env_height * self.render_scale
         self.window = pygame.display.set_mode((self.pygame_w, self.pygame_h))
         pygame.display.set_caption(caption)
 
@@ -50,6 +53,8 @@ class Renderer():
         """
         x = pymunk_point[0]
         y = pymunk_point[1]
+        if self.centered:
+            return int(x * self.render_scale + self.pygame_w / 2), int(self.pygame_h / 2 - y * self.render_scale)
         return int(x * self.render_scale), int(self.pygame_h - y * self.render_scale)
 
     
@@ -98,20 +103,67 @@ class Renderer():
         """
         raise NotImplementedError
 
+    def display_goal_point(self):
+        """
+        Display goal point for navigation tasks
+        """
+        pygame.draw.circle(
+            self.window,
+            (255, 255, 255),  # Circle color (white)
+            self.to_pygame(self.goal_point),  # Circle center
+            5,  # Circle radius
+            0   # Circle thickness
+        )
+    
+    def display_clearance_boundary(self):
+        """
+        Display clearance boundary for object pushing tasks
+        """
+        pygame.draw.polygon(
+            self.window,
+            '#20FE20',  # Line color (green)
+            [self.to_pygame(point) for point in self.clearance_boundary],  # Convert boundary to Pygame coordinates
+            2  # Line width
+        )
 
-
-    def render(self, save=False, path=None):
+    def render(self, save=False, path=None, manual_draw=False):
         self.window.fill(self.background_color)
-        self.space.debug_draw(self.draw_options)
+        if not manual_draw:
+            self.space.debug_draw(self.draw_options)
+        
+        else:
+            static_list = ['wall', 'receptacle', 'corner', 'divider', 'column']
+            static_shapes = [shape for shape in self.space.shapes if shape.label in static_list]
+            dynamic_shapes = [shape for shape in self.space.shapes if shape.label not in static_list]
+            for shape in static_shapes:
+                pygame.draw.polygon(
+                    self.window,
+                    shape.color,
+                    [self.to_pygame(shape.body.local_to_world((x, y))) for x, y in shape.get_vertices()]
+                )
+
+            for shape in dynamic_shapes:
+                pygame.draw.polygon(
+                    self.window,
+                    shape.color,
+                    [self.to_pygame(shape.body.local_to_world((x, y))) for x, y in shape.get_vertices()]
+                )
 
         if self.path is not None:
             self.display_planned_path()
         
         if self.goal_line is not None:
             self.display_goal_line()
+        
+        if self.clearance_boundary is not None:
+            self.display_clearance_boundary()
 
         ### could add goal region display here
         ###
+
+        ### Goal point display
+        if self.goal_point is not None:
+            self.display_goal_point()
 
         pygame.display.update()
 
