@@ -70,28 +70,30 @@ class MazeNAMO(gym.Env):
         self.env_max_trial = 4000
 
         # Define action space
+        max_linear_speed = 1.0
         max_yaw_rate_step = (np.pi/2) / 15        # rad/sec
         print("max yaw rate per step: ", max_yaw_rate_step)
-        self.action_space = spaces.Box(low=-max_yaw_rate_step, high=max_yaw_rate_step, dtype=np.float64)
+        self.action_space = spaces.Box(low= np.array([0, -max_yaw_rate_step]), 
+                                       high=np.array([max_linear_speed, max_yaw_rate_step]),
+                                       dtype=np.float64)
         
-        
-        # Define observation space
-                # Define action space
-        max_yaw_rate_step = (np.pi/2) / 15        # rad/sec
-        print("max yaw rate per step: ", max_yaw_rate_step)
-        self.action_space = spaces.Box(low=-max_yaw_rate_step, high=max_yaw_rate_step, dtype=np.float64)
-
         # Define observation space
         self.low_dim_state = self.cfg.low_dim_state
         if self.low_dim_state:
+            #low dimensional observation space comprises of the 2D positions of each obstacle in addition to the robot
             self.fixed_trial_idx = self.cfg.fixed_trial_idx
             if self.cfg.randomize_obstacles:
-                self.observation_space = spaces.Box(low=-10, high=30, shape=(self.cfg.num_obstacles * 2,), dtype=np.float64)
+                self.observation_space = spaces.Box(low=-10, high=30, shape=((self.cfg.num_obstacles+1) * 2,), dtype=np.float64) 
             else:
-                self.observation_space = spaces.Box(low=-10, high=30, shape=(6,), dtype=np.float64)
-
+                self.observation_space = spaces.Box(low=-10, high=30, shape=(8,), dtype=np.float64) # 8 for 3 obstacles and the robot
+        
         else:
-            self.observation_shape = (2, self.occupancy.occ_map_height, self.occupancy.occ_map_width)
+            #high dimensional observation space comprises of the occupancy grid map with 4 channels
+            #channel 1 - occupancy grid map with static obstacles
+            #channel 2 - occupancy grid map with movable obstacles
+            #channel 3 - occupancy grid map with robot footprint
+            #channel 4 - occupancy grid map with goal location
+            self.observation_shape = (4, self.occupancy.occ_map_height, self.occupancy.occ_map_width)
             self.observation_space = spaces.Box(low=0, high=1, shape=self.observation_shape, dtype=np.float64)
 
         self.yaw_lim = (0, np.pi)       # lower and upper limit of ship yaw  
@@ -208,7 +210,8 @@ class MazeNAMO(gym.Env):
                 x_start = 1 + random.random() * (self.cfg.start_x_range - 1)
                 y_start = 1 + random.random() * (self.cfg.start_y_range - 1)
                 #check if the start and goal points are not in the maze walls
-                if not self.space.point_query((x_start, y_start), 0, pymunk.ShapeFilter()): 
+                min_dist = self.cfg.robot.min_obstacle_dist
+                if not self.space.point_query((x_start, y_start), min_dist, pymunk.ShapeFilter()): 
                     print("start point: ", x_start, y_start)
                     break
 
@@ -258,10 +261,13 @@ class MazeNAMO(gym.Env):
                 center_x = random.random() * (max_x - min_x) + min_x
                 center_y = random.random() * (max_y - min_y) + min_y
 
-                # loop through previous obstacles to check for overlap
+                # loop through previous obstacles to check for overlap with other obstacles or maze walls
                 overlapped = False
                 for prev_obs_x, pre_obs_y in obstacles:
                     if ((center_x - prev_obs_x)**2 + (center_y - pre_obs_y)**2)**(0.5) <= obs_min_dist:
+                        overlapped = True
+                        break
+                    if self.space.point_query((center_x, center_y), obs_min_dist, pymunk.ShapeFilter()):
                         overlapped = True
                         break
                 
@@ -321,12 +327,23 @@ class MazeNAMO(gym.Env):
     def construct_maze_walls(self):
         self.length = self.cfg.env.length
         self.width = self.cfg.env.width
-        self.maze_walls = [[(0,0),(self.width,0)] , [(0,0),(0,self.length)],
+        self.maze_version = self.cfg.env.maze_version
+        if self.maze_version == 1:
+            self.maze_walls = [[(0,0),(self.width,0)] , [(0,0),(0,self.length)],
                     [(self.width,0),(self.width,self.length)], 
                     [(0,self.length),(self.width,self.length)],
-                    [(self.width/3,0),(self.width/3,self.length/3)], [(2*self.width/3,self.length),(2*self.width/3,5)]]
-       
-    
+                     [(2*self.width/2,self.length),(2*self.width/2,5)],
+                    [(self.width/2,0),(self.width/2,self.length - self.length/3)]]
+        elif self.maze_version == 2:
+            self.maze_walls = [[(0,0),(self.width,0)] , [(0,0),(0,self.length)],
+                    [(self.width,0),(self.width,self.length)], 
+                    [(0,self.length),(self.width,self.length)],
+                    [(self.width/3,0),(self.width/3,2*self.length/3)], [(2*self.width/3,self.length),(2*self.width/3, self.length/3)]]
+        else:
+            #abort the program
+            print("Invalid maze version")
+            exit(1)
+
     def randomize_obstacles(self):
         """
         NOTE this function is called only when using low-dimensional observation
@@ -384,11 +401,11 @@ class MazeNAMO(gym.Env):
 
         else:
 
-            # constant forward speed in global frame
-            global_velocity = R(self.robot_body.angle) @ [self.target_speed, 0]
+            # apply linear velocity
+            global_velocity = R(self.robot_body.angle) @ [action[0], 0]
 
             # apply velocity controller
-            self.robot_body.angular_velocity = action
+            self.robot_body.angular_velocity = action[1]
             self.robot_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
 
         # move simulation forward
@@ -461,12 +478,16 @@ class MazeNAMO(gym.Env):
 
     def generate_observation_low_dim(self, updated_obstacles):
         """
-        The observation is a vector of shape (num_obstacles * 2) specifying the 2d position of the obstacles
-        <obs1_x, obs1_y, obs2_x, obs2_y, ..., obsn_x, obsn_y>
+        The observation is a vector of shape (num_obstacles * 2)+ 2 specifying the 2d position of the obstacles and the robot
+        <robot_x, robot_y, obs1_x, obs1_y, obs2_x, obs2_y, ..., obsn_x, obsn_y>
         """
         # print("num obs: ", len(updated_obstacles))
-        observation = np.zeros((len(updated_obstacles) * 2))
-        for i in range(len(updated_obstacles)):
+        observation = np.zeros(((len(updated_obstacles)+1) * 2))
+        #robot position
+        observation[0] = self.robot_body.position.x
+        observation[1] = self.robot_body.position.y
+        #obstacle positions
+        for i in range(1,len(updated_obstacles)):
             obs = updated_obstacles[i]
             center = np.abs(poly_centroid(obs))
             observation[i * 2] = center[0]
@@ -482,23 +503,36 @@ class MazeNAMO(gym.Env):
     
 
     def generate_observation(self):
-        raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, 
+        #Compute Binary Occupancy Grids
+        robot_pose = (self.robot_body.position.x, self.robot_body.position.y, self.robot_body.angle)
+        self.occupancy.compute_ship_footprint_planner(ship_state=robot_pose, ship_vertices=self.cfg.robot.vertices)
+        robot_occ = np.copy(self.occupancy.footprint)         # (H, W)
+        movable_obstacles = self.occupancy.compute_occ_img(obstacles=self.obstacles, 
                         ice_binary_w=int(self.occupancy.map_width * self.cfg.occ.m_to_pix_scale), 
                         ice_binary_h=int(self.occupancy.map_height * self.cfg.occ.m_to_pix_scale))
-        self.occupancy.compute_con_gridmap(raw_ice_binary=raw_ice_binary, save_fig_dir=None)
+        fixed_obstacles = self.occupancy.compute_occ_img(obstacles=self.maze_walls, 
+                        ice_binary_w=int(self.occupancy.map_width * self.cfg.occ.m_to_pix_scale), 
+                        ice_binary_h=int(self.occupancy.map_height * self.cfg.occ.m_to_pix_scale))
+        self.occupancy.compute_goal_image(goal_y=self.goal[1])
+        goal_img = np.copy(self.occupancy.goal_img)               # (H, W)
+        
         occupancy = np.copy(self.occupancy.occ_map)         # (H, W)
 
         # compute footprint observation  NOTE: here we want unscaled, unpadded vertices
-        robot_pose = (self.robot_body.position.x, self.robot_body.position.y, self.robot_body.angle)
-        self.occupancy.compute_ship_footprint_planner(ship_state=robot_pose, ship_vertices=self.cfg.robot.vertices)
-        footprint = np.copy(self.occupancy.footprint)       # (H, W)
+       # robot_pose = (self.robot_body.position.x, self.robot_body.position.y, self.robot_body.angle)
+       # self.occupancy.compute_ship_footprint_planner(ship_state=robot_pose, ship_vertices=self.cfg.robot.vertices)
+       # footprint = np.copy(self.occupancy.footprint)       # (H, W)
 
         # compute goal observation
         # self.occupancy.compute_goal_image(goal_y=self.goal[1])
         # goal_img = np.copy(self.occupancy.goal_img)               # (H, W)
         # observation = np.concatenate((np.array([occupancy]), np.array([footprint]), np.array([goal_img])))          # (3, H, W)
-
-        observation = np.concatenate((np.array([occupancy]), np.array([footprint])))          # (2, H, W)
+        print("Robot: ", robot_occ.shape)
+        print("movable obstacles: ", movable_obstacles.shape)
+        print("fixed obstacles: ", fixed_obstacles.shape)
+        print("goal img: ", goal_img.shape)
+        observation = np.concatenate((np.array([robot_occ]), np.array([movable_obstacles]), 
+                                      np.array([fixed_obstacles]), np.array([goal_img])))          # (4, H, W)
         return observation
 
     def goal_is_reached(self):
@@ -530,7 +564,7 @@ class MazeNAMO(gym.Env):
 
             # whether to also log occupancy observation
             if self.cfg.render.log_obs and not self.low_dim_state:
-
+                print("Rendering occupancy observation")
                 # visualize occupancy map
                 self.con_ax.clear()
                 occ_map_render = np.copy(self.occupancy.occ_map)
