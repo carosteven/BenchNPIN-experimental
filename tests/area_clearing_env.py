@@ -17,4 +17,5 @@ for i in range(1000):
 
     env.render()
 
-    # print(observation.shape)
+    if terminated or truncated:
+        break

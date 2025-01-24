@@ -20,4 +20,5 @@ for i in range(500):
 
     print(observation.shape)
     
-    env.render()
+    if terminated or truncated:
+        break
