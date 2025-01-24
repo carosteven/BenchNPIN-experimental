@@ -401,7 +401,7 @@ class MazeNAMO(gym.Env):
 
         else:
 
-            # constant forward speed in global frame
+            # apply linear velocity
             global_velocity = R(self.robot_body.angle) @ [action[0], 0]
 
             # apply velocity controller
