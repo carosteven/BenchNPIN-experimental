@@ -26,7 +26,7 @@ R = lambda theta: np.asarray([
 ])
 
 YAW_CONSTRAINT_PENALTY = 0
-BOUNDARY_PENALTY = -50
+BOUNDARY_PENALTY = -10
 TERMINAL_REWARD = 200
 
 class ShipIceEnv(gym.Env):
@@ -43,7 +43,7 @@ class ShipIceEnv(gym.Env):
         cfg_file = os.path.join(self.current_dir, 'config.yaml')
 
         cfg = cfg = DotDict.load_from_file(cfg_file)
-        self.occupancy = OccupancyGrid(grid_width=cfg.occ.grid_size, grid_height=cfg.occ.grid_size, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, ship_body=None)
+        self.occupancy = OccupancyGrid(grid_width=cfg.occ.grid_size, grid_height=cfg.occ.grid_size, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, ship_body=None, meter_to_pixel_scale=cfg.occ.m_to_pix_scale)
         self.cfg = cfg
 
         self.beta = 50         # amount to scale the collision reward
@@ -61,7 +61,7 @@ class ShipIceEnv(gym.Env):
         
         # load ice field environment
         assert self.cfg.concentration in [0.1, 0.2, 0.3, 0.4, 0.5], print("PLease check environment config. Concentration value should be set to one of the followings: 0.1, 0.2, 0.3, 0.4, 0.5")
-        ice_file = os.path.join(self.current_dir, 'ice_environments', 'experiments_' + str(int(self.cfg.concentration * 100)) + '_100_r06_d40x12.pk')
+        ice_file = os.path.join(self.current_dir, 'ice_environments', 'experiments_' + str(int(self.cfg.concentration * 100)) + '_100_r06_d10x8.pk')
         ddict = pickle.load(open(ice_file, 'rb'))
 
         self.experiment = ddict['exp'][self.cfg.concentration]
@@ -420,4 +420,6 @@ class ShipIceEnv(gym.Env):
 
     def close(self):
         plt.close('all')
-        self.renderer.close()
+
+        if self.renderer is not None:
+            self.renderer.close()

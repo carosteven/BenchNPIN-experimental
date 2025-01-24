@@ -9,10 +9,10 @@ plot:
   show: false       # true will show planner plots
 
 # parameters for low-dim environment
-low_dim_state: false
+low_dim_state: true
 fixed_trial_idx: 4            # 4 for 25x12 (c01) environment; 
 random_start: true
-start_x_range: 11
+start_x_range: 7
 
 randomize_obstacles: false
 max_obs_x: 5
@@ -22,14 +22,14 @@ max_obs_y: 9
 #max_replan: 1        # max number of replans
 concentration: 0.1    # options are 0.1, 0.2, 0.3, 0.4, 0.5
 planner: 'predictive'    # options are 'skeleton', 'straight', or 'lattice'
-goal_y: 39
+goal_y: 9
 threshold_dist: 0.5   # fraction of path length for deciding whether to update planned path
 threshold_cost: 0.95  # fraction of path cost for deciding whether to update planned path
 occ:
-  grid_size: 0.2       # occupancy map grid size
-  m_to_pix_scale: 19.5   # number of pixels per meter when generating the raw occupancy map
-  map_height: 40       # occupancy map height (in meter)
-  map_width: 12        # occupancy map width (in meter)
+  grid_size: 0.04       # occupancy map grid size
+  m_to_pix_scale: 50   # number of pixels per meter when generating the raw occupancy map
+  map_height: 10       # occupancy map height (in meter)
+  map_width: 8        # occupancy map width (in meter)
 a_star:
   horizon: 30  # receding horizon in metres (needs to be an int for it to be enabled)
   replan: true

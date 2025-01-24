@@ -10,7 +10,7 @@ from benchnpin.common.geometry.polygon import poly_centroid
 
 class OccupancyGrid:
 
-    def __init__(self, grid_width, grid_height, map_width, map_height, ship_body=None) -> None:
+    def __init__(self, grid_width, grid_height, map_width, map_height, ship_body=None, meter_to_pixel_scale=50) -> None:
         """
         grid_width, grid_height, map_width, map_height are in meter units
         ship body info at starting position
@@ -21,6 +21,7 @@ class OccupancyGrid:
         self.map_height = map_height
         self.occ_map_width = int(self.map_width / self.grid_width)         # number of grids in x-axis
         self.occ_map_height = int(self.map_height / self.grid_height)      # number of grids in y-axis
+        self.meter_to_pixel_scale = meter_to_pixel_scale
 
         print("Occupancy map resolution: ", grid_width, "; occupancy map dimension: ", (self.occ_map_width, self.occ_map_height))
 
@@ -65,7 +66,7 @@ class OccupancyGrid:
 
 
     def compute_occ_img(self, obstacles, ice_binary_w=235, ice_binary_h=774):
-        meter_to_pixel_scale = ice_binary_h / self.map_height
+        meter_to_pixel_scale = self.meter_to_pixel_scale
 
         raw_ice_binary = np.zeros((ice_binary_h, ice_binary_w))
 
@@ -91,8 +92,8 @@ class OccupancyGrid:
         """
         Compute concentration grid map
         """
-        meter_to_pixel_scale_y = raw_ice_binary.shape[0] / self.map_height
-        meter_to_pixel_scale_x = raw_ice_binary.shape[1] / self.map_width
+        meter_to_pixel_scale_y = self.meter_to_pixel_scale
+        meter_to_pixel_scale_x = self.meter_to_pixel_scale
 
         for i in range(self.occ_map_height):
             y_low = int(i * self.grid_height * meter_to_pixel_scale_y)
