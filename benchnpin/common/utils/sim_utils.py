@@ -110,10 +110,10 @@ def create_polygon(space, vertices, x, y, density, heading=0, label='poly', idx=
     shape.density = density
     shape.elasticity = 0.01
     shape.friction = 1.0
-    space.add(body, shape)
-
+    shape.label = label
     if color is not None:
         shape.color = color
+    space.add(body, shape)
     return shape
 
 
@@ -129,8 +129,8 @@ def generate_sim_obs(space, obstacles: List[dict], density, color=None):
 def generate_sim_cubes(space, cubes: List[dict], density):
     return [
         create_polygon(
-            space, (cube['vertices'] - np.array(cube['centre'])).tolist(),
-            *cube['centre'], density=density, heading=cube['heading'], label='cube', idx=cube['idx'], radius=0
+            space, (cube['vertices'] - np.array(cube['position'])).tolist(),
+            *cube['position'], density=density, heading=cube['heading'], label='cube', idx=cube['idx'], radius=0, color=cube['color']
         )
         for cube in cubes
     ]
