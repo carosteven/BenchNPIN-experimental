@@ -6,7 +6,15 @@ import pymunk
 
 from benchnpin.common.ship import Ship
 
-def create_agent(space, vertices: List, start_pos: Tuple[float, float, float], body_type: int):
+BLACK = (0, 0, 0, 255)
+RED = (255, 0, 0, 255)
+GREEN = (0, 255, 0, 255)
+BLUE = (0, 0, 255, 255)
+
+def get_color(name):
+    return globals()[name.upper()]
+
+def create_agent(space, vertices: List, start_pos: Tuple[float, float, float], body_type: int, label: str, color=None):
 
         x, y, heading = start_pos
         # setup for pymunk
@@ -17,39 +25,43 @@ def create_agent(space, vertices: List, start_pos: Tuple[float, float, float], b
         centre_of_g = dummy_shape.center_of_gravity
         vs = [(x - centre_of_g[0], y - centre_of_g[1]) for x, y in vertices]
 
-        shape = pymunk.Poly(body, vs, radius=0.08)
+        shape = pymunk.Poly(body, vs)#, radius=0.08)
         shape.mass = 10.0
         shape.elasticity = 0.01
         shape.friction = 1.0
-        shape.label = 'agent'
+        shape.label = label
+        if color is not None:
+            shape.color = color
         space.add(body, shape)
         return shape
 
-def generate_sim_agent(space, agent: dict, body_type=pymunk.Body.DYNAMIC):
-    return create_agent(space, agent['vertices'], agent['start_pos'], body_type)
+def generate_sim_agent(space, agent: dict, body_type: int=pymunk.Body.DYNAMIC, label: str='agent'):
+    return create_agent(space, agent['vertices'], agent['start_pos'], body_type, label, color=agent['color'])
 
-def create_static(space, boundary):
-    body = space.static_body
+def create_static(space, boundary, color=None):
+    body = pymunk.Body(body_type=pymunk.Body.STATIC)
     # body.position = (x, y)
     # dummy_shape = pymunk.Poly(None, vertices)
     # centre_of_g = dummy_shape.center_of_gravity
     # vs = [(x - centre_of_g[0], y - centre_of_g[1]) for x, y in vertices]
 
     vs = [(x, y) for x, y in boundary['vertices']]
-    shape = pymunk.Poly(body, vs, radius=0.02)
+    shape = pymunk.Poly(body, vs)#, radius=0.02)
     shape.elasticity = 0.01
     shape.friction = 1.0
     shape.label = boundary['type']
-    space.add(shape)
+    if color is not None:
+        shape.color = color
+    space.add(body, shape)
     return shape
 
 def generate_sim_bounds(space, bounds: List[dict]):
-    shapes = [create_static(space, bound)
+    shapes = [create_static(space, bound, color=bound['color'])
               for bound in bounds if bound['type'] != 'corner']
     shapes.extend(generate_sim_corners(space, [bound for bound in bounds if bound['type'] == 'corner']))
     return shapes
 
-def create_corners(space, corner):
+def create_corners(space, corner, color=None):
     shapes = []
     vs1 = [(0, 0),
            (0, -1),
@@ -73,6 +85,8 @@ def create_corners(space, corner):
         shape.elasticity = 0.01
         shape.friction = 1.0
         shape.label = 'corner'
+        if color is not None:
+            shape.color = color
         space.add(body, shape)
         shapes.append(shape)
     return shapes
@@ -80,7 +94,7 @@ def create_corners(space, corner):
 def generate_sim_corners(space, corners: List[dict]):
     corner_shapes = []
     for corner in corners:
-        cs = create_corners(space, corner)
+        cs = create_corners(space, corner, color=corner['color'])
         for shape in cs:
             corner_shapes.append(shape)
     return corner_shapes
@@ -112,6 +126,15 @@ def generate_sim_obs(space, obstacles: List[dict], density, color=None):
         for obs in obstacles
     ]
 
+def generate_sim_cubes(space, cubes: List[dict], density):
+    return [
+        create_polygon(
+            space, (cube['vertices'] - np.array(cube['centre'])).tolist(),
+            *cube['centre'], density=density, heading=cube['heading'], label='cube', idx=cube['idx'], radius=0
+        )
+        for cube in cubes
+    ]
+
 def generate_sim_maze(space, maze_walls):
     for pos in maze_walls:
         print(pos)
@@ -120,6 +143,7 @@ def generate_sim_maze(space, maze_walls):
         shape.elasticity = 0.5
         shape.friction = 0.5
         space.add(body, shape)
+
 
 def simulate_ship_ice_collision(path, ship_vertices, obs_dicts, ship_vel=1, dt=0.25, steps=10):
     """

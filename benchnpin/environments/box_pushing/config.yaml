@@ -8,7 +8,7 @@ plot:
   y_axis_limit: 18  # limits the y-axis of the plot
   show: false       # true will show planner plots
 
-demo_mode: true     # when using demo mode, control both forward and angular speed
+demo_mode: false     # when using demo mode, control both forward and angular speed
 
 # cubes information
 randomize_cubes: true
@@ -85,7 +85,8 @@ agent:
 
 ### SIMULATION PARAMS
 render:
-  log_obs: true       # whether to log occupancy observation
+  log_obs: false       # whether to log occupancy observation
+  show: true          # if true show animation plots
   frequency: 20       # frequency of rendering
 sim:
   t_max: 2000  # max number of iterations in simulation loop (originally 5000)
@@ -132,8 +133,8 @@ controller:
 
 ### ENVIRONMENT PARAMS
 env:
-  obstacle_config: large_divider # options are small_empty, small_columns, large_columns, large_divider
+  obstacle_config: small_columns # options are small_empty, small_columns, large_columns, large_divider
   room_length: 10
-  room_width: 10 # 5 for small, 10 for large
+  room_width: 5 # 5 for small, 10 for large
   receptacle_width: 1.5
   shortest_path_channel_scale: 0.25

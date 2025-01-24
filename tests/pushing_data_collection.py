@@ -6,6 +6,7 @@ A simple script to run a teleoperation pipeline for demonstration dataset collec
 'X': stop turning (note: this does not stop linear motion)
 'esc': exit teleoperation
 """
+import random
 
 import benchnpin.environments
 import gymnasium as gym
@@ -91,6 +92,10 @@ def collect_demos():
                 print("command: ", command, "; step: ", t, \
                     "; num completed: ", info['box_count'],  end="\r")
                 observation, reward, terminated, truncated, info = env.step(command)
+                # random action
+                # action_space = 96*96
+                # action = random.randrange(action_space)
+                # observation, reward, terminated, truncated, info = env.step(action)
 
                 # command = OTHER
                 if t % 5 == 0:
