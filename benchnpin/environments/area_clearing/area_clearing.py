@@ -12,7 +12,7 @@ from matplotlib import pyplot as plt
 from benchnpin.common.cost_map import CostMap
 from benchnpin.common.evaluation.metrics import total_work_done
 from benchnpin.common.geometry.polygon import poly_area
-from benchnpin.common.utils.sim_utils import generate_sim_obs, generate_sim_agent
+from benchnpin.common.utils.sim_utils import generate_sim_obs, generate_sim_agent, get_color
 from benchnpin.common.geometry.polygon import poly_centroid, create_polygon_from_line
 from benchnpin.common.utils.utils import DotDict
 from benchnpin.common.occupancy_grid.occupancy_map import OccupancyGrid
@@ -190,6 +190,7 @@ class AreaClearingEnv(gym.Env):
 
         self.agent_info = self.cfg.agent
         self.agent_info['start_pos'] = self.start
+        self.agent_info['color'] = get_color('red')
 
         self.obs_dicts = self.generate_obstacles()
         obs_dicts, self.static_obs_shapes = self.generate_static_obstacles()
