@@ -106,7 +106,8 @@ class ObjectPushing(gym.Env):
         self.robot_info = self.cfg.agent
         self.robot_info['color'] = get_color('red')
         self.robot_radius = ((self.robot_info.length**2 + self.robot_info.width**2)**0.5 / 2) * 1.2
-        robot_pixel_width = int(2 * self.robot_radius * LOCAL_MAP_PIXELS_PER_METER)
+        self.robot_half_width = max(self.robot_info.length, self.robot_info.width) / 2
+        robot_pixel_width = int(2 * self.robot_half_width * LOCAL_MAP_PIXELS_PER_METER)
         self.robot_state_channel = np.zeros((LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH), dtype=np.float32)
         start = int(np.floor(LOCAL_MAP_PIXEL_WIDTH / 2 - robot_pixel_width / 2))
         for i in range(start, start + robot_pixel_width):
@@ -142,7 +143,7 @@ class ObjectPushing(gym.Env):
         # Define action space
         max_yaw_rate_step = (np.pi/2) / 15        # rad/sec
         print("max yaw rate per step: ", max_yaw_rate_step)
-        self.action_space = spaces.Box(low=-max_yaw_rate_step, high=max_yaw_rate_step, dtype=np.float64)
+        self.action_space = spaces.Box(low=0, high=LOCAL_MAP_PIXEL_WIDTH * LOCAL_MAP_PIXEL_WIDTH, dtype=np.float64)
 
         # Define observation space
         self.low_dim_state = self.cfg.low_dim_state
@@ -1223,11 +1224,10 @@ class ObjectPushing(gym.Env):
         obstacle_map[start_i:start_i + small_obstacle_map.shape[0], start_j:start_j + small_obstacle_map.shape[1]] = small_obstacle_map
 
         # Dilate obstacles and walls based on robot size
-        robot_pixel_width = int(2 * self.robot_radius * LOCAL_MAP_PIXELS_PER_METER)
-        selem = disk(np.floor(robot_pixel_width / 2))
+        selem = disk(np.floor(self.robot_radius * LOCAL_MAP_PIXELS_PER_METER))
         self.configuration_space = 1 - binary_dilation(obstacle_map, selem).astype(np.float32)
         
-        selem_thin = disk(np.floor(robot_pixel_width / 4))
+        selem_thin = disk(np.floor(self.robot_half_width * LOCAL_MAP_PIXELS_PER_METER))
         self.configuration_space_thin = 1 - binary_dilation(obstacle_map, selem_thin).astype(np.float32)
 
         self.closest_cspace_indices = distance_transform_edt(1 - self.configuration_space, return_distances=False, return_indices=True)
