@@ -178,6 +178,8 @@ class BoxPushingSAM(BasePolicy):
         self.weight_decay = weight_decay
 
         log_dir = os.path.join(os.path.dirname(__file__), 'logs/')
+        if not os.path.exists(log_dir):
+            os.mkdir(log_dir)
         logging.basicConfig(filename=os.path.join(log_dir, 'box_pushing_sam.log'), level=logging.DEBUG)
         logging.info("starting training...")
         # logging.info(f"Job ID: {job_id}")

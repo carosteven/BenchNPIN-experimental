@@ -64,7 +64,7 @@ class ClickAgent:
                 pass
 
             if done or force_reset_env:
-                state = self.env.reset()
+                state, _ = self.env.reset()
                 done = False
                 force_reset_env = False
                 last_reward = 0

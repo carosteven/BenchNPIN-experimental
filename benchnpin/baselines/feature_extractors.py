@@ -216,7 +216,7 @@ class DenseActionSpaceDQN(nn.Module):
         self.conv3 = nn.Conv2d(32, num_output_channels, kernel_size=1, stride=1)
     
     def forward(self, x):
-        x = self.resnet18(x)
+        x = self.resnet18.features(x)
         x = F.relu(self.conv1(x))
         x = F.interpolate(x, scale_factor=2, mode='bilinear', align_corners=True)
         x = F.relu(self.conv2(x))

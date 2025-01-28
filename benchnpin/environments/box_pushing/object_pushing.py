@@ -1132,7 +1132,8 @@ class ObjectPushing(gym.Env):
         channels.append(self.robot_state_channel)
         channels.append(self.get_local_distance_map(self.create_global_shortest_path_to_receptacle_map(), self.robot.body.position, self.robot.body.angle))
         channels.append(self.get_local_distance_map(self.create_global_shortest_path_map(self.robot.body.position), self.robot.body.position, self.robot.body.angle))
-        observation = np.stack(channels)
+        # observation = np.stack(channels)
+        observation = np.stack(channels, axis=2)
         return observation
     
     def get_local_overhead_map(self):
