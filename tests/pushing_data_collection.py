@@ -6,6 +6,7 @@ A simple script to run a teleoperation pipeline for demonstration dataset collec
 'X': stop turning (note: this does not stop linear motion)
 'esc': exit teleoperation
 """
+# TODO record high and low dimenstion states
 import random
 
 import benchnpin.environments

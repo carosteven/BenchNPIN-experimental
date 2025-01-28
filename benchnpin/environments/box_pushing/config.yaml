@@ -161,12 +161,14 @@ train:
   final_exploration: 0.01
   gamma: 0.99
   grad_norm_clipping: 10
+  job_id_to_resume: null
   learning_rate: 0.01
   learning_starts: 1000
   model_path: null
   n_epochs: 10
   n_steps: 256
   replay_buffer_size: 10000
+  resume_training: false
   target_update_freq: 1000
   total_timesteps: 60000
   use_double_dqn: True

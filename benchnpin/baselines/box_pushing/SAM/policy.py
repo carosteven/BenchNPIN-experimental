@@ -45,7 +45,7 @@ class ReplayBuffer:
         return len(self.buffer)
     
 class DenseActionSpacePolicy:
-    def __init__(self, action_space, num_input_channels, final_exploration, train=False, checkpoint_path=None, model_path=None, random_seed=None):
+    def __init__(self, action_space, num_input_channels, final_exploration, train=False, checkpoint_path=None, resume_training=False, job_id_to_resume=None, random_seed=None):
         self.action_space = action_space
         self.num_input_channels = num_input_channels
         self.final_exploration = final_exploration
@@ -56,7 +56,12 @@ class DenseActionSpacePolicy:
         self.transform = transforms.ToTensor()
 
         # Resume from checkpoint if applicable
-        if checkpoint_path is not None:
+        if os.path.exists(checkpoint_path) or resume_training:
+            if resume_training:
+                model_path = os.join(os.path.dirname(__file__), f'checkpoint/{job_id_to_resume}/model-{self.model_name}.pt')
+            else:
+                checkpoint_dir = os.path.dirname(checkpoint_path)
+                model_path = os.path.join(checkpoint_dir, f'model-{self.model_name}.pt')
             model_checkpoint = torch.load(model_path, map_location=self.device)
             self.policy_net.load_state_dict(model_checkpoint['state_dict'])
             if self.train:
@@ -94,7 +99,7 @@ class DenseActionSpacePolicy:
 
 class BoxPushingSAM(BasePolicy):
 
-    def __init__(self, model_name='ppo_model', model_path=None) -> None:
+    def __init__(self, model_name='sam_model', model_path=None) -> None:
         super().__init__()
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -150,16 +155,18 @@ class BoxPushingSAM(BasePolicy):
     def train(self,
               batch_size=64,
               checkpoint_freq=10000,
-              checkpoint_path=None,
               exploration_timesteps=6000,
               final_exploration=0.01,
               gamma=0.99,
               grad_norm_clipping=10,
+              job_id=None,
+              job_id_to_resume=None,
               learning_rate=0.01,
               learning_starts=1000,
               n_epochs=10,
               n_steps=256,
               replay_buffer_size=10000,
+              resume_training=False,
               target_update_freq=1000,
               total_timesteps=60000, 
               use_double_dqn=True,
@@ -177,12 +184,14 @@ class BoxPushingSAM(BasePolicy):
         self.use_double_dqn = use_double_dqn
         self.weight_decay = weight_decay
 
-        log_dir = os.path.join(os.path.dirname(__file__), 'logs/')
+        checkpoint_path = os.path.join(os.path.dirname(__file__), f'checkpoint/{job_id}/checkpoint-{self.model_name}.pt')
+
+        log_dir = os.path.join(os.path.dirname(__file__), 'output_logs/')
         if not os.path.exists(log_dir):
             os.mkdir(log_dir)
         logging.basicConfig(filename=os.path.join(log_dir, 'box_pushing_sam.log'), level=logging.DEBUG)
         logging.info("starting training...")
-        # logging.info(f"Job ID: {job_id}")
+        logging.info(f"Job ID: {job_id}")
 
         # create environment
         env = gym.make('object-pushing-v0')
@@ -190,7 +199,7 @@ class BoxPushingSAM(BasePolicy):
 
         # policy
         policy = DenseActionSpacePolicy(env.action_space.high, env.num_channels, self.final_exploration,
-                                         train=True, checkpoint_path=checkpoint_path, model_path=self.model_path)
+                                         train=True, checkpoint_path=checkpoint_path, resume_training=resume_training)
 
         # optimizer
         optimizer = optim.SGD(policy.policy_net.parameters(), lr=self.learning_rate, momentum=0.9, weight_decay=self.weight_decay)
@@ -201,8 +210,12 @@ class BoxPushingSAM(BasePolicy):
         # resume if possible
         start_timestep = 0
         episode = 0
-        if checkpoint_path is not None:
-            checkpoint = torch.load(checkpoint_path)
+        if os.path.exists(checkpoint_path) or resume_training:
+            if resume_training:
+                checkpoint_path_to_load = os.path.join(os.path.dirname(__file__), f'checkpoint/{job_id_to_resume}/checkpoint-{self.model_name}.pt')
+            else:
+                checkpoint_path_to_load = checkpoint_path
+            checkpoint = torch.load(checkpoint_path_to_load)
             start_timestep = checkpoint['timestep']
             episode = checkpoint['episode']
             optimizer.load_state_dict(checkpoint['optimizer'])
@@ -292,7 +305,7 @@ class BoxPushingSAM(BasePolicy):
                 # between, during a system crash (i.e. preemtion)
                 os.replace(temp_model_path, self.model_path+self.model_name)
                 os.replace(temp_checkpoint_path, checkpoint_path+self.model_name)
-                msg = datetime.now().strftime("%Y-%m-%d %H:%M:%S") + ": Checkpoint saved at " + self.checkpoint_path + self.model_name
+                msg = datetime.now().strftime("%Y-%m-%d %H:%M:%S") + ": Checkpoint saved at " + checkpoint_path + self.model_name
                 logging.info(msg)
         env.close()
 
@@ -300,15 +313,15 @@ class BoxPushingSAM(BasePolicy):
 
     def evaluate(self, num_eps: int, model_eps: str ='latest'):
         raise NotImplementedError("The 'evaluate' method is not implemented yet.")
+        env = gym.make('object-pushing-v0')
+        env = env.unwrapped
+
         if model_eps == 'latest':
-            # self.model = PPO.load(os.path.join(self.model_path, self.model_name))
-            pass
+            self.model = DenseActionSpacePolicy(env.action_space.high, env.num_channels, self.final_exploration,
+                                                train=True, checkpoint_path=checkpoint_path, model_path=self.model_path)
         else:
             model_checkpoint = self.model_name + '_' + model_eps + '_steps'
             # self.model = PPO.load(os.path.join(self.model_path, model_checkpoint))
-
-        env = gym.make('object-pushing-v0')
-        env = env.unwrapped
 
         rewards_list = []
         for eps_idx in range(num_eps):
@@ -317,7 +330,7 @@ class BoxPushingSAM(BasePolicy):
             done = truncated = False
             eps_reward = 0.0
             while True:
-                action, _ = self.model.predict(obs)
+                action, _ = self.model.step(obs, exploration_eps=0.0)
                 obs, reward, done, truncated, info = env.step(action)
                 eps_reward += reward
                 if done or truncated:
