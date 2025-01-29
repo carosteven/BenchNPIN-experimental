@@ -115,7 +115,8 @@ class AreaClearingEnv(gym.Env):
         self.horizon = self.cfg.a_star.horizon
         self.replan = self.cfg.a_star.replan
         self.dt = self.cfg.controller.dt
-        self.target_speed = self.cfg.controller.target_speed
+        # self.target_speed = self.cfg.controller.target_speed
+        self.target_speed = 0
 
         # setup pymunk environment
         self.space = pymunk.Space()  # threaded=True causes some issues
@@ -328,7 +329,10 @@ class AreaClearingEnv(gym.Env):
                                 round(self.agent.body.angle, 2)), 
                 'total_work': self.total_work[0], 
                 'obs': updated_obstacles, 
-                'box_count': 0}
+                'box_count': 0,
+                'boundary': self.boundary_vertices,
+                'walls': self.walls,
+                'static_obstacles': self.static_obstacles}
 
         if self.low_dim_state:
             observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles)

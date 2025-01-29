@@ -77,9 +77,9 @@ class Renderer():
         Display the planned path given from a planner
         """
         pygame.draw.lines(
-                self.window, (0, 255, 0), False,  # green color, not a closed shape
+                self.window, (255, 0, 0), False,  # red color, not a closed shape
                 [self.to_pygame(point) for point in self.path],  # Convert trajectory to Pygame coordinates
-                3,  # Line thickness
+                1,  # Line thickness
             )
 
     

@@ -8,9 +8,9 @@ plot:
   y_axis_limit: 18  # limits the y-axis of the plot
   show: false       # true will show planner plots
 
-# env: 'clear_env'
+env: 'clear_env'
 # env: 'walled_env'
-env: 'walled_env_with_columns'
+# env: 'walled_env_with_columns'
 
 demo_mode: true     # when using demo mode, control both forward and angular speed
 
