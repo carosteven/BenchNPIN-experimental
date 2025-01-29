@@ -86,6 +86,36 @@ class OccupancyGrid:
         
         return raw_ice_binary
     
+    def compute_occ_img_walls(self, walls, width , height, wall_radius=0.5):
+        meter_to_pixel_scale = height / self.map_height
+        raw_wall_binary = np.zeros((height, width))
+        for wall in walls:
+            vertices = []
+            
+            direction_vector = np.array(wall[1]) - np.array(wall[0])
+            line_length = np.linalg.norm(direction_vector)
+            unit_direction_vector = direction_vector / line_length
+            perpendicular_unit_vector = np.array([-unit_direction_vector[1], unit_direction_vector[0]])
+            
+            #Create the four vertices of the wall 
+            vertices.append(wall[0] + wall_radius * perpendicular_unit_vector - wall_radius * unit_direction_vector)
+            vertices.append(wall[0] - wall_radius * perpendicular_unit_vector - wall_radius * unit_direction_vector)
+            vertices.append(wall[1] - wall_radius * perpendicular_unit_vector + wall_radius * unit_direction_vector)
+            vertices.append(wall[1] + wall_radius * perpendicular_unit_vector + wall_radius * unit_direction_vector)
+            vertices = np.array(vertices) * meter_to_pixel_scale
+
+            print("vertices: ", vertices)
+            print("shape: ", vertices.shape)
+            # get pixel coordinates on costmap that are contained inside obstacle/polygon
+            rr, cc = draw.polygon(vertices[:, 1], vertices[:, 0], shape=raw_wall_binary.shape)
+
+            # skip if 0 area
+            if len(rr) == 0 or len(cc) == 0:
+                continue
+
+            raw_wall_binary[rr, cc] = 1.0
+
+        return raw_wall_binary
 
     def compute_con_gridmap(self, raw_ice_binary, save_fig_dir=None, visualize=False):
         """
@@ -187,6 +217,14 @@ class OccupancyGrid:
         goal_y_idx = int(goal_y * meter_to_grid_scale_y)
         self.goal_img[goal_y_idx] = 1.0
 
+    def compute_goal_point_image(self, goal):
+        goal_x, goal_y = goal
+        self.goal_img = np.zeros((self.occ_map_height, self.occ_map_width))
+        meter_to_grid_scale_x = self.occ_map_width / self.map_width
+        meter_to_grid_scale_y = self.occ_map_height / self.map_height
+        goal_x_idx = int(goal_x * meter_to_grid_scale_x)
+        goal_y_idx = int(goal_y * meter_to_grid_scale_y)
+        self.goal_img[goal_y_idx, goal_x_idx] = 1.0
     
     def compute_ship_footprint_planner(self, ship_state, ship_vertices, padding=0.25):
         """
