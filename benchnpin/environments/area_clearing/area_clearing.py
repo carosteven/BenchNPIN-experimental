@@ -115,8 +115,7 @@ class AreaClearingEnv(gym.Env):
         self.horizon = self.cfg.a_star.horizon
         self.replan = self.cfg.a_star.replan
         self.dt = self.cfg.controller.dt
-        # self.target_speed = self.cfg.controller.target_speed
-        self.target_speed = 0
+        self.target_speed = self.cfg.controller.target_speed
 
         # setup pymunk environment
         self.space = pymunk.Space()  # threaded=True causes some issues

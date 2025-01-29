@@ -83,9 +83,12 @@ class PlanningBasedPolicy(BasePolicy):
         boundary_linestrings = []
         for line in temp_boundary_linestrings:
             if line.geom_type == 'MultiLineString':
-                boundary_linestrings.extend(list(line.geoms))
+                boundary_linestrings.extend([ls for ls in list(line.geoms) if ls.length > 0.1])
+            elif line.geom_type == 'LineString':
+                if line.length > 0.1:
+                    boundary_linestrings.append(line)
             else:
-                boundary_linestrings.append(line)
+                raise ValueError("Invalid geometry type to handle")
 
         self.boundary_goals = boundary_linestrings
     
@@ -97,6 +100,8 @@ class PlanningBasedPolicy(BasePolicy):
             is_in_boundary = self.boundary_polygon.intersects(obstacle_poly)
             if is_in_boundary:
                 obstacles_to_push.append(obstacle)
+
+        print(self.boundary_goals)
 
         all_pushing_paths = []
         for obstacle in obstacles_to_push:
