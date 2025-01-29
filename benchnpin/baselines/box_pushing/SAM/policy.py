@@ -45,7 +45,7 @@ class ReplayBuffer:
         return len(self.buffer)
     
 class DenseActionSpacePolicy:
-    def __init__(self, action_space, num_input_channels, final_exploration, train=False, checkpoint_path=None, resume_training=False, job_id_to_resume=None, random_seed=None):
+    def __init__(self, action_space, num_input_channels, final_exploration, train=False, checkpoint_path=None, resume_training=False, evaluate=False, job_id_to_resume=None, random_seed=None):
         self.action_space = action_space
         self.num_input_channels = num_input_channels
         self.final_exploration = final_exploration
@@ -56,12 +56,14 @@ class DenseActionSpacePolicy:
         self.transform = transforms.ToTensor()
 
         # Resume from checkpoint if applicable
-        if os.path.exists(checkpoint_path) or resume_training:
+        if os.path.exists(checkpoint_path) or resume_training or evaluate:
             if resume_training:
-                model_path = os.join(os.path.dirname(__file__), f'checkpoint/{job_id_to_resume}/model-{self.model_name}.pt')
+                model_path = os.path.join(os.path.dirname(__file__), f'checkpoint/{job_id_to_resume}/model-{self.model_name}.pt')
+            elif evaluate:
+                model_path = os.path.join(os.path.dirname(__file__), f'models_to_test/{self.model_name}.pt')
             else:
                 checkpoint_dir = os.path.dirname(checkpoint_path)
-                model_path = os.path.join(checkpoint_dir, f'model-{self.model_name}.pt')
+                model_path = f'{checkpoint_dir}/model-{self.model_name}.pt'
             model_checkpoint = torch.load(model_path, map_location=self.device)
             self.policy_net.load_state_dict(model_checkpoint['state_dict'])
             if self.train:
@@ -183,7 +185,6 @@ class BoxPushingSAM(BasePolicy):
         self.replay_buffer_size = replay_buffer_size
         self.use_double_dqn = use_double_dqn
         self.weight_decay = weight_decay
-
         checkpoint_path = os.path.join(os.path.dirname(__file__), f'checkpoint/{job_id}/checkpoint-{self.model_name}.pt')
 
         log_dir = os.path.join(os.path.dirname(__file__), 'output_logs/')
@@ -282,13 +283,17 @@ class BoxPushingSAM(BasePolicy):
             ################################################################################
             # Checkpoint
             if (timestep + 1) % checkpoint_freq == 0 or timestep + 1 == total_timesteps_with_warmup:
-                temp_model_path = os.path.join(self.model_path, "temp.pt")
+                checkpoint_dir = os.path.dirname(checkpoint_path)
+                model_path = f'{checkpoint_dir}/model-{self.model_name}.pt'
+                if not os.path.exists(checkpoint_dir):
+                    os.makedirs(checkpoint_dir)
+                temp_model_path = f'{checkpoint_dir}/model-temp.pt'
                 model = {
                     'timestep': timestep + 1,
                     'state_dict': policy.policy_net.state_dict(),
                 }
 
-                temp_checkpoint_path = os.path.join(checkpoint_path, "temp.pt")
+                temp_checkpoint_path = f'{checkpoint_dir}/checkpoint-temp.pt'
                 checkpoint = {
                     'timestep': timestep + 1,
                     'episode': episode,
@@ -303,8 +308,8 @@ class BoxPushingSAM(BasePolicy):
                 # according to the GNU spec of rename, the state of checkpoint_path
                 # is atomic, i.e. it will either be modified or not modified, but not in
                 # between, during a system crash (i.e. preemtion)
-                os.replace(temp_model_path, self.model_path+self.model_name)
-                os.replace(temp_checkpoint_path, checkpoint_path+self.model_name)
+                os.replace(temp_model_path, model_path)
+                os.replace(temp_checkpoint_path, checkpoint_path)
                 msg = datetime.now().strftime("%Y-%m-%d %H:%M:%S") + ": Checkpoint saved at " + checkpoint_path + self.model_name
                 logging.info(msg)
         env.close()
@@ -312,13 +317,15 @@ class BoxPushingSAM(BasePolicy):
 
 
     def evaluate(self, num_eps: int, model_eps: str ='latest'):
-        raise NotImplementedError("The 'evaluate' method is not implemented yet.")
         env = gym.make('object-pushing-v0')
         env = env.unwrapped
 
+        checkpoint_dir = os.path.join(os.path.dirname(__file__), f'checkpoint/')
+        model_path = f'{checkpoint_dir}/model-{self.model_name}.pt'
+
         if model_eps == 'latest':
             self.model = DenseActionSpacePolicy(env.action_space.high, env.num_channels, self.final_exploration,
-                                                train=True, checkpoint_path=checkpoint_path, model_path=self.model_path)
+                                                train=False, evaluate=True)
         else:
             model_checkpoint = self.model_name + '_' + model_eps + '_steps'
             # self.model = PPO.load(os.path.join(self.model_path, model_checkpoint))

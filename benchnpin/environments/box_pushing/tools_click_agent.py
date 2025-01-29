@@ -5,7 +5,7 @@ import benchnpin.environments
 import gymnasium as gym
 import numpy as np
 import pickle
-from pynput import keyboard
+# from pynput import keyboard
 
 
 class ClickAgent:

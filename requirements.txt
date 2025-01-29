@@ -20,6 +20,8 @@ gymnasium
 stable-baselines3
 tensorboard
 pygame
+opencv-python
+pynput
 git+https://github.com/rdesc/pydubins.git
 
 # cd benchnpin/common/spfa
