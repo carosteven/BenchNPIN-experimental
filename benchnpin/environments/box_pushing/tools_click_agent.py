@@ -30,7 +30,7 @@ class ClickAgent:
         self.key_pressed = event.key
 
     def update_display(self, state, last_reward, last_ministeps):
-        state_img = state[0]
+        state_img = state[:,:,0]
         self.ax.clear()
         self.ax.imshow(state_img)
         plt.draw()

@@ -155,10 +155,7 @@ class ObjectPushing(gym.Env):
                 self.observation_space = spaces.Box(low=-10, high=30, shape=(6,), dtype=np.float64)
 
         else:
-            # self.observation_shape = (2, self.occupancy.occ_map_height, self.occupancy.occ_map_width)
-            # self.observation_space = spaces.Box(low=0, high=1, shape=self.observation_shape, dtype=np.float64)
-            self.observation_shape = (self.num_channels, LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH)
-            # self.observation_shape = (self.num_channels, 232, 232)
+            self.observation_shape = (LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH, self.num_channels)
             self.observation_space = spaces.Box(low=0, high=1, shape=self.observation_shape, dtype=np.float32)
 
         self.yaw_lim = (0, np.pi)       # lower and upper limit of ship yaw  
@@ -839,7 +836,8 @@ class ObjectPushing(gym.Env):
             for position, heading in zip(robot_waypoint_positions, robot_waypoint_headings):
                 self.path.append([position[0], position[1], heading])
             self.path = np.array(self.path)
-            self.renderer.update_path(self.path)
+            if self.cfg.render.show:
+                self.renderer.update_path(self.path)
             # ****************** Make into function ******************
 
             ############################################################################################################
@@ -1372,7 +1370,8 @@ class ObjectPushing(gym.Env):
     def close(self):
         """Optional: close any resources or cleanup if necessary."""
         plt.close('all')
-        self.renderer.close()
+        if self.cfg.render.show:
+            self.renderer.close()
 
 
 # Helper functions
