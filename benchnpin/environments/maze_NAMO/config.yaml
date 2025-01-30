@@ -21,7 +21,7 @@ max_obs_y: 20
 min_obs_y: 0
 
 # parameters for low-dim environment
-low_dim_state: true
+low_dim_state: false
 fixed_trial_idx: 1
 random_start: true
 start_x_range: 15
@@ -37,7 +37,7 @@ threshold_dist: 0.5   # fraction of path length for deciding whether to update p
 threshold_cost: 0.95  # fraction of path cost for deciding whether to update planned path
 occ:
   grid_size: 0.2       # occupancy map grid size
-  m_to_pix_scale: 19.5   # number of pixels per meter when generating the raw occupancy map
+  m_to_pix_scale: 5   # number of pixels per meter when generating the raw occupancy map
   map_height: 20       # occupancy map height (in meter)
   map_width: 20       # occupancy map width (in meter)
 a_star:

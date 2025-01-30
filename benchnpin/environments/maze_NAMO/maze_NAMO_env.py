@@ -505,32 +505,21 @@ class MazeNAMO(gym.Env):
     def generate_observation(self):
         #Compute Binary Occupancy Grids
         robot_pose = (self.robot_body.position.x, self.robot_body.position.y, self.robot_body.angle)
+        #compute robot footprint binary occupancy grid 
         self.occupancy.compute_ship_footprint_planner(ship_state=robot_pose, ship_vertices=self.cfg.robot.vertices)
         robot_occ = np.copy(self.occupancy.footprint)         # (H, W)
+        #compute movable obstacles binary occupancy grid
         movable_obstacles = self.occupancy.compute_occ_img(obstacles=self.obstacles, 
                         ice_binary_w=int(self.occupancy.map_width * self.cfg.occ.m_to_pix_scale), 
                         ice_binary_h=int(self.occupancy.map_height * self.cfg.occ.m_to_pix_scale))
-        fixed_obstacles = self.occupancy.compute_occ_img(obstacles=self.maze_walls, 
-                        ice_binary_w=int(self.occupancy.map_width * self.cfg.occ.m_to_pix_scale), 
-                        ice_binary_h=int(self.occupancy.map_height * self.cfg.occ.m_to_pix_scale))
-        self.occupancy.compute_goal_image(goal_y=self.goal[1])
+        fixed_obstacles = self.occupancy.compute_occ_img_walls(walls=self.maze_walls, 
+                        width=int(self.occupancy.map_width * self.cfg.occ.m_to_pix_scale), 
+                        height=int(self.occupancy.map_height * self.cfg.occ.m_to_pix_scale))
+        #compute goal point binary occupancy grid
+        self.occupancy.compute_goal_point_image(self.goal)
         goal_img = np.copy(self.occupancy.goal_img)               # (H, W)
         
-        occupancy = np.copy(self.occupancy.occ_map)         # (H, W)
-
-        # compute footprint observation  NOTE: here we want unscaled, unpadded vertices
-       # robot_pose = (self.robot_body.position.x, self.robot_body.position.y, self.robot_body.angle)
-       # self.occupancy.compute_ship_footprint_planner(ship_state=robot_pose, ship_vertices=self.cfg.robot.vertices)
-       # footprint = np.copy(self.occupancy.footprint)       # (H, W)
-
-        # compute goal observation
-        # self.occupancy.compute_goal_image(goal_y=self.goal[1])
-        # goal_img = np.copy(self.occupancy.goal_img)               # (H, W)
-        # observation = np.concatenate((np.array([occupancy]), np.array([footprint]), np.array([goal_img])))          # (3, H, W)
-        print("Robot: ", robot_occ.shape)
-        print("movable obstacles: ", movable_obstacles.shape)
-        print("fixed obstacles: ", fixed_obstacles.shape)
-        print("goal img: ", goal_img.shape)
+        # Construct the observation
         observation = np.concatenate((np.array([robot_occ]), np.array([movable_obstacles]), 
                                       np.array([fixed_obstacles]), np.array([goal_img])))          # (4, H, W)
         return observation
@@ -564,25 +553,49 @@ class MazeNAMO(gym.Env):
 
             # whether to also log occupancy observation
             if self.cfg.render.log_obs and not self.low_dim_state:
+                #get an observation
+                robot_footprint , movable_obs, fixed_obs, goal_img = self.generate_observation()
                 print("Rendering occupancy observation")
-                # visualize occupancy map
-                self.con_ax.clear()
-                occ_map_render = np.copy(self.occupancy.occ_map)
-                occ_map_render = np.flip(occ_map_render, axis=0)
-                self.con_ax.imshow(occ_map_render, cmap='gray')
-                self.con_ax.axis('off')
-                save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
-                fp = os.path.join(save_fig_dir, str(self.t) + '_con.png')
-                self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
 
                 # visualize footprint
                 self.con_ax.clear()
-                occ_map_render = np.copy(self.occupancy.footprint)
+                occ_map_render = np.copy(robot_footprint)
                 occ_map_render = np.flip(occ_map_render, axis=0)
                 self.con_ax.imshow(occ_map_render, cmap='gray')
                 self.con_ax.axis('off')
                 save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
                 fp = os.path.join(save_fig_dir, str(self.t) + '_footprint.png')
+                self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
+
+
+                #visualize movable obstacles
+                self.con_ax.clear()
+                occ_map_render = np.copy(movable_obs)
+                occ_map_render = np.flip(occ_map_render, axis=0)
+                self.con_ax.imshow(occ_map_render, cmap='gray')
+                self.con_ax.axis('off')
+                save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
+                fp = os.path.join(save_fig_dir, str(self.t) + '_movable_obs.png')
+                self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
+                
+                #visualize fixed obstacles
+                self.con_ax.clear()
+                occ_map_render = np.copy(fixed_obs)
+                occ_map_render = np.flip(occ_map_render, axis=0)
+                self.con_ax.imshow(occ_map_render, cmap='gray')
+                self.con_ax.axis('off')
+                save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
+                fp = os.path.join(save_fig_dir, str(self.t) + '_fixed_obs.png')
+                self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
+
+                #visualize goal image
+                self.con_ax.clear()
+                occ_map_render = np.copy(goal_img)
+                occ_map_render = np.flip(occ_map_render, axis=0)
+                self.con_ax.imshow(occ_map_render, cmap='gray')
+                self.con_ax.axis('off')
+                save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
+                fp = os.path.join(save_fig_dir, str(self.t) + '_goal_img.png')
                 self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
 
         else:
