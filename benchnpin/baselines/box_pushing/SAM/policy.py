@@ -45,7 +45,7 @@ class ReplayBuffer:
         return len(self.buffer)
     
 class DenseActionSpacePolicy:
-    def __init__(self, action_space, num_input_channels, final_exploration, train=False, checkpoint_path=None, resume_training=False, evaluate=False, job_id_to_resume=None, random_seed=None):
+    def __init__(self, action_space, num_input_channels, final_exploration, train=False, checkpoint_path='', resume_training=False, evaluate=False, job_id_to_resume=None, random_seed=None, model_name='sam_model'):
         self.action_space = action_space
         self.num_input_channels = num_input_channels
         self.final_exploration = final_exploration
@@ -58,9 +58,9 @@ class DenseActionSpacePolicy:
         # Resume from checkpoint if applicable
         if os.path.exists(checkpoint_path) or resume_training or evaluate:
             if resume_training:
-                model_path = os.path.join(os.path.dirname(__file__), f'checkpoint/{job_id_to_resume}/model-{self.model_name}.pt')
+                model_path = os.path.join(os.path.dirname(__file__), f'checkpoint/{job_id_to_resume}/model-{model_name}.pt')
             elif evaluate:
-                model_path = os.path.join(os.path.dirname(__file__), f'models_to_test/{self.model_name}.pt')
+                model_path = os.path.join(os.path.dirname(__file__), f'models_to_test/model-{model_name}.pt')
             else:
                 checkpoint_dir = os.path.dirname(checkpoint_path)
                 model_path = f'{checkpoint_dir}/model-{self.model_name}.pt'
@@ -324,7 +324,7 @@ class BoxPushingSAM(BasePolicy):
         model_path = f'{checkpoint_dir}/model-{self.model_name}.pt'
 
         if model_eps == 'latest':
-            self.model = DenseActionSpacePolicy(env.action_space.high, env.num_channels, self.final_exploration,
+            self.model = DenseActionSpacePolicy(env.action_space.high, env.num_channels, 0.0,
                                                 train=False, evaluate=True)
         else:
             model_checkpoint = self.model_name + '_' + model_eps + '_steps'
@@ -337,7 +337,7 @@ class BoxPushingSAM(BasePolicy):
             done = truncated = False
             eps_reward = 0.0
             while True:
-                action, _ = self.model.step(obs, exploration_eps=0.0)
+                action, _ = self.model.step(obs)
                 obs, reward, done, truncated, info = env.step(action)
                 eps_reward += reward
                 if done or truncated:

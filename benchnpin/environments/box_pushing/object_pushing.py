@@ -107,7 +107,7 @@ class ObjectPushing(gym.Env):
         self.robot_info['color'] = get_color('red')
         self.robot_radius = ((self.robot_info.length**2 + self.robot_info.width**2)**0.5 / 2) * 1.2
         self.robot_half_width = max(self.robot_info.length, self.robot_info.width) / 2
-        robot_pixel_width = int(2 * self.robot_half_width * LOCAL_MAP_PIXELS_PER_METER)
+        robot_pixel_width = int(2 * self.robot_radius * LOCAL_MAP_PIXELS_PER_METER)
         self.robot_state_channel = np.zeros((LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH), dtype=np.float32)
         start = int(np.floor(LOCAL_MAP_PIXEL_WIDTH / 2 - robot_pixel_width / 2))
         for i in range(start, start + robot_pixel_width):
@@ -146,6 +146,7 @@ class ObjectPushing(gym.Env):
         self.action_space = spaces.Box(low=0, high=LOCAL_MAP_PIXEL_WIDTH * LOCAL_MAP_PIXEL_WIDTH, dtype=np.float64)
 
         # Define observation space
+        self.show_observation = False
         self.low_dim_state = self.cfg.low_dim_state
         if self.low_dim_state:
             self.fixed_trial_idx = self.cfg.fixed_trial_idx
@@ -170,6 +171,7 @@ class ObjectPushing(gym.Env):
             self.linear_speed = 0.0
             self.linear_speed_increment = 0.02
 
+        if self.cfg.render.show_obs:
             # show state
             num_plots = self.num_channels
             self.state_plot = plt
@@ -669,14 +671,15 @@ class ObjectPushing(gym.Env):
 
         if self.low_dim_state:
             updated_cubes = CostMap.get_obs_from_poly(self.cubes)
-            observation = self.generate_observation_low_dim(updated_cubes=updated_cubes)
+            self.observation = self.generate_observation_low_dim(updated_cubes=updated_cubes)
 
         else:
-            observation = self.generate_observation()
+            self.observation = self.generate_observation()
 
         if self.cfg.render.show:
+            self.show_observation = True
             self.render()
-        return observation, info
+        return self.observation, info
     
 
     def step(self, action):
@@ -924,7 +927,7 @@ class ObjectPushing(gym.Env):
                 
                 sim_steps += 1
                 if sim_steps % 5 == 0 and self.cfg.render.show:
-                    self.observation = self.generate_observation()
+                    # self.observation = self.generate_observation()
                     self.render()
 
                 # break if robot is stuck
@@ -991,7 +994,7 @@ class ObjectPushing(gym.Env):
             terminated = True
         
         truncated = False
-        if self.inactivity_counter > self.inactivity_cutoff:
+        if self.inactivity_counter >= self.inactivity_cutoff:
             terminated = True
             truncated = True
         
@@ -1012,6 +1015,7 @@ class ObjectPushing(gym.Env):
         
         # render environment
         if self.cfg.render.show:
+            self.show_observation = True
             self.render()
         
         return self.observation, reward, terminated, truncated, info
@@ -1250,12 +1254,13 @@ class ObjectPushing(gym.Env):
             vertices_px[:, 1] = small_overhead_map.shape[0] - vertices_px[:, 1]
 
             # draw the boundary on the small_overhead_map
+            small_overhead_map[small_overhead_map == 1] = FLOOR_SEG_INDEX / MAX_SEG_INDEX
             if poly.label == 'receptacle':
                 fillPoly(small_overhead_map, [vertices_px], color=RECEPTACLE_SEG_INDEX/MAX_SEG_INDEX)
             elif poly.label == 'cube':
                 fillPoly(small_overhead_map, [vertices_px], color=CUBE_SEG_INDEX/MAX_SEG_INDEX)
-            elif poly.label == 'robot':
-                fillPoly(small_overhead_map, [vertices_px], color=ROBOT_SEG_INDEX/MAX_SEG_INDEX)
+            # elif poly.label == 'robot':
+            #     fillPoly(small_overhead_map, [vertices_px], color=ROBOT_SEG_INDEX/MAX_SEG_INDEX)
 
         start_i, start_j = int(self.global_overhead_map.shape[0] / 2 - small_overhead_map.shape[0] / 2), int(self.global_overhead_map.shape[1] / 2 - small_overhead_map.shape[1] / 2)
         self.global_overhead_map[start_i:start_i + small_overhead_map.shape[0], start_j:start_j + small_overhead_map.shape[1]] = small_overhead_map
@@ -1333,7 +1338,7 @@ class ObjectPushing(gym.Env):
 
     def render(self, mode='human', close=False):
         """Renders the environment."""
-        if self.t % self.cfg.anim.plot_steps == 0:
+        if self.t % self.cfg.anim.plot_steps == 0 and False:
             direc = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx), str(self.t) + '.png')
             self.renderer.render(save=False, path=direc, manual_draw=True)
 
@@ -1353,18 +1358,20 @@ class ObjectPushing(gym.Env):
         else:
             self.renderer.render(save=False, manual_draw=True)
 
-            if self.cfg.render.show_obs and not self.low_dim_state:# and self.t % self.cfg.render.frequency == 1:
+            if self.cfg.render.show_obs and not self.low_dim_state and self.show_observation:# and self.t % self.cfg.render.frequency == 1:
+                self.show_observation = False
                 for ax, i in zip(self.state_ax, range(self.num_channels)):
                     ax.clear()
                     ax.set_title(f'Channel {i}')
-                    im = ax.imshow(self.observation[i,:,:], cmap='hot', interpolation='nearest')
+                    im = ax.imshow(self.observation[:,:,i], cmap='hot', interpolation='nearest')
                     if self.colorbars[i] is not None:
                         self.colorbars[i].update_normal(im)
                     else:
                         self.colorbars[i] = self.state_fig.colorbar(im, ax=ax)
                 
                 self.state_plot.draw()
-                self.state_plot.pause(0.001)
+                # self.state_plot.pause(0.001)
+                self.state_plot.pause(0.1)
 
 
     def close(self):
