@@ -72,6 +72,7 @@ class TargetCourse:
         self.ch = ch
         self.Lfc = Lfc
         self.path_length = path_length(np.asarray([cx, cy]).T, cumsum=True)
+        print(self.path_length)
         self.setpoint_al = 0
 
     def init_setpoint(self, x, y):
@@ -114,7 +115,7 @@ class TargetCourse:
         self.setpoint_al += target_speed * dt
         ind = len(self.path_length[self.path_length < self.setpoint_al])
         return [self.cx[ind], self.cy[ind], self.ch[ind]], ind
-
+        
 
 class PID:
     def __init__(self, Kp, Ki, Kd):
@@ -156,7 +157,10 @@ class DP:
     def get_setpoint(self):
         # the switch from one index to the next causes a spike
         # in the derivative term in the pid controller
+        
         return self.target_course.advance(self.target_speed, self.dt)[0]
+        # return self.target_course.search_target_index(self.state.x, self.state.y)[0]
+
 
     def get_state_history(self):
         data = self.state_storage.get_history()

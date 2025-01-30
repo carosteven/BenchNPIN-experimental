@@ -68,10 +68,14 @@ class AreaClearingEnv(gym.Env):
         self.path = None
         self.scatter = False
 
+        self.target_speed = self.cfg.controller.target_speed
+
         # Define action space
         max_yaw_rate_step = (np.pi/2) / 15        # rad/sec
         print("max yaw rate per step: ", max_yaw_rate_step)
-        self.action_space = spaces.Box(low=-max_yaw_rate_step, high=max_yaw_rate_step, dtype=np.float64)
+        self.action_space = spaces.Box(low= np.array([-self.target_speed, -max_yaw_rate_step]), 
+                                       high=np.array([self.target_speed, max_yaw_rate_step]),
+                                       dtype=np.float64)
 
         # Define observation space
         self.low_dim_state = self.cfg.low_dim_state
@@ -115,7 +119,6 @@ class AreaClearingEnv(gym.Env):
         self.horizon = self.cfg.a_star.horizon
         self.replan = self.cfg.a_star.replan
         self.dt = self.cfg.controller.dt
-        self.target_speed = self.cfg.controller.target_speed
 
         # setup pymunk environment
         self.space = pymunk.Space()  # threaded=True causes some issues
@@ -175,7 +178,9 @@ class AreaClearingEnv(gym.Env):
         if self.cfg.render.show:
             if self.renderer is None:
                 self.renderer = Renderer(self.space, env_width=self.cfg.occ.map_width, env_height=self.cfg.occ.map_height, render_scale=20, 
-                        background_color=(255, 255, 255), caption="Area Clearing", clearance_boundary=self.boundary_vertices)
+                        background_color=(255, 255, 255), caption="Area Clearing", 
+                        clearance_boundary=self.boundary_vertices
+                        )
             else:
                 self.renderer.reset(new_space=self.space)
         
@@ -379,12 +384,9 @@ class AreaClearingEnv(gym.Env):
 
         else:
 
-            # constant forward speed in global frame
-            global_velocity = R(self.agent.body.angle) @ [self.target_speed, 0]
-
             # apply velocity controller
-            self.agent.body.angular_velocity = action
-            self.agent.body.velocity = Vec2d(global_velocity[0], global_velocity[1])
+            self.agent.body.angular_velocity = action[1] / 2
+            self.agent.body.velocity = action[0].tolist()
 
         # move simulation forward
         boundary_constraint_violated = False

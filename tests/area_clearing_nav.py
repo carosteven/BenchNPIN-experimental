@@ -32,17 +32,11 @@ for eps_idx in range(total_episodes):
 
     # start a new rollout
     while True:
-        if print_count == 0:
-            print(info['state'])
-
         # call planning based policy
         action = policy.act(observation=(observation / 255).astype(np.float64), agent_pos=info['state'], obstacles=obstacles)
-        if print_count == 0:
-            print(policy.path)
-            print_count += 1
-        
         env.update_path(policy.path)
 
+        print(action)
         observation, reward, terminated, truncated, info = env.step(action)
         obstacles = info['obs']
         env.render()
@@ -53,7 +47,7 @@ for eps_idx in range(total_episodes):
         total_scaled_col_reward += info['scaled collision reward']
 
         if terminated or truncated:
-            # policy.reset()
+            policy.reset()
             break
 
 print(total_dist_reward, total_col_reward, total_scaled_col_reward)

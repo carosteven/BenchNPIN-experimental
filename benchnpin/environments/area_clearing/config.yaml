@@ -8,11 +8,11 @@ plot:
   y_axis_limit: 18  # limits the y-axis of the plot
   show: false       # true will show planner plots
 
-# env: 'clear_env'
-env: 'walled_env'
+env: 'clear_env'
+# env: 'walled_env'
 # env: 'walled_env_with_columns'
 
-demo_mode: true     # when using demo mode, control both forward and angular speed
+demo_mode: false     # when using demo mode, control both forward and angular speed
 
 # obstacles information
 randomize_obstacles: true
@@ -122,8 +122,7 @@ controller:
   Lfc: 0.5
   
   # target speed
-  # target_speed: 0.3  # m/s
-  target_speed: 0  # m/s
+  target_speed: 0.3  # m/s
 
   PID_gains:  # gains for 3 PIDs
     - [ 5, 0, 5 ]

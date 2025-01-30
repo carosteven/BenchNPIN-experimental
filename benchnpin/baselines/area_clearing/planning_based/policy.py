@@ -1,11 +1,16 @@
 import benchnpin.environments
 import gymnasium as gym
-from benchnpin.baselines.base_class import BasePolicy
-from benchnpin.common.controller.dp import DP
 import numpy as np
+import os
 
 from shapely.geometry import Polygon, LineString
 from shapely import shortest_line
+
+from benchnpin.common.controller.dp import DP
+from benchnpin.common.utils.utils import DotDict
+from benchnpin.common.evaluation.metrics import euclid_dist
+
+from benchnpin.baselines.base_class import BasePolicy
 
 from benchnpin.baselines.area_clearing.planning_based.GTSPPlanner.transition_graph_lookup import TransitionGraphLookup
 from benchnpin.baselines.area_clearing.planning_based.GTSPPlanner.solve_gtsp import GTSPSolver
@@ -43,7 +48,15 @@ class PlanningBasedPolicy(BasePolicy):
     def __init__(self) -> None:
         super().__init__()
 
+        # get current directory of this script
+        self.current_dir = os.path.dirname(__file__)
+        # construct absolute path to the env_config folder
+        cfg_file = os.path.join(self.current_dir, 'config.yaml')
+        self.cfg = DotDict.load_from_file(cfg_file)
+
         self.path = None
+        self.dt = self.cfg.controller.dt
+        self.velocity = self.cfg.controller.target_speed
 
         self.boundary_vertices = None
         self.walls = None
@@ -51,6 +64,9 @@ class PlanningBasedPolicy(BasePolicy):
 
         self.boundary_polygon = None
         self.boundary_goals = None
+
+        self.current_point_id = 0
+
 
     def update_boundary_and_obstacles(self, boundary, walls, static_obstacles):
         self.boundary_vertices = boundary
@@ -101,8 +117,6 @@ class PlanningBasedPolicy(BasePolicy):
             if is_in_boundary:
                 obstacles_to_push.append(obstacle)
 
-        print(self.boundary_goals)
-
         all_pushing_paths = []
         for obstacle in obstacles_to_push:
             obstacle_poly = Polygon(obstacle)
@@ -123,10 +137,17 @@ class PlanningBasedPolicy(BasePolicy):
         output_tuple, time_found = gtsp_solver.solve_GTSP_Problem(obstacles_to_push, all_pushing_paths, transition_graph, agent_pos)
         final_nodes, transition_paths, transition_cost, transition_length, total_angle, transition_costs = output_tuple
 
-        self.path = [agent_pos[:2]]
+        self.path = [agent_pos]
         for i in range(len(final_nodes)):
-            self.path.append(final_nodes[i].traversal_route[0])
-            self.path.append(final_nodes[i].traversal_route[-1])
+            point_1 = final_nodes[i].traversal_route[0]
+            point_2 = final_nodes[i].traversal_route[-1]
+
+            heading = np.arctan2(point_2[1] - point_1[1], point_2[0] - point_1[0])
+
+            self.path.append([point_1[0], point_1[1], heading])
+            self.path.append([point_2[0], point_2[1], heading])
+        
+        self.path = np.array(self.path)
 
     def act(self, observation, **kwargs):
 
@@ -140,22 +161,30 @@ class PlanningBasedPolicy(BasePolicy):
         if self.path is None:
             self.plan_path(agent_pos, observation, obstacles)
 
-            # # setup dp controller to track the planned path
-            # cx = self.path.T[0]
-            # cy = self.path.T[1]
-            # ch = self.path.T[2]
-            # self.dp = DP(x=agent_pos[0], y=agent_pos[1], yaw=agent_pos[2],
-            #         cx=cx, cy=cy, ch=ch, **self.lattice_planner.cfg.controller)
-            # self.dp_state = self.dp.state
+            # setup dp controller to track the planned path
+            cx = self.path.T[0]
+            cy = self.path.T[1]
+            ch = self.path.T[2]
+            self.dp = DP(x=agent_pos[0], y=agent_pos[1], yaw=agent_pos[2],
+                    cx=cx, cy=cy, ch=ch, **self.cfg.controller)
+            self.dp_state = self.dp.state
         
-        # # call ideal controller to get angular velocity control
-        # omega, _ = self.dp.ideal_control(agent_pos[0], agent_pos[1], agent_pos[2])
+            self.current_point_id = 1
 
-        # # update setpoint
-        # x_s, y_s, h_s = self.dp.get_setpoint()
-        # self.dp.setpoint = np.asarray([x_s, y_s, np.unwrap([self.dp_state.yaw, h_s])[1]])
+        if(self.current_point_id >= len(self.path)):
+            return np.array([0.0, 0.0]), 0.0
 
-        return omega
+        if(euclid_dist(agent_pos, self.path[self.current_point_id]) < 0.05):
+            self.current_point_id += 1
+            
+            # update setpoint
+            x_s, y_s, h_s = self.path[self.current_point_id]
+            self.dp.setpoint = np.asarray([x_s, y_s, np.unwrap([self.dp_state.yaw, h_s])[1]])
+
+        # call ideal controller to get angular velocity control
+        omega, velocity = self.dp.ideal_control(agent_pos[0], agent_pos[1], agent_pos[2])
+
+        return velocity, omega
 
 
     def evaluate(self, num_eps: int, model_eps: str ='latest') -> list:
