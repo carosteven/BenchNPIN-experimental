@@ -174,8 +174,11 @@ class PlanningBasedPolicy(BasePolicy):
         if(self.current_point_id >= len(self.path)):
             return np.array([0.0, 0.0]), 0.0
 
-        if(euclid_dist(agent_pos, self.path[self.current_point_id]) < 0.05):
+        if(euclid_dist(agent_pos, self.path[self.current_point_id]) < 0.4):
             self.current_point_id += 1
+
+            if(self.current_point_id >= len(self.path)):
+                return np.array([0.0, 0.0]), 0.0
             
             # update setpoint
             x_s, y_s, h_s = self.path[self.current_point_id]

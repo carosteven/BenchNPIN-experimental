@@ -396,7 +396,9 @@ class AreaClearingEnv(gym.Env):
             self.space.step(self.dt / self.steps)
 
             # apply boundary constraints
-            if self.agent.body.position.x < 0 or self.agent.body.position.x > self.cfg.occ.map_width:
+            if self.agent.body.position.x < 0 and abs(self.agent.body.position.x - 0) >= self.boundary_violation_limit:
+                boundary_constraint_violated = True
+            if self.agent.body.position.x > self.cfg.occ.map_width and abs(self.agent.body.position.x - self.cfg.occ.map_width) >= self.boundary_violation_limit:
                 boundary_constraint_violated = True
 
             for obs in self.static_obs_shapes + self.wall_shapes:

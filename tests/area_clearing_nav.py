@@ -36,7 +36,6 @@ for eps_idx in range(total_episodes):
         action = policy.act(observation=(observation / 255).astype(np.float64), agent_pos=info['state'], obstacles=obstacles)
         env.update_path(policy.path)
 
-        print(action)
         observation, reward, terminated, truncated, info = env.step(action)
         obstacles = info['obs']
         env.render()
@@ -47,6 +46,8 @@ for eps_idx in range(total_episodes):
         total_scaled_col_reward += info['scaled collision reward']
 
         if terminated or truncated:
+            print('Terminated:', terminated)
+            print('Truncated:', truncated)
             policy.reset()
             break
 
