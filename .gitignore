@@ -16,3 +16,5 @@ venv/
 
 *.gtsp
 tour.txt
+
+events.out*

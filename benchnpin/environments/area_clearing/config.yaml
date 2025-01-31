@@ -7,8 +7,8 @@ output_dir: "logs/" # 'output/trial0'
 plot:
   show: false       # true will show planner plots
 
-env: 'clear_env'
-# env: 'walled_env'
+# env: 'clear_env'
+env: 'walled_env'
 # env: 'walled_env_with_columns'
 
 demo_mode: false     # when using demo mode, control both forward and angular speed
