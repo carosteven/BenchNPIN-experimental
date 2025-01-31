@@ -41,6 +41,8 @@ class Renderer():
 
         # convert from pymunk meter unit to pygame pixel unit
         self.draw_options.transform = pymunk.Transform.scaling(self.render_scale)
+        if self.centered:
+            self.draw_options.transform = self.draw_options.transform.translated(env_width / 2, env_width / 2)
 
         self.space = space
 
