@@ -435,10 +435,9 @@ class AreaClearingEnv(gym.Env):
         failure = boundary_constraint_violated or collision_with_static_or_walls or boundary_violation_terminal
 
         # # check episode terminal condition
-        # if all_boxes_completed:
-        #     terminated = True
-        # el
-        if failure:
+        if all_boxes_completed:
+            terminated = True
+        elif failure:
             terminated = True
         else:
             terminated = False
