@@ -11,8 +11,6 @@ plot:
 env: 'walled_env'
 # env: 'walled_env_with_columns'
 
-demo_mode: false     # when using demo mode, control both forward and angular speed
-
 # obstacles information
 num_obstacles: 5
 obstacle_size: 0.5

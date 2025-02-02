@@ -95,11 +95,7 @@ class AreaClearingEnv(gym.Env):
 
         self.con_fig, self.con_ax = plt.subplots(figsize=(10, 10))
 
-        if self.cfg.demo_mode:
-            self.angular_speed = 0.0
-            self.angular_speed_increment = 0.005
-            self.linear_speed = 0.0
-            self.linear_speed_increment = 0.02
+        self.demo_mode = False
 
         self.boundary_vertices = self.env_cfg.boundary
         self.walls = self.env_cfg.walls if 'walls' in self.env_cfg else []
@@ -118,6 +114,14 @@ class AreaClearingEnv(gym.Env):
         self.renderer = None
 
         self.cleared_box_count = 0
+    
+    def activate_demo_mode(self):
+        self.demo_mode = True
+        
+        self.angular_speed = 0.0
+        self.angular_speed_increment = 0.005
+        self.linear_speed = 0.0
+        self.linear_speed_increment = 0.02
 
     def init_area_clearing_sim(self):
 
@@ -341,7 +345,11 @@ class AreaClearingEnv(gym.Env):
             observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles)
 
         else:
+            low_level_observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles)
+            info['low_level_observation'] = low_level_observation
+            
             observation = self.generate_observation()
+
         return observation, info
     
 
@@ -349,7 +357,7 @@ class AreaClearingEnv(gym.Env):
         """Executes one time step in the environment and returns the result."""
         self.t += 1
 
-        if self.cfg.demo_mode:
+        if self.demo_mode:
 
             if action == FORWARD:
                 self.linear_speed = 0.3
@@ -476,6 +484,9 @@ class AreaClearingEnv(gym.Env):
         if self.low_dim_state:
             observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles)
         else:
+            low_level_observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles)
+            info['low_level_observation'] = low_level_observation
+            
             observation = self.generate_observation()
         
         return observation, reward, terminated, False, info
