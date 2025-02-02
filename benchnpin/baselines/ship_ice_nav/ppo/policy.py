@@ -26,7 +26,7 @@ class ShipIcePPO(BasePolicy):
                                         features_extractor_kwargs=dict(features_dim=512),
                                         net_arch=dict(pi=[512, 256], vf=[512, 256])),
             n_steps=256,
-            batch_size=64,
+            batch_size=128,
             n_epochs=10,
             learning_rate=5e-4,
             gamma=0.97,
