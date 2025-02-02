@@ -7,6 +7,7 @@ import gymnasium as gym
 import numpy as np
 from benchnpin.baselines.ship_ice_nav.planning_based.policy import PlanningBasedPolicy
 from benchnpin.baselines.ship_ice_nav.ppo.policy import ShipIcePPO
+from benchnpin.baselines.ship_ice_nav.sac.policy import ShipIceSAC 
 
 env = gym.make('ship-ice-v0')
 env = env.unwrapped
@@ -17,12 +18,13 @@ env = env.unwrapped
 
 # initialize RL policy
 policy = ShipIcePPO()
+# policy = ShipIceSAC()
 
 total_dist_reward = 0
 total_col_reward = 0
 total_scaled_col_reward = 0
 
-total_episodes = 5
+total_episodes = 500
 for eps_idx in range(total_episodes):
 
     observation, info = env.reset()
@@ -39,7 +41,8 @@ for eps_idx in range(total_episodes):
         # env.update_path(policy.path)
 
         # call RL policy
-        action = policy.act(observation=observation, model_eps='140000')
+        action = policy.act(observation=observation, model_eps='470000')
+        # action = policy.act(observation=observation, model_eps='130000')
 
 
         observation, reward, terminated, truncated, info = env.step(action)
