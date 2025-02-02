@@ -10,14 +10,14 @@ from benchnpin.baselines.ship_ice_nav.planning_based.policy import PlanningBased
 
 # ========================= PPO Policy =====================================
 ppo_policy = ShipIcePPO()
-ppo_policy.train(total_timesteps=int(2e5), checkpoint_freq=10000)
+ppo_policy.train(total_timesteps=int(5e5), checkpoint_freq=10000)
 evaluations = ppo_policy.evaluate(num_eps=5, model_eps='300')
 print("PPO Eval: ", evaluations)
 
 
 # ========================= SAC Policy =====================================
 # sac_policy = ShipIceSAC()
-# sac_policy.train(total_timesteps=500)
+# sac_policy.train(total_timesteps=int(5e5), checkpoint_freq=10000)
 # evaluations = sac_policy.evaluate(num_eps=5, model_eps='300')
 # print("PPO Eval: ", evaluations)
 
