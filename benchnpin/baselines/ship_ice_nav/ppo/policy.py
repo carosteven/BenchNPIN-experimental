@@ -1,5 +1,7 @@
 from benchnpin.baselines.base_class import BasePolicy
 from benchnpin.baselines.feature_extractors import ResNet18
+from benchnpin.common.merics.ship_ice_metric import ShipIceMetric
+from typing import List, Tuple
 import benchnpin.environments
 import gymnasium as gym
 from stable_baselines3 import PPO
@@ -66,7 +68,7 @@ class ShipIcePPO(BasePolicy):
 
 
 
-    def evaluate(self, num_eps: int, model_eps: str ='latest'):
+    def evaluate(self, num_eps: int, model_eps: str ='latest') -> Tuple[List[float], List[float], List[float], str]:
 
         if model_eps == 'latest':
             self.model = PPO.load(os.path.join(self.model_path, self.model_name))
@@ -76,23 +78,21 @@ class ShipIcePPO(BasePolicy):
 
         env = gym.make('ship-ice-v0')
         env = env.unwrapped
+        metric = ShipIceMetric(env=env, alg_name="PPO")
 
-        rewards_list = []
         for eps_idx in range(num_eps):
             print("Progress: ", eps_idx, " / ", num_eps, " episodes")
-            obs, info = env.reset()
+            obs, info = metric.reset()
             done = truncated = False
-            eps_reward = 0.0
             while True:
                 action, _ = self.model.predict(obs)
-                obs, reward, done, truncated, info = env.step(action)
-                eps_reward += reward
+                obs, reward, done, truncated, info = metric.step(action)
                 if done or truncated:
-                    rewards_list.append(eps_reward)
                     break
         
         env.close()
-        return rewards_list
+        metric.plot_scores()
+        return metric.efficiency_scores, metric.effort_scores, metric.rewards, "PPO"
 
 
     

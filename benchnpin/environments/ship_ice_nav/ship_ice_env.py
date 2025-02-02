@@ -343,8 +343,10 @@ class ShipIceEnv(gym.Env):
             reward += BOUNDARY_PENALTY
 
         # apply terminal reward
+        trial_success = False
         if terminated and not boundary_violation_terminal:
             reward += TERMINAL_REWARD
+            trial_success = True
 
         # Optionally, we can add additional info
         info = {'state': (round(self.ship_body.position.x, 2),
@@ -354,6 +356,7 @@ class ShipIceEnv(gym.Env):
                 'collision reward': collision_reward, 
                 'scaled collision reward': collision_reward * self.beta, 
                 'dist reward': dist_reward, 
+                'trial_success': trial_success,
                 'obs': updated_obstacles}
         
         if self.low_dim_state:

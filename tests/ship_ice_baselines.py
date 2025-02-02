@@ -7,29 +7,28 @@ from benchnpin.baselines.ship_ice_nav.ppo.policy import ShipIcePPO
 from benchnpin.baselines.ship_ice_nav.sac.policy import ShipIceSAC
 from benchnpin.baselines.ship_ice_nav.td3.policy import ShipIceTD3
 from benchnpin.baselines.ship_ice_nav.planning_based.policy import PlanningBasedPolicy
+from benchnpin.common.merics.base_metric import BaseMetric
 
-# ========================= PPO Policy =====================================
+
+""" ============================== Policy Training ========================================"""
 ppo_policy = ShipIcePPO()
 ppo_policy.train(total_timesteps=int(5e5), checkpoint_freq=10000)
-evaluations = ppo_policy.evaluate(num_eps=5, model_eps='300')
-print("PPO Eval: ", evaluations)
+
+sac_policy = ShipIceSAC()
+sac_policy.train(total_timesteps=int(5e5), checkpoint_freq=10000)
 
 
-# ========================= SAC Policy =====================================
-# sac_policy = ShipIceSAC()
-# sac_policy.train(total_timesteps=int(5e5), checkpoint_freq=10000)
-# evaluations = sac_policy.evaluate(num_eps=5, model_eps='300')
-# print("PPO Eval: ", evaluations)
 
+""" ============================== Policy Benchmark ========================================"""
+benchmark_results = []
+num_eps = 10
 
-# ========================= PPO Policy =====================================
-# td3_policy = ShipIceTD3()
-# td3_policy.train(total_timesteps=500)
-# evaluations = td3_policy.evaluate(num_eps=5, model_eps='latest')
-# print("PPO Eval: ", evaluations)
+ppo_policy = ShipIcePPO()
+sac_policy = ShipIceSAC()
+planning_policy = PlanningBasedPolicy(planner_type='lattice')
 
+benchmark_results.append(ppo_policy.evaluate(num_eps=num_eps, model_eps='300000'))
+benchmark_results.append(sac_policy.evaluate(num_eps=num_eps, model_eps='130000'))
+# benchmark_results.append(planning_policy.evaluate(num_eps=num_eps))                   # we currently skip planning-based for benchmarking
 
-# ========================= Planning-based Policy =====================================
-# planning_policy = PlanningBasedPolicy(planner_type='lattice')
-# evaluations = planning_policy.evaluate(num_eps=5)
-# print("Plannning Based Eval: ", evaluations)
+BaseMetric.plot_algs_scores(benchmark_results, save_fig_dir='./')
