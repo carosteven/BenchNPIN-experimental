@@ -21,6 +21,13 @@ from benchnpin.common.utils.renderer import Renderer
 
 from shapely.geometry import Polygon
 
+from benchnpin.environments.area_clearing.utils import round_up_to_even, position_to_pixel_indices
+from scipy.ndimage import distance_transform_edt, rotate as rotate_image
+from skimage.morphology import disk, binary_dilation
+import spfa
+
+from cv2 import fillPoly
+
 R = lambda theta: np.asarray([
     [np.cos(theta), -np.sin(theta)],
     [np.sin(theta), np.cos(theta)]
@@ -28,6 +35,17 @@ R = lambda theta: np.asarray([
 
 BOUNDARY_PENALTY = -50
 TERMINAL_REWARD = 200
+
+LOCAL_MAP_PIXEL_WIDTH = 96
+LOCAL_MAP_WIDTH = 10 # 10 meters
+LOCAL_MAP_PIXELS_PER_METER = LOCAL_MAP_PIXEL_WIDTH / LOCAL_MAP_WIDTH
+
+OBSTACLE_SEG_INDEX = 0
+FLOOR_SEG_INDEX = 1
+RECEPTACLE_SEG_INDEX = 3
+CUBE_SEG_INDEX = 4
+ROBOT_SEG_INDEX = 5
+MAX_SEG_INDEX = 8
 
 FORWARD = 0
 STOP_TURNING = 1
@@ -52,7 +70,6 @@ class AreaClearingEnv(gym.Env):
         cfg_file = os.path.join(self.current_dir, 'config.yaml')
 
         cfg = DotDict.load_from_file(cfg_file)
-        self.occupancy = OccupancyGrid(grid_width=cfg.occ.grid_size, grid_height=cfg.occ.grid_size, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, ship_body=None)
         self.cfg = cfg
 
         env_cfg_file_path = os.path.join(self.current_dir, 'envs/' + cfg.env + '.yaml')
@@ -67,6 +84,27 @@ class AreaClearingEnv(gym.Env):
         self.episode_idx = None
         self.path = None
         self.scatter = False
+
+        # observation
+        self.num_channels = 3
+        self.observation = None
+        self.global_overhead_map = None
+        self.small_obstacle_map = None
+        self.configuration_space = None
+        self.configuration_space_thin = None
+        self.closest_cspace_indices = None
+
+        # robot state channel
+        self.agent_info = self.cfg.agent
+        self.robot_radius = ((self.agent_info.length**2 + self.agent_info.width**2)**0.5 / 2) * 1.2
+        robot_pixel_width = int(2 * self.robot_radius * LOCAL_MAP_PIXELS_PER_METER)
+        self.robot_state_channel = np.zeros((LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH), dtype=np.float32)
+        start = int(np.floor(LOCAL_MAP_PIXEL_WIDTH / 2 - robot_pixel_width / 2))
+        for i in range(start, start + robot_pixel_width):
+            for j in range(start, start + robot_pixel_width):
+                # Circular robot mask
+                if (((i + 0.5) - LOCAL_MAP_PIXEL_WIDTH / 2)**2 + ((j + 0.5) - LOCAL_MAP_PIXEL_WIDTH / 2)**2)**0.5 < robot_pixel_width / 2:
+                    self.robot_state_channel[i, j] = 1
 
         self.target_speed = self.cfg.controller.target_speed
 
@@ -87,11 +125,11 @@ class AreaClearingEnv(gym.Env):
                 self.observation_space = spaces.Box(low=-10, high=30, shape=(6,), dtype=np.float64)
 
         else:
-            self.observation_shape = (2, self.occupancy.occ_map_height, self.occupancy.occ_map_width)
+            self.observation_shape = (self.num_channels, LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH)
             self.observation_space = spaces.Box(low=0, high=1, shape=self.observation_shape, dtype=np.float64)
 
         self.yaw_lim = (0, np.pi)       # lower and upper limit of ship yaw  
-        self.boundary_violation_limit = self.occupancy.occ_map_width / 4       # if the ship is out of boundary more than this limit, terminate and truncate the episode 
+        self.boundary_violation_limit = self.cfg.occ.map_width / 4       # if the ship is out of boundary more than this limit, terminate and truncate the episode 
 
         self.con_fig, self.con_ax = plt.subplots(figsize=(10, 10))
 
@@ -114,6 +152,10 @@ class AreaClearingEnv(gym.Env):
         self.renderer = None
 
         self.cleared_box_count = 0
+
+        self.state_plot = plt
+        self.state_fig, self.state_ax = self.state_plot.subplots(1, self.num_channels, figsize=(4 * self.num_channels, 6))
+        self.colorbars = [None] * self.num_channels
     
     def activate_demo_mode(self):
         self.demo_mode = True
@@ -205,7 +247,6 @@ class AreaClearingEnv(gym.Env):
             mid_x = (self.min_x_boundary + self.max_x_boundary) / 2
             self.start = (mid_x, self.min_y_boundary + 1.0, np.pi / 2)
 
-        self.agent_info = self.cfg.agent
         self.agent_info['start_pos'] = self.start
         self.agent_info['color'] = get_color('red')
 
@@ -227,6 +268,9 @@ class AreaClearingEnv(gym.Env):
 
         self.agent = generate_sim_agent(self.space, self.agent_info, body_type=pymunk.Body.KINEMATIC)
         self.agent.collision_type = 1
+
+        # Initialize configuration space (only need to compute once)
+        self.update_configuration_space()
 
         for _ in range(1000):
             self.space.step(self.dt / self.steps)
@@ -326,6 +370,10 @@ class AreaClearingEnv(gym.Env):
 
         self.init_area_clearing_sim()
         self.init_area_clearing_env()
+
+        # reset map
+        self.global_overhead_map = self.create_padded_room_zeros()
+        self.update_global_overhead_map()
 
         self.t = 0
 
@@ -468,6 +516,8 @@ class AreaClearingEnv(gym.Env):
         # apply terminal reward
         if terminated and not failure:
             reward += TERMINAL_REWARD
+        
+        done = terminated or self.t >= self.t_max
 
         # Optionally, we can add additional info
         info = {'state': (round(self.agent.body.position.x, 2),
@@ -487,7 +537,10 @@ class AreaClearingEnv(gym.Env):
             low_level_observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles)
             info['low_level_observation'] = low_level_observation
             
-            observation = self.generate_observation()
+            observation = self.generate_observation(done=done)
+            self.observation = observation
+
+        self.update_global_overhead_map()
         
         return observation, reward, terminated, False, info
 
@@ -509,24 +562,132 @@ class AreaClearingEnv(gym.Env):
     def update_path(self, new_path):
         self.path = new_path
         self.renderer.update_path(path=self.path)
-    
 
-    def generate_observation(self):
-        # compute occupancy map observation  (40, 12)
-        raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, 
-                        ice_binary_w=int(self.occupancy.map_width * self.cfg.occ.m_to_pix_scale), 
-                        ice_binary_h=int(self.occupancy.map_height * self.cfg.occ.m_to_pix_scale))
-        self.occupancy.compute_con_gridmap(raw_ice_binary=raw_ice_binary, save_fig_dir=None)
-        occupancy = np.copy(self.occupancy.occ_map)         # (H, W)
+    def generate_observation(self, done=False):
+        self.update_global_overhead_map()
 
-        # compute footprint observation  NOTE: here we want unscaled, unpadded vertices
-        agent_pose = (self.agent.body.position.x, self.agent.body.position.y, self.agent.body.angle)
-        self.occupancy.compute_ship_footprint_planner(ship_state=agent_pose, ship_vertices=self.cfg.agent.vertices)
-        footprint = np.copy(self.occupancy.footprint)       # (H, W)
-
-        observation = np.concatenate((np.array([occupancy]), np.array([footprint])))          # (2, H, W)
-
+        if done:
+            return None
+        
+        # Overhead map
+        channels = []
+        channels.append(self.get_local_map(self.global_overhead_map, self.agent.body.position, self.agent.body.angle))
+        channels.append(self.robot_state_channel)
+        channels.append(self.get_local_distance_map(self.create_global_shortest_path_map(self.agent.body.position), self.agent.body.position, self.agent.body.angle))
+        observation = np.stack(channels)
         return observation
+    
+    def create_padded_room_zeros(self):
+        room_width = self.max_x_boundary - self.min_x_boundary
+        room_length = self.max_y_boundary - self.min_y_boundary
+        return np.zeros((
+            int(2 * np.ceil((room_width * LOCAL_MAP_PIXELS_PER_METER + LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)) / 2)),
+            int(2 * np.ceil((room_length * LOCAL_MAP_PIXELS_PER_METER + LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)) / 2))
+        ), dtype=np.float32)
+    
+    def update_global_overhead_map(self):
+        small_overhead_map = self.small_obstacle_map.copy()
+
+        for vertices in self.obstacles:
+            vertices_np = np.array(vertices)
+
+            # convert world coordinates to pixel coordinates
+            vertices_px = (vertices_np * LOCAL_MAP_PIXELS_PER_METER).astype(np.int32)
+            vertices_px[:, 0] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
+            vertices_px[:, 1] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
+            vertices_px[:, 1] = small_overhead_map.shape[0] - vertices_px[:, 1]
+
+            fillPoly(small_overhead_map, [vertices_px], color=CUBE_SEG_INDEX/MAX_SEG_INDEX)
+
+        start_i, start_j = int(self.global_overhead_map.shape[0] / 2 - small_overhead_map.shape[0] / 2), int(self.global_overhead_map.shape[1] / 2 - small_overhead_map.shape[1] / 2)
+        self.global_overhead_map[start_i:start_i + small_overhead_map.shape[0], start_j:start_j + small_overhead_map.shape[1]] = small_overhead_map
+
+    def get_local_distance_map(self, global_map, robot_position, robot_heading):
+        local_map = self.get_local_map(global_map, robot_position, robot_heading)
+        local_map -= local_map.min() # move the min to 0 to make invariant to size of environment
+        return local_map
+    
+    def get_local_map(self, global_map, robot_position, robot_heading):
+        crop_width = round_up_to_even(LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2))
+        rotation_angle = 90 - np.degrees(robot_heading)
+        pixel_i = int(np.floor(-robot_position[1] * LOCAL_MAP_PIXELS_PER_METER + global_map.shape[0] / 2))
+        pixel_j = int(np.floor(robot_position[0] * LOCAL_MAP_PIXELS_PER_METER + global_map.shape[1] / 2))
+        crop = global_map[pixel_i - crop_width // 2:pixel_i + crop_width // 2, pixel_j - crop_width // 2:pixel_j + crop_width // 2]
+        rotated_crop = rotate_image(crop, rotation_angle, order=0)
+        local_map = rotated_crop[
+            rotated_crop.shape[0] // 2 - LOCAL_MAP_PIXEL_WIDTH // 2:rotated_crop.shape[0] // 2 + LOCAL_MAP_PIXEL_WIDTH // 2,
+            rotated_crop.shape[1] // 2 - LOCAL_MAP_PIXEL_WIDTH // 2:rotated_crop.shape[1] // 2 + LOCAL_MAP_PIXEL_WIDTH // 2
+        ]
+        return local_map
+    
+    def get_local_overhead_map(self):
+        rotation_angle = -np.degrees(self.agent.body.angle) + 90
+        pos_y = int(np.floor(self.global_overhead_map.shape[0] / 2 - self.agent.body.position.y * LOCAL_MAP_PIXELS_PER_METER))
+        pos_x = int(np.floor(self.global_overhead_map.shape[1] / 2 + self.agent.body.position.x * LOCAL_MAP_PIXELS_PER_METER))
+        mask = rotate_image(np.zeros((LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH), dtype=np.float32), rotation_angle, order=0)
+        y_start = pos_y - int(mask.shape[0] / 2)
+        y_end = y_start + mask.shape[0]
+        x_start = pos_x - int(mask.shape[1] / 2)
+        x_end = x_start + mask.shape[1]
+        crop = self.global_overhead_map[y_start:y_end, x_start:x_end]
+        crop = rotate_image(crop, rotation_angle, order=0)
+        y_start = int(crop.shape[0] / 2 - LOCAL_MAP_PIXEL_WIDTH / 2)
+        y_end = y_start + LOCAL_MAP_PIXEL_WIDTH
+        x_start = int(crop.shape[1] / 2 - LOCAL_MAP_PIXEL_WIDTH / 2)
+        x_end = x_start + LOCAL_MAP_PIXEL_WIDTH
+        return crop[y_start:y_end, x_start:x_end]
+    
+    def create_global_shortest_path_map(self, robot_position):
+        pixel_i, pixel_j = position_to_pixel_indices(robot_position[0], robot_position[1], self.configuration_space.shape, LOCAL_MAP_PIXELS_PER_METER)
+        pixel_i, pixel_j = self.closest_valid_cspace_indices(pixel_i, pixel_j)
+        global_map, _ = spfa.spfa(self.configuration_space, (pixel_i, pixel_j))
+        global_map /= LOCAL_MAP_PIXELS_PER_METER
+        global_map /= (np.sqrt(2) * LOCAL_MAP_PIXEL_WIDTH) / LOCAL_MAP_PIXELS_PER_METER
+        # global_map *= self.cfg.env.shortest_path_channel_scale
+        return global_map
+    
+    def closest_valid_cspace_indices(self, i, j):
+        return self.closest_cspace_indices[:, i, j]
+    
+    def update_configuration_space(self):
+        """
+        Obstacles are dilated based on the robot's radius to define a collision-free space
+        """
+
+        obstacle_map = self.create_padded_room_zeros()
+        small_obstacle_map = np.zeros((LOCAL_MAP_PIXEL_WIDTH+20, LOCAL_MAP_PIXEL_WIDTH+20), dtype=np.float32)
+
+        for vertices in self.obstacles:
+            # get world coordinates of vertices
+            # vertices = [poly.body.local_to_world(v) for v in poly.get_vertices()]
+            # vertices_np = np.array([[v.x, v.y] for v in vertices])
+            vertices_np = np.array(vertices)
+
+            # convert world coordinates to pixel coordinates
+            vertices_px = (vertices_np * LOCAL_MAP_PIXELS_PER_METER).astype(np.int32)
+            vertices_px[:, 0] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
+            vertices_px[:, 1] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
+            vertices_px[:, 1] = small_obstacle_map.shape[0] - vertices_px[:, 1]
+
+            fillPoly(small_obstacle_map, [vertices_px], color=1)
+
+            # # draw the boundary on the small_obstacle_map
+            # if poly.label in ['wall', 'divider', 'column', 'corner']:
+            #     fillPoly(small_obstacle_map, [vertices_px], color=1)
+        
+        start_i, start_j = int(obstacle_map.shape[0] / 2 - small_obstacle_map.shape[0] / 2), int(obstacle_map.shape[1] / 2 - small_obstacle_map.shape[1] / 2)
+        obstacle_map[start_i:start_i + small_obstacle_map.shape[0], start_j:start_j + small_obstacle_map.shape[1]] = small_obstacle_map
+
+        # Dilate obstacles and walls based on robot size
+        robot_pixel_width = int(2 * self.robot_radius * LOCAL_MAP_PIXELS_PER_METER)
+        selem = disk(np.floor(robot_pixel_width / 2))
+        self.configuration_space = 1 - binary_dilation(obstacle_map, selem).astype(np.float32)
+        
+        selem_thin = disk(np.floor(robot_pixel_width / 4))
+        self.configuration_space_thin = 1 - binary_dilation(obstacle_map, selem_thin).astype(np.float32)
+
+        self.closest_cspace_indices = distance_transform_edt(1 - self.configuration_space, return_distances=False, return_indices=True)
+        self.small_obstacle_map = 1 - small_obstacle_map
 
     
     def boxes_completed(self, updated_obstacles, boundary_polygon):
@@ -556,25 +717,17 @@ class AreaClearingEnv(gym.Env):
 
             if self.cfg.render.log_obs and not self.low_dim_state:
 
-                # visualize occupancy map
-                self.con_ax.clear()
-                occ_map_render = np.copy(self.occupancy.occ_map)
-                occ_map_render = np.flip(occ_map_render, axis=0)
-                self.con_ax.imshow(occ_map_render, cmap='gray')
-                self.con_ax.axis('off')
-                save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
-                fp = os.path.join(save_fig_dir, str(self.t) + '_con.png')
-                self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
-
-                # visualize footprint
-                self.con_ax.clear()
-                occ_map_render = np.copy(self.occupancy.footprint)
-                occ_map_render = np.flip(occ_map_render, axis=0)
-                self.con_ax.imshow(occ_map_render, cmap='gray')
-                self.con_ax.axis('off')
-                save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
-                fp = os.path.join(save_fig_dir, str(self.t) + '_footprint.png')
-                self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
+                for ax, i in zip(self.state_ax, range(self.num_channels)):
+                    ax.clear()
+                    ax.set_title(f'Channel {i}')
+                    im = ax.imshow(self.observation[i,:,:], cmap='hot', interpolation='nearest')
+                    if self.colorbars[i] is not None:
+                        self.colorbars[i].update_normal(im)
+                    else:
+                        self.colorbars[i] = self.state_fig.colorbar(im, ax=ax)
+                
+                self.state_plot.draw()
+                self.state_plot.pause(0.001)
         else:
             self.renderer.render(save=False)
 
