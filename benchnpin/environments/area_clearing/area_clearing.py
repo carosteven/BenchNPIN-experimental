@@ -86,7 +86,7 @@ class AreaClearingEnv(gym.Env):
         self.scatter = False
 
         # observation
-        self.num_channels = 3
+        self.num_channels = 2
         self.observation = None
         self.global_overhead_map = None
         self.small_obstacle_map = None
@@ -119,11 +119,7 @@ class AreaClearingEnv(gym.Env):
         self.low_dim_state = self.cfg.low_dim_state
         if self.low_dim_state:
             self.fixed_trial_idx = self.cfg.fixed_trial_idx
-            if self.cfg.randomize_obstacles:
-                self.observation_space = spaces.Box(low=-10, high=30, shape=(self.cfg.num_obstacles * 2,), dtype=np.float64)
-            else:
-                self.observation_space = spaces.Box(low=-10, high=30, shape=(6,), dtype=np.float64)
-
+            self.observation_space = spaces.Box(low=-10, high=30, shape=(self.cfg.num_obstacles * 2,), dtype=np.float64)
         else:
             self.observation_shape = (self.num_channels, LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH)
             self.observation_space = spaces.Box(low=0, high=1, shape=self.observation_shape, dtype=np.float64)
@@ -153,8 +149,7 @@ class AreaClearingEnv(gym.Env):
 
         self.cleared_box_count = 0
 
-        self.state_plot = plt
-        self.state_fig, self.state_ax = self.state_plot.subplots(1, self.num_channels, figsize=(4 * self.num_channels, 6))
+        self.state_fig, self.state_ax = plt.subplots(1, self.num_channels, figsize=(4 * self.num_channels, 6))
         self.colorbars = [None] * self.num_channels
     
     def activate_demo_mode(self):
@@ -458,7 +453,7 @@ class AreaClearingEnv(gym.Env):
 
             for obs in self.static_obs_shapes + self.wall_shapes:
                 contact_pts = self.agent.shapes_collide(obs)
-                if len(contact_pts.points) > 0:
+                if len(contact_pts.points) > 1:
                     collision_with_static_or_walls = True
                     break
                 
@@ -469,7 +464,7 @@ class AreaClearingEnv(gym.Env):
 
         for obs in self.static_obs_shapes + self.wall_shapes:
             contact_pts = self.agent.shapes_collide(obs)
-            if len(contact_pts.points) > 0:
+            if len(contact_pts.points) > 1:
                 collision_with_static_or_walls = True
                 break
             
@@ -508,16 +503,17 @@ class AreaClearingEnv(gym.Env):
         collision_reward = -work
 
         reward = self.beta * collision_reward + dist_reward
+        truncated = self.t >= self.t_max
 
         # apply constraint penalty
         if failure:
             reward += BOUNDARY_PENALTY
 
         # apply terminal reward
-        if terminated and not failure:
+        if (terminated or truncated) and not failure:
             reward += TERMINAL_REWARD
         
-        done = terminated or self.t >= self.t_max
+        done = terminated or truncated
 
         # Optionally, we can add additional info
         info = {'state': (round(self.agent.body.position.x, 2),
@@ -542,7 +538,7 @@ class AreaClearingEnv(gym.Env):
 
         self.update_global_overhead_map()
         
-        return observation, reward, terminated, False, info
+        return observation, reward, terminated, truncated, info
 
 
     def generate_observation_low_dim(self, updated_obstacles):
@@ -573,8 +569,13 @@ class AreaClearingEnv(gym.Env):
         channels = []
         channels.append(self.get_local_map(self.global_overhead_map, self.agent.body.position, self.agent.body.angle))
         channels.append(self.robot_state_channel)
-        channels.append(self.get_local_distance_map(self.create_global_shortest_path_map(self.agent.body.position), self.agent.body.position, self.agent.body.angle))
-        observation = np.stack(channels)
+        # channels.append(self.get_local_distance_map(self.create_global_shortest_path_map(self.agent.body.position), self.agent.body.position, self.agent.body.angle))
+        try:
+            observation = np.stack(channels)
+        except Exception as e:
+            print(e)
+            print(channels[0].shape, channels[1].shape)
+            raise e
         return observation
     
     def create_padded_room_zeros(self):
@@ -726,8 +727,7 @@ class AreaClearingEnv(gym.Env):
                     else:
                         self.colorbars[i] = self.state_fig.colorbar(im, ax=ax)
                 
-                self.state_plot.draw()
-                self.state_plot.pause(0.001)
+                self.state_fig.savefig(os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx), str(self.t) + '_obs.png'))
         else:
             self.renderer.render(save=False)
 
