@@ -68,10 +68,14 @@ class AreaClearingEnv(gym.Env):
         self.path = None
         self.scatter = False
 
+        self.target_speed = self.cfg.controller.target_speed
+
         # Define action space
         max_yaw_rate_step = (np.pi/2) / 15        # rad/sec
         print("max yaw rate per step: ", max_yaw_rate_step)
-        self.action_space = spaces.Box(low=-max_yaw_rate_step, high=max_yaw_rate_step, dtype=np.float64)
+        self.action_space = spaces.Box(low= np.array([-self.target_speed, -max_yaw_rate_step]), 
+                                       high=np.array([self.target_speed, max_yaw_rate_step]),
+                                       dtype=np.float64)
 
         # Define observation space
         self.low_dim_state = self.cfg.low_dim_state
@@ -101,7 +105,15 @@ class AreaClearingEnv(gym.Env):
         self.walls = self.env_cfg.walls if 'walls' in self.env_cfg else []
         self.static_obstacles = self.env_cfg.static_obstacles if 'static_obstacles' in self.env_cfg else []
 
+        self.env_center = (int(self.cfg.occ.map_width / 2), int(self.cfg.occ.map_height / 2))
+
+        # move boundary to the center of the environment
         self.boundary_polygon = Polygon(self.boundary_vertices)
+
+        self.min_x_boundary = min([x for x, y in self.boundary_vertices])
+        self.max_x_boundary = max([x for x, y in self.boundary_vertices])
+        self.min_y_boundary = min([y for x, y in self.boundary_vertices])
+        self.max_y_boundary = max([y for x, y in self.boundary_vertices])
 
         self.renderer = None
 
@@ -112,10 +124,7 @@ class AreaClearingEnv(gym.Env):
         # initialize robot clearing environment
         self.steps = self.cfg.sim.steps
         self.t_max = self.cfg.sim.t_max if self.cfg.sim.t_max else np.inf
-        self.horizon = self.cfg.a_star.horizon
-        self.replan = self.cfg.a_star.replan
         self.dt = self.cfg.controller.dt
-        self.target_speed = self.cfg.controller.target_speed
 
         # setup pymunk environment
         self.space = pymunk.Space()  # threaded=True causes some issues
@@ -175,7 +184,10 @@ class AreaClearingEnv(gym.Env):
         if self.cfg.render.show:
             if self.renderer is None:
                 self.renderer = Renderer(self.space, env_width=self.cfg.occ.map_width, env_height=self.cfg.occ.map_height, render_scale=20, 
-                        background_color=(255, 255, 255), caption="Area Clearing", clearance_boundary=self.boundary_vertices)
+                        background_color=(255, 255, 255), caption="Area Clearing", 
+                        centered=True,
+                        clearance_boundary=self.boundary_vertices
+                        )
             else:
                 self.renderer.reset(new_space=self.space)
         
@@ -183,10 +195,11 @@ class AreaClearingEnv(gym.Env):
 
         # generate random start point, if specified
         if self.cfg.random_start:
-            x_start = 1 + random.random() * (self.cfg.start_x_range - 1)    # [1, start_x_range]
-            self.start = (x_start, 1.0, np.pi / 2)
+            x_start = (self.min_x_boundary + 1) + random.random() * ((self.max_x_boundary - self.min_x_boundary) - 2)
+            self.start = (x_start, self.min_y_boundary + 1.0, np.pi / 2)
         else:
-            self.start = (5, 1.0, np.pi / 2)
+            mid_x = (self.min_x_boundary + self.max_x_boundary) / 2
+            self.start = (mid_x, self.min_y_boundary + 1.0, np.pi / 2)
 
         self.agent_info = self.cfg.agent
         self.agent_info['start_pos'] = self.start
@@ -201,8 +214,6 @@ class AreaClearingEnv(gym.Env):
         # filter out obstacles that have zero area
         self.obs_dicts[:] = [ob for ob in self.obs_dicts if (poly_area(ob['vertices']) != 0)]
         self.obstacles = [ob['vertices'] for ob in self.obs_dicts]
-
-        self.goal = (0, self.cfg.goal_y)
 
         # initialize ship sim objects
         self.dynamic_obs = [ob for ob in self.obs_dicts if ob['type'] == ObstacleType.DYNAMIC]
@@ -263,36 +274,29 @@ class AreaClearingEnv(gym.Env):
         obs_size = self.cfg.obstacle_size
         obstacles = []          # a list storing non-overlappin obstacle centers
 
-        if self.cfg.randomize_obstacles:
-            total_obs_required = self.cfg.num_obstacles
-            self.num_box = self.cfg.num_obstacles
-            obs_min_dist = self.cfg.min_obs_dist
-            min_x = self.cfg.min_obs_x
-            max_x = self.cfg.max_obs_x
-            min_y = self.cfg.min_obs_y
-            max_y = self.cfg.max_obs_y
+        total_obs_required = self.cfg.num_obstacles
+        self.num_box = self.cfg.num_obstacles
+        obs_min_dist = self.cfg.min_obs_dist
+        min_x = self.min_x_boundary + 1
+        max_x = self.max_x_boundary - 1
+        min_y = self.min_y_boundary + 1
+        max_y = self.max_y_boundary - 1
 
-            obs_count = 0
-            while obs_count < total_obs_required:
-                center_x = random.random() * (max_x - min_x) + min_x
-                center_y = random.random() * (max_y - min_y) + min_y
+        obs_count = 0
+        while obs_count < total_obs_required:
+            center_x = random.random() * (max_x - min_x) + min_x
+            center_y = random.random() * (max_y - min_y) + min_y
 
-                # loop through previous obstacles to check for overlap
-                overlapped = False
-                for prev_obs_x, pre_obs_y in obstacles:
-                    if ((center_x - prev_obs_x)**2 + (center_y - pre_obs_y)**2)**(0.5) <= obs_min_dist:
-                        overlapped = True
-                        break
-                
-                if not overlapped:
-                    obstacles.append([center_x, center_y])
-                    obs_count += 1
-        
-        else:
-            obstacles.append([8, 5.5])
-            obstacles.append([3, 7])
-            obstacles.append([13, 8])
-            self.num_box = 3
+            # loop through previous obstacles to check for overlap
+            overlapped = False
+            for prev_obs_x, pre_obs_y in obstacles:
+                if ((center_x - prev_obs_x)**2 + (center_y - pre_obs_y)**2)**(0.5) <= obs_min_dist:
+                    overlapped = True
+                    break
+            
+            if not overlapped:
+                obstacles.append([center_x, center_y])
+                obs_count += 1
         
         # convert to obs dict
         obs_dict = []
@@ -328,7 +332,10 @@ class AreaClearingEnv(gym.Env):
                                 round(self.agent.body.angle, 2)), 
                 'total_work': self.total_work[0], 
                 'obs': updated_obstacles, 
-                'box_count': 0}
+                'box_count': 0,
+                'boundary': self.boundary_vertices,
+                'walls': self.walls,
+                'static_obstacles': self.static_obstacles}
 
         if self.low_dim_state:
             observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles)
@@ -376,12 +383,9 @@ class AreaClearingEnv(gym.Env):
 
         else:
 
-            # constant forward speed in global frame
-            global_velocity = R(self.agent.body.angle) @ [self.target_speed, 0]
-
             # apply velocity controller
-            self.agent.body.angular_velocity = action
-            self.agent.body.velocity = Vec2d(global_velocity[0], global_velocity[1])
+            self.agent.body.angular_velocity = action[1] / 2
+            self.agent.body.velocity = action[0].tolist()
 
         # move simulation forward
         boundary_constraint_violated = False
@@ -391,7 +395,9 @@ class AreaClearingEnv(gym.Env):
             self.space.step(self.dt / self.steps)
 
             # apply boundary constraints
-            if self.agent.body.position.x < 0 or self.agent.body.position.x > self.cfg.occ.map_width:
+            if self.agent.body.position.x < 0 and abs(self.agent.body.position.x - 0) >= self.boundary_violation_limit:
+                boundary_constraint_violated = True
+            if self.agent.body.position.x > self.cfg.occ.map_width and abs(self.agent.body.position.x - self.cfg.occ.map_width) >= self.boundary_violation_limit:
                 boundary_constraint_violated = True
 
             for obs in self.static_obs_shapes + self.wall_shapes:
@@ -436,11 +442,13 @@ class AreaClearingEnv(gym.Env):
         else:
             terminated = False
 
+        ### TODO: NEED TO FIGURE OUT WHAT THE REWARD function should be
         # compute reward
-        if self.agent.body.position.y < self.goal[1]:
-            dist_reward = -1
-        else:
-            dist_reward = 0
+        # if self.agent.body.position.y < self.goal[1]:
+        #     dist_reward = -1
+        # else:
+        #     dist_reward = 0
+        dist_reward = 0
         collision_reward = -work
 
         reward = self.beta * collision_reward + dist_reward
