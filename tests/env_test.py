@@ -22,11 +22,7 @@ for i in range(500):
     action = 0
     observation, reward, terminated, truncated, info = env.step(action)
 
-    print(info)
-
     env.render()
-
-    print(observation.shape)
     
     if terminated or truncated:
         break
