@@ -18,3 +18,5 @@ venv/
 tour.txt
 
 events.out*
+
+*.pkl
