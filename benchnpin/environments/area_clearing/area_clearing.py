@@ -37,7 +37,7 @@ BOUNDARY_PENALTY = -50
 TERMINAL_REWARD = 200
 
 LOCAL_MAP_PIXEL_WIDTH = 96
-LOCAL_MAP_WIDTH = 10 # 10 meters
+LOCAL_MAP_WIDTH = 16 # 10 meters
 LOCAL_MAP_PIXELS_PER_METER = LOCAL_MAP_PIXEL_WIDTH / LOCAL_MAP_WIDTH
 
 OBSTACLE_SEG_INDEX = 0
@@ -86,7 +86,7 @@ class AreaClearingEnv(gym.Env):
         self.scatter = False
 
         # observation
-        self.num_channels = 2
+        self.num_channels = 3
         self.observation = None
         self.global_overhead_map = None
         self.small_obstacle_map = None
@@ -144,6 +144,9 @@ class AreaClearingEnv(gym.Env):
         self.max_x_boundary = max([x for x, y in self.boundary_vertices])
         self.min_y_boundary = min([y for x, y in self.boundary_vertices])
         self.max_y_boundary = max([y for x, y in self.boundary_vertices])
+
+        self.map_width = self.max_x_boundary - self.min_x_boundary
+        self.map_height = self.max_y_boundary - self.min_y_boundary
 
         self.renderer = None
 
@@ -367,7 +370,7 @@ class AreaClearingEnv(gym.Env):
         self.init_area_clearing_env()
 
         # reset map
-        self.global_overhead_map = self.create_padded_room_zeros()
+        self.global_overhead_map = self.create_padded_room_ones()
         self.update_global_overhead_map()
 
         self.t = 0
@@ -569,7 +572,7 @@ class AreaClearingEnv(gym.Env):
         channels = []
         channels.append(self.get_local_map(self.global_overhead_map, self.agent.body.position, self.agent.body.angle))
         channels.append(self.robot_state_channel)
-        # channels.append(self.get_local_distance_map(self.create_global_shortest_path_map(self.agent.body.position), self.agent.body.position, self.agent.body.angle))
+        channels.append(self.get_local_distance_map(self.create_global_shortest_path_map(self.agent.body.position), self.agent.body.position, self.agent.body.angle))
         try:
             observation = np.stack(channels)
         except Exception as e:
@@ -586,8 +589,18 @@ class AreaClearingEnv(gym.Env):
             int(2 * np.ceil((room_length * LOCAL_MAP_PIXELS_PER_METER + LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)) / 2))
         ), dtype=np.float32)
     
+    def create_padded_room_ones(self):
+        room_width = (self.max_x_boundary - self.min_x_boundary)
+        room_length = (self.max_y_boundary - self.min_y_boundary)
+        return np.ones((
+            int(2 * np.ceil((room_width * LOCAL_MAP_PIXELS_PER_METER + LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)) / 2)),
+            int(2 * np.ceil((room_length * LOCAL_MAP_PIXELS_PER_METER + LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)) / 2))
+        ), dtype=np.float32)
+    
     def update_global_overhead_map(self):
         small_overhead_map = self.small_obstacle_map.copy()
+        small_overhead_map[small_overhead_map == 1] = FLOOR_SEG_INDEX/MAX_SEG_INDEX
+        self.global_overhead_map[self.global_overhead_map == 1] = FLOOR_SEG_INDEX/MAX_SEG_INDEX
 
         for poly in self.box_shapes:
             vertices = [poly.body.local_to_world(v) for v in poly.get_vertices()]
@@ -680,9 +693,8 @@ class AreaClearingEnv(gym.Env):
         selem_thin = disk(np.floor(robot_pixel_width / 4))
         self.configuration_space_thin = 1 - binary_dilation(obstacle_map, selem_thin).astype(np.float32)
 
-        self.closest_cspace_indices = distance_transform_edt(1 - self.configuration_space, return_distances=False, return_indices=True)
+        self.closest_cspace_indices = distance_transform_edt(self.configuration_space, return_distances=False, return_indices=True)
         self.small_obstacle_map = 1 - small_obstacle_map
-
     
     def boxes_completed(self, updated_obstacles, boundary_polygon):
         """
@@ -721,6 +733,10 @@ class AreaClearingEnv(gym.Env):
                         self.colorbars[i] = self.state_fig.colorbar(im, ax=ax)
                 
                 self.state_fig.savefig(os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx), str(self.t) + '_obs.png'))
+
+            fig, ax = plt.subplots(figsize=(10, 10))
+            ax.imshow(self.configuration_space, cmap='gray')
+            fig.savefig(os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx), str(self.t) + '_config_space.png'))
         else:
             self.renderer.render(save=False)
 

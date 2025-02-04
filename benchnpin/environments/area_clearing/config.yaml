@@ -40,17 +40,10 @@ prim:
 agent:
   mass: 1  # mass of the NRC ship in kg
   padding: 0.25  # adds padding to ship footprint
-  length: 0.8
-  width: 0.7
+  length: 1.38  # length of the NRC ship in meters
+  width: 2.4
 
   vertices: [
-
-              # [0.69, -0.89],
-              # [-0.69, -0.89],
-
-              # [-0.69, 0.89],
-              # [0.69, 0.89], 
-
               [0.69, -1.2],
               [-0.69, -0.89],
 
