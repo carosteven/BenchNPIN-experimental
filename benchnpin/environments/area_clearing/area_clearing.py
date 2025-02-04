@@ -257,8 +257,8 @@ class AreaClearingEnv(gym.Env):
 
         # initialize ship sim objects
         self.dynamic_obs = [ob for ob in self.obs_dicts if ob['type'] == ObstacleType.DYNAMIC]
-        self.polygons = generate_sim_obs(self.space, self.dynamic_obs, self.cfg.sim.obstacle_density)
-        for p in self.polygons:
+        self.box_shapes = generate_sim_obs(self.space, self.dynamic_obs, self.cfg.sim.obstacle_density)
+        for p in self.box_shapes:
             p.collision_type = 2
 
         self.agent = generate_sim_agent(self.space, self.agent_info, body_type=pymunk.Body.KINEMATIC)
@@ -269,7 +269,7 @@ class AreaClearingEnv(gym.Env):
 
         for _ in range(1000):
             self.space.step(self.dt / self.steps)
-        self.prev_obs = CostMap.get_obs_from_poly(self.polygons)
+        self.prev_obs = CostMap.get_obs_from_poly(self.box_shapes)
 
     def generate_static_obstacles(self):
         obs_dict = []
@@ -373,7 +373,7 @@ class AreaClearingEnv(gym.Env):
         self.t = 0
 
         # get updated obstacles
-        updated_obstacles = CostMap.get_obs_from_poly(self.polygons)
+        updated_obstacles = CostMap.get_obs_from_poly(self.box_shapes)
         info = {'state': (round(self.agent.body.position.x, 2),
                                 round(self.agent.body.position.y, 2),
                                 round(self.agent.body.angle, 2)), 
@@ -469,7 +469,7 @@ class AreaClearingEnv(gym.Env):
                 break
             
         # get updated obstacles
-        updated_obstacles = CostMap.get_obs_from_poly(self.polygons)
+        updated_obstacles = CostMap.get_obs_from_poly(self.box_shapes)
         num_completed, all_boxes_completed = self.boxes_completed(updated_obstacles, self.boundary_polygon)
         
         if(self.cleared_box_count < num_completed):
@@ -579,8 +579,8 @@ class AreaClearingEnv(gym.Env):
         return observation
     
     def create_padded_room_zeros(self):
-        room_width = self.max_x_boundary - self.min_x_boundary
-        room_length = self.max_y_boundary - self.min_y_boundary
+        room_width = (self.max_x_boundary - self.min_x_boundary)
+        room_length = (self.max_y_boundary - self.min_y_boundary)
         return np.zeros((
             int(2 * np.ceil((room_width * LOCAL_MAP_PIXELS_PER_METER + LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)) / 2)),
             int(2 * np.ceil((room_length * LOCAL_MAP_PIXELS_PER_METER + LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)) / 2))
@@ -589,8 +589,9 @@ class AreaClearingEnv(gym.Env):
     def update_global_overhead_map(self):
         small_overhead_map = self.small_obstacle_map.copy()
 
-        for vertices in self.obstacles:
-            vertices_np = np.array(vertices)
+        for poly in self.box_shapes:
+            vertices = [poly.body.local_to_world(v) for v in poly.get_vertices()]
+            vertices_np = np.array([[v.x, v.y] for v in vertices])
 
             # convert world coordinates to pixel coordinates
             vertices_px = (vertices_np * LOCAL_MAP_PIXELS_PER_METER).astype(np.int32)
@@ -598,7 +599,17 @@ class AreaClearingEnv(gym.Env):
             vertices_px[:, 1] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
             vertices_px[:, 1] = small_overhead_map.shape[0] - vertices_px[:, 1]
 
+            # draw the boundary on the small_overhead_map
             fillPoly(small_overhead_map, [vertices_px], color=CUBE_SEG_INDEX/MAX_SEG_INDEX)
+        
+        vertices = [self.agent.body.local_to_world(v) for v in self.agent.get_vertices()]
+        robot_vertices = np.array([[v.x, v.y] for v in vertices])
+        robot_vertices_px = (robot_vertices * LOCAL_MAP_PIXELS_PER_METER).astype(np.int32)
+        robot_vertices_px[:, 0] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
+        robot_vertices_px[:, 1] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
+        robot_vertices_px[:, 1] = small_overhead_map.shape[0] - robot_vertices_px[:, 1]
+        
+        fillPoly(small_overhead_map, [robot_vertices_px], color=ROBOT_SEG_INDEX/MAX_SEG_INDEX)
 
         start_i, start_j = int(self.global_overhead_map.shape[0] / 2 - small_overhead_map.shape[0] / 2), int(self.global_overhead_map.shape[1] / 2 - small_overhead_map.shape[1] / 2)
         self.global_overhead_map[start_i:start_i + small_overhead_map.shape[0], start_j:start_j + small_overhead_map.shape[1]] = small_overhead_map
@@ -621,23 +632,6 @@ class AreaClearingEnv(gym.Env):
         ]
         return local_map
     
-    def get_local_overhead_map(self):
-        rotation_angle = -np.degrees(self.agent.body.angle) + 90
-        pos_y = int(np.floor(self.global_overhead_map.shape[0] / 2 - self.agent.body.position.y * LOCAL_MAP_PIXELS_PER_METER))
-        pos_x = int(np.floor(self.global_overhead_map.shape[1] / 2 + self.agent.body.position.x * LOCAL_MAP_PIXELS_PER_METER))
-        mask = rotate_image(np.zeros((LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH), dtype=np.float32), rotation_angle, order=0)
-        y_start = pos_y - int(mask.shape[0] / 2)
-        y_end = y_start + mask.shape[0]
-        x_start = pos_x - int(mask.shape[1] / 2)
-        x_end = x_start + mask.shape[1]
-        crop = self.global_overhead_map[y_start:y_end, x_start:x_end]
-        crop = rotate_image(crop, rotation_angle, order=0)
-        y_start = int(crop.shape[0] / 2 - LOCAL_MAP_PIXEL_WIDTH / 2)
-        y_end = y_start + LOCAL_MAP_PIXEL_WIDTH
-        x_start = int(crop.shape[1] / 2 - LOCAL_MAP_PIXEL_WIDTH / 2)
-        x_end = x_start + LOCAL_MAP_PIXEL_WIDTH
-        return crop[y_start:y_end, x_start:x_end]
-    
     def create_global_shortest_path_map(self, robot_position):
         pixel_i, pixel_j = position_to_pixel_indices(robot_position[0], robot_position[1], self.configuration_space.shape, LOCAL_MAP_PIXELS_PER_METER)
         pixel_i, pixel_j = self.closest_valid_cspace_indices(pixel_i, pixel_j)
@@ -658,11 +652,10 @@ class AreaClearingEnv(gym.Env):
         obstacle_map = self.create_padded_room_zeros()
         small_obstacle_map = np.zeros((LOCAL_MAP_PIXEL_WIDTH+20, LOCAL_MAP_PIXEL_WIDTH+20), dtype=np.float32)
 
-        for vertices in self.obstacles:
+        for poly in self.wall_shapes + self.static_obs_shapes:
             # get world coordinates of vertices
-            # vertices = [poly.body.local_to_world(v) for v in poly.get_vertices()]
-            # vertices_np = np.array([[v.x, v.y] for v in vertices])
-            vertices_np = np.array(vertices)
+            vertices = [poly.body.local_to_world(v) for v in poly.get_vertices()]
+            vertices_np = np.array([[v.x, v.y] for v in vertices])
 
             # convert world coordinates to pixel coordinates
             vertices_px = (vertices_np * LOCAL_MAP_PIXELS_PER_METER).astype(np.int32)

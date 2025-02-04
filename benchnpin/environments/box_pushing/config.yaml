@@ -8,6 +8,8 @@ plot:
   y_axis_limit: 18  # limits the y-axis of the plot
   show: false       # true will show planner plots
 
+demo_mode: true
+
 # cubes information
 randomize_cubes: true
 num_cubes: 10
