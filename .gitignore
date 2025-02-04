@@ -13,3 +13,6 @@ venv/
 *egg-info
 
 venv/
+
+*.gtsp
+tour.txt

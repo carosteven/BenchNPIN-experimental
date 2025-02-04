@@ -1,4 +1,7 @@
 from benchnpin.baselines.base_class import BasePolicy
+from benchnpin.baselines.feature_extractors import ResNet18
+from benchnpin.common.merics.ship_ice_metric import ShipIceMetric
+from typing import List, Tuple
 import benchnpin.environments
 import gymnasium as gym
 from stable_baselines3 import SAC
@@ -23,15 +26,17 @@ class ShipIceSAC(BasePolicy):
         self.model = None
 
 
-    def train(self, policy_kwargs=dict(net_arch=[256, 256]),
-            batch_size=64,
+    def train(self, policy_kwargs=dict(features_extractor_class=ResNet18,
+                                        features_extractor_kwargs=dict(features_dim=512),
+                                        net_arch=[512, 256]),
+            batch_size=128,
             buffer_size=15000,
             learning_starts=200,
             learning_rate=5e-4,
             gamma=0.97,
             verbose=2,
             total_timesteps=int(2e5), 
-            checkpoint_freq=100) -> None:
+            checkpoint_freq=10000) -> None:
 
         env = gym.make('ship-ice-v0')
         env = env.unwrapped
@@ -71,7 +76,7 @@ class ShipIceSAC(BasePolicy):
 
 
 
-    def evaluate(self, num_eps: int, model_eps: str ='latest'):
+    def evaluate(self, num_eps: int, model_eps: str ='latest') -> Tuple[List[float], List[float], List[float], str]:
 
         if model_eps == 'latest':
             self.model = SAC.load(os.path.join(self.model_path, self.model_name))
@@ -81,31 +86,37 @@ class ShipIceSAC(BasePolicy):
 
         env = gym.make('ship-ice-v0')
         env = env.unwrapped
+        metric = ShipIceMetric(env=env, alg_name="SAC")
 
-        rewards_list = []
         for eps_idx in range(num_eps):
             print("Progress: ", eps_idx, " / ", num_eps, " episodes")
-            obs, info = env.reset()
+            obs, info = metric.reset()
             done = truncated = False
-            eps_reward = 0.0
             while True:
                 action, _ = self.model.predict(obs, deterministic=True)
-                obs, reward, done, truncated, info = env.step(action)
-                eps_reward += reward
+                obs, reward, done, truncated, info = metric.step(action)
                 if done or truncated:
-                    rewards_list.append(eps_reward)
                     break
         
         env.close()
-        return rewards_list
+        metric.plot_scores()
+        return metric.efficiency_scores, metric.effort_scores, metric.rewards, "SAC"
 
 
     
     def act(self, observation, **kwargs):
+
+        # parameters for planners
+        model_eps = kwargs.get('model_eps', None)
         
         # load trained model for the first time
         if self.model is None:
-            self.model = SAC.load(os.path.join(self.model_path, self.model_name))
+
+            if model_eps is None:
+                self.model = SAC.load(os.path.join(self.model_path, self.model_name))
+            else:
+                model_checkpoint = self.model_name + '_' + model_eps + '_steps'
+                self.model = SAC.load(os.path.join(self.model_path, model_checkpoint))
 
         action, _ = self.model.predict(observation, deterministic=True)
         return action

@@ -43,10 +43,13 @@ class ShipIceEnv(gym.Env):
         cfg_file = os.path.join(self.current_dir, 'config.yaml')
 
         cfg = cfg = DotDict.load_from_file(cfg_file)
-        self.occupancy = OccupancyGrid(grid_width=cfg.occ.grid_size, grid_height=cfg.occ.grid_size, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, ship_body=None)
+        self.occupancy = OccupancyGrid(grid_width=cfg.occ.grid_size, grid_height=cfg.occ.grid_size, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, local_width=6, local_height=6, ship_body=None, meter_to_pixel_scale=cfg.occ.m_to_pix_scale)
         self.cfg = cfg
+        self.local_window_v_shift = 2
 
-        self.beta = 50         # amount to scale the collision reward
+        self.beta = 30         # amount to scale the collision reward
+        # print("current beta: ", self.beta)
+        self.directional_reward_scale = 1.0
 
         self.episode_idx = None     # the increment of this index is handled in reset()
 
@@ -75,7 +78,8 @@ class ShipIceEnv(gym.Env):
             self.observation_space = spaces.Box(low=-10, high=30, shape=(len(self.obs_dicts) * 2,), dtype=np.float64)
 
         else:
-            self.observation_shape = (2, self.occupancy.occ_map_height, self.occupancy.occ_map_width)
+            # self.observation_shape = (2, self.occupancy.occ_map_height, self.occupancy.occ_map_width)
+            self.observation_shape = (4, self.occupancy.local_window_height, self.occupancy.local_window_width)
             self.observation_space = spaces.Box(low=0, high=255, shape=self.observation_shape, dtype=np.uint8)
 
         self.yaw_lim = (0, np.pi)       # lower and upper limit of ship yaw  
@@ -164,7 +168,7 @@ class ShipIceEnv(gym.Env):
 
         if self.cfg.render.show:
             if self.renderer is None:
-                self.renderer = Renderer(self.space, env_width=self.cfg.occ.map_width, env_height=self.cfg.occ.map_height, render_scale=15, 
+                self.renderer = Renderer(self.space, env_width=self.cfg.occ.map_width, env_height=self.cfg.occ.map_height, render_scale=40, 
                         background_color=(28, 107, 160), caption="ASV Navigation", goal_line=self.cfg.goal_y)
             else:
                 self.renderer.reset(new_space=self.space)
@@ -253,6 +257,15 @@ class ShipIceEnv(gym.Env):
             # translate vertices and reset center
             obs['vertices'] = obs['vertices'] - prev_centre + new_centre
             obs['centre'] = new_centre
+
+
+    def _directional_reward(self):
+        goal_vector = np.array([0, 1])
+        robot_heading = np.array([np.cos(self.ship_body.angle), np.sin(self.ship_body.angle)])
+
+        cos_phi = np.dot(robot_heading, goal_vector)
+
+        return self.directional_reward_scale * cos_phi
     
 
     def step(self, action):
@@ -312,7 +325,9 @@ class ShipIceEnv(gym.Env):
         # compute reward
         if self.ship_body.position.y < self.goal[1]:
             # dist_reward = self.goal[1] - self.ship_body.position.y
-            dist_reward = -1
+            # dist_reward = -1
+            # dist_reward = 0.0
+            dist_reward = self._directional_reward()
         else:
             dist_reward = 0
         collision_reward = -work
@@ -328,8 +343,10 @@ class ShipIceEnv(gym.Env):
             reward += BOUNDARY_PENALTY
 
         # apply terminal reward
+        trial_success = False
         if terminated and not boundary_violation_terminal:
             reward += TERMINAL_REWARD
+            trial_success = True
 
         # Optionally, we can add additional info
         info = {'state': (round(self.ship_body.position.x, 2),
@@ -339,6 +356,7 @@ class ShipIceEnv(gym.Env):
                 'collision reward': collision_reward, 
                 'scaled collision reward': collision_reward * self.beta, 
                 'dist reward': dist_reward, 
+                'trial_success': trial_success,
                 'obs': updated_obstacles}
         
         if self.low_dim_state:
@@ -371,18 +389,34 @@ class ShipIceEnv(gym.Env):
     def generate_observation(self):
 
 
+        # raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, 
+        #                 ice_binary_w=int(self.occupancy.map_width * self.cfg.occ.m_to_pix_scale), 
+        #                 ice_binary_h=int(self.occupancy.map_height * self.cfg.occ.m_to_pix_scale))
+        # self.occupancy.compute_con_gridmap(raw_ice_binary=raw_ice_binary, save_fig_dir=None)
+        # occupancy = np.copy(self.occupancy.occ_map)         # (H, W)
+
+        # # compute footprint observation  NOTE: here we want unscaled, unpadded vertices
+        # ship_pose = (self.ship_body.position.x, self.ship_body.position.y, self.ship_body.angle)
+        # self.occupancy.compute_ship_footprint_planner(ship_state=ship_pose, ship_vertices=self.cfg.ship.vertices)
+        # footprint = np.copy(self.occupancy.footprint)       # (H, W)
+
+        # observation = np.concatenate((np.array([occupancy]), np.array([footprint])))          # (2, H, W)
+
+        ship_pose = (self.ship_body.position.x, self.ship_body.position.y, self.ship_body.angle)
+
         raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, 
                         ice_binary_w=int(self.occupancy.map_width * self.cfg.occ.m_to_pix_scale), 
-                        ice_binary_h=int(self.occupancy.map_height * self.cfg.occ.m_to_pix_scale))
-        self.occupancy.compute_con_gridmap(raw_ice_binary=raw_ice_binary, save_fig_dir=None)
-        occupancy = np.copy(self.occupancy.occ_map)         # (H, W)
+                        ice_binary_h=int(self.occupancy.map_height * self.cfg.occ.m_to_pix_scale), 
+                        local_range=[12, 12], ship_state=ship_pose)
+        occupancy = self.occupancy.eagle_view_obstacle_map(raw_ice_binary=raw_ice_binary, ship_state=ship_pose, vertical_shift=self.local_window_v_shift)
+        
+        local_footprint = self.occupancy.eagle_view_footprint(ship_state=ship_pose, ship_vertices=self.cfg.ship.vertices, vertical_shift=self.local_window_v_shift)
 
-        # compute footprint observation  NOTE: here we want unscaled, unpadded vertices
-        ship_pose = (self.ship_body.position.x, self.ship_body.position.y, self.ship_body.angle)
-        self.occupancy.compute_ship_footprint_planner(ship_state=ship_pose, ship_vertices=self.cfg.ship.vertices)
-        footprint = np.copy(self.occupancy.footprint)       # (H, W)
-
-        observation = np.concatenate((np.array([occupancy]), np.array([footprint])))          # (2, H, W)
+        local_edt = self.occupancy.eagle_view_goal_dist_transform(goal_y=self.goal[1], ship_state=ship_pose, vertical_shift=self.local_window_v_shift)
+        
+        local_orientation_map = self.occupancy.eagle_view_orientation_map(ship_state=ship_pose, head=self.cfg.ship.head, tail=self.cfg.ship.tail, vertical_shift=self.local_window_v_shift)
+        
+        observation = np.concatenate((np.array([local_footprint]), np.array([local_edt]), np.array([local_orientation_map]), np.array([occupancy])))          # (2, H, W)
         observation = (observation*255).astype(np.uint8)                                      # NOTE SB3 image format
         return observation
 
@@ -398,9 +432,19 @@ class ShipIceEnv(gym.Env):
             # whether to also log occupancy observation
             if self.cfg.render.log_obs and not self.low_dim_state:
 
-                # visualize occupancy map
+                # # visualize global occupancy map
+                # self.con_ax.clear()
+                # occ_map_render = np.copy(self.occupancy.occ_map)
+                # occ_map_render = np.flip(occ_map_render, axis=0)
+                # self.con_ax.imshow(occ_map_render, cmap='gray')
+                # self.con_ax.axis('off')
+                # save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
+                # fp = os.path.join(save_fig_dir, str(self.t) + '_con.png')
+                # self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
+
+                # visualize local occupancy map
                 self.con_ax.clear()
-                occ_map_render = np.copy(self.occupancy.occ_map)
+                occ_map_render = np.copy(self.occupancy.local_obstacle_map)
                 occ_map_render = np.flip(occ_map_render, axis=0)
                 self.con_ax.imshow(occ_map_render, cmap='gray')
                 self.con_ax.axis('off')
@@ -408,9 +452,30 @@ class ShipIceEnv(gym.Env):
                 fp = os.path.join(save_fig_dir, str(self.t) + '_con.png')
                 self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
 
-                # visualize footprint
+                # visualize local orientation map
                 self.con_ax.clear()
-                occ_map_render = np.copy(self.occupancy.footprint)
+                occ_map_render = np.copy(self.occupancy.local_orientation)
+                occ_map_render = np.flip(occ_map_render, axis=0)
+                self.con_ax.imshow(occ_map_render, cmap='gray')
+                self.con_ax.axis('off')
+                save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
+                fp = os.path.join(save_fig_dir, str(self.t) + '_orientation.png')
+                self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
+
+                # visualize local dist transform map
+                self.con_ax.clear()
+                occ_map_render = np.copy(self.occupancy.local_edt)
+                occ_map_render = np.flip(occ_map_render, axis=0)
+                self.con_ax.imshow(occ_map_render, cmap='gray')
+                self.con_ax.axis('off')
+                save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
+                fp = os.path.join(save_fig_dir, str(self.t) + '_edt.png')
+                self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
+
+                # visualize local footprint
+                self.con_ax.clear()
+                # occ_map_render = np.copy(self.occupancy.footprint)
+                occ_map_render = np.copy(self.occupancy.local_footprint)
                 occ_map_render = np.flip(occ_map_render, axis=0)
                 self.con_ax.imshow(occ_map_render, cmap='gray')
                 self.con_ax.axis('off')
@@ -424,4 +489,6 @@ class ShipIceEnv(gym.Env):
 
     def close(self):
         plt.close('all')
-        self.renderer.close()
+
+        if self.renderer is not None:
+            self.renderer.close()

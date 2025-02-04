@@ -3,7 +3,9 @@ import gymnasium as gym
 from benchnpin.baselines.ship_ice_nav.planning_based.planners.lattice import LatticePlanner
 from benchnpin.baselines.ship_ice_nav.planning_based.planners.predictive import PredictivePlanner
 from benchnpin.baselines.base_class import BasePolicy
+from benchnpin.common.merics.ship_ice_metric import ShipIceMetric
 from benchnpin.common.controller.dp import DP
+from typing import List, Tuple
 import numpy as np
 
 
@@ -66,35 +68,31 @@ class PlanningBasedPolicy(BasePolicy):
         return omega / action_scale
 
 
-    def evaluate(self, num_eps: int, model_eps: str ='latest') -> list:
+    def evaluate(self, num_eps: int, model_eps: str ='latest') -> Tuple[List[float], List[float], List[float], str]:
         env = gym.make('ship-ice-v0')
         env = env.unwrapped
+        metric = ShipIceMetric(env=env, alg_name="planningBased")
 
-        rewards_list = []
         for eps_idx in range(num_eps):
             print("Progress: ", eps_idx, " / ", num_eps, " episodes")
-            observation, info = env.reset()
+            observation, info = metric.reset()
             obstacles = info['obs']
             done = truncated = False
-            eps_reward = 0.0
 
             while True:
                 action = self.act(observation=(observation / 255).astype(np.float64), ship_pos=info['state'], obstacles=obstacles, 
                                     goal=env.goal,
                                     conc=env.cfg.concentration, 
                                     action_scale=env.max_yaw_rate_step)
-                observation, reward, done, truncated, info = env.step(action)
+                observation, reward, done, truncated, info = metric.step(action)
                 obstacles = info['obs']
-                eps_reward += reward
                 if done or truncated:
-                    rewards_list.append(eps_reward)
                     break
 
         env.close()
-        return rewards_list
+        metric.plot_scores()
+        return metric.efficiency_scores, metric.effort_scores, metric.rewards, "planning-Based"
+
     
     def reset(self):
         self.path = None
-
-pbp = PlanningBasedPolicy('lattice')
-rewards = pbp.evaluate(1)
