@@ -19,7 +19,7 @@ from benchnpin.common.occupancy_grid.occupancy_map import OccupancyGrid
 from benchnpin.common.types import ObstacleType
 from benchnpin.common.utils.renderer import Renderer
 
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, LineString
 
 from benchnpin.environments.area_clearing.utils import round_up_to_even, position_to_pixel_indices
 from scipy.ndimage import distance_transform_edt, rotate as rotate_image
@@ -37,7 +37,7 @@ BOUNDARY_PENALTY = -50
 TERMINAL_REWARD = 200
 
 LOCAL_MAP_PIXEL_WIDTH = 96
-LOCAL_MAP_WIDTH = 16 # 10 meters
+LOCAL_MAP_WIDTH = 20 #  meters
 LOCAL_MAP_PIXELS_PER_METER = LOCAL_MAP_PIXEL_WIDTH / LOCAL_MAP_WIDTH
 
 OBSTACLE_SEG_INDEX = 0
@@ -86,13 +86,14 @@ class AreaClearingEnv(gym.Env):
         self.scatter = False
 
         # observation
-        self.num_channels = 3
+        self.num_channels = 4
         self.observation = None
         self.global_overhead_map = None
         self.small_obstacle_map = None
         self.configuration_space = None
         self.configuration_space_thin = None
         self.closest_cspace_indices = None
+        self.goal_point_global_map = None
 
         # robot state channel
         self.agent_info = self.cfg.agent
@@ -125,17 +126,15 @@ class AreaClearingEnv(gym.Env):
             self.observation_space = spaces.Box(low=0, high=1, shape=self.observation_shape, dtype=np.float64)
 
         self.yaw_lim = (0, np.pi)       # lower and upper limit of ship yaw  
-        self.boundary_violation_limit = self.cfg.occ.map_width / 4       # if the ship is out of boundary more than this limit, terminate and truncate the episode 
 
         self.con_fig, self.con_ax = plt.subplots(figsize=(10, 10))
 
         self.demo_mode = False
 
+        self.outer_boundary_vertices = self.env_cfg.outer_boundary
         self.boundary_vertices = self.env_cfg.boundary
         self.walls = self.env_cfg.walls if 'walls' in self.env_cfg else []
         self.static_obstacles = self.env_cfg.static_obstacles if 'static_obstacles' in self.env_cfg else []
-
-        self.env_center = (int(self.cfg.occ.map_width / 2), int(self.cfg.occ.map_height / 2))
 
         # move boundary to the center of the environment
         self.boundary_polygon = Polygon(self.boundary_vertices)
@@ -145,8 +144,13 @@ class AreaClearingEnv(gym.Env):
         self.min_y_boundary = min([y for x, y in self.boundary_vertices])
         self.max_y_boundary = max([y for x, y in self.boundary_vertices])
 
-        self.map_width = self.max_x_boundary - self.min_x_boundary
-        self.map_height = self.max_y_boundary - self.min_y_boundary
+        self.min_x_outer = min([x for x, y in self.outer_boundary_vertices])
+        self.max_x_outer = max([x for x, y in self.outer_boundary_vertices])
+        self.min_y_outer = min([y for x, y in self.outer_boundary_vertices])
+        self.max_y_outer = max([y for x, y in self.outer_boundary_vertices])
+
+        self.map_width = self.max_x_outer - self.min_x_outer
+        self.map_height = self.max_y_outer - self.min_y_outer
 
         self.renderer = None
 
@@ -154,6 +158,49 @@ class AreaClearingEnv(gym.Env):
 
         self.state_fig, self.state_ax = plt.subplots(1, self.num_channels, figsize=(4 * self.num_channels, 6))
         self.colorbars = [None] * self.num_channels
+
+        self.boundary_goals, self.goal_points = self._compute_boundary_goals()
+
+    def _compute_boundary_goals(self, interpolated_points=10):
+        if self.boundary_vertices is None:
+            return None
+        
+        boundary_edges = []
+        for i in range(len(self.boundary_vertices)):
+            boundary_edges.append([self.boundary_vertices[i], self.boundary_vertices[(i + 1) % len(self.boundary_vertices)]])
+        
+        boundary_linestrings = [LineString(edge) for edge in boundary_edges]
+
+        # remove walls from boundary
+        for wall in self.walls:
+            wall_polygon = LineString(wall)
+            wall_polygon = wall_polygon.buffer(0.1)
+            for i in range(len(boundary_linestrings)):
+                boundary_linestrings[i] = boundary_linestrings[i].difference(wall_polygon)
+
+        # convert multilinestrings to linestrings
+        temp_boundary_linestrings = boundary_linestrings.copy()
+        boundary_linestrings = []
+        for line in temp_boundary_linestrings:
+            if line.geom_type == 'MultiLineString':
+                boundary_linestrings.extend([ls for ls in list(line.geoms) if ls.length > 0.1])
+            elif line.geom_type == 'LineString':
+                if line.length > 0.1:
+                    boundary_linestrings.append(line)
+            else:
+                raise ValueError("Invalid geometry type to handle")
+
+        boundary_goals = boundary_linestrings
+        
+        # get 5 evenly spaced points on each boundary goal line
+        goal_points = []
+        for line in boundary_goals:
+            line_length = line.length
+            for i in range(int(interpolated_points)):
+                goal_points.append(line.interpolate(((i + 1/2) / interpolated_points) * line_length))
+
+        return boundary_goals, goal_points
+
     
     def activate_demo_mode(self):
         self.demo_mode = True
@@ -227,7 +274,7 @@ class AreaClearingEnv(gym.Env):
 
         if self.cfg.render.show:
             if self.renderer is None:
-                self.renderer = Renderer(self.space, env_width=self.cfg.occ.map_width, env_height=self.cfg.occ.map_height, render_scale=20, 
+                self.renderer = Renderer(self.space, env_width=self.map_width + 2, env_height=self.map_height + 2, render_scale=20, 
                         background_color=(255, 255, 255), caption="Area Clearing", 
                         centered=True,
                         clearance_boundary=self.boundary_vertices
@@ -295,7 +342,10 @@ class AreaClearingEnv(gym.Env):
     def generate_walls(self):
         obs_dict = []
         wall_shapes = []
-        for wall_vertices in self.walls:
+        outer_boundary_walls = []
+        for i in range(len(self.outer_boundary_vertices)):
+            outer_boundary_walls.append([self.outer_boundary_vertices[i], self.outer_boundary_vertices[(i + 1) % len(self.outer_boundary_vertices)]])
+        for wall_vertices in self.walls + outer_boundary_walls:
             # convert line to polygon
             wall_poly = create_polygon_from_line(wall_vertices)
 
@@ -373,6 +423,8 @@ class AreaClearingEnv(gym.Env):
         self.global_overhead_map = self.create_padded_room_ones()
         self.update_global_overhead_map()
 
+        self.goal_point_global_map = self.create_global_shortest_path_to_goal_points()
+
         self.t = 0
 
         # get updated obstacles
@@ -442,28 +494,15 @@ class AreaClearingEnv(gym.Env):
             self.agent.body.velocity = action[0].tolist()
 
         # move simulation forward
-        boundary_constraint_violated = False
-        boundary_violation_terminal = False      # if out of boundary for too much, terminate and truncate the episode
         collision_with_static_or_walls = False
         for _ in range(self.steps):
             self.space.step(self.dt / self.steps)
-
-            # apply boundary constraints
-            if self.agent.body.position.x < 0 and abs(self.agent.body.position.x - 0) >= self.boundary_violation_limit:
-                boundary_constraint_violated = True
-            if self.agent.body.position.x > self.cfg.occ.map_width and abs(self.agent.body.position.x - self.cfg.occ.map_width) >= self.boundary_violation_limit:
-                boundary_constraint_violated = True
 
             for obs in self.static_obs_shapes + self.wall_shapes:
                 contact_pts = self.agent.shapes_collide(obs)
                 if len(contact_pts.points) > 1:
                     collision_with_static_or_walls = True
                     break
-                
-        if self.agent.body.position.x < 0 and abs(self.agent.body.position.x - 0) >= self.boundary_violation_limit:
-            boundary_violation_terminal = True
-        if self.agent.body.position.x > self.cfg.occ.map_width and abs(self.agent.body.position.x - self.cfg.occ.map_width) >= self.boundary_violation_limit:
-            boundary_violation_terminal = True
 
         for obs in self.static_obs_shapes + self.wall_shapes:
             contact_pts = self.agent.shapes_collide(obs)
@@ -486,7 +525,7 @@ class AreaClearingEnv(gym.Env):
         self.prev_obs = updated_obstacles
         self.obstacles = updated_obstacles
 
-        failure = boundary_constraint_violated or collision_with_static_or_walls or boundary_violation_terminal
+        failure = collision_with_static_or_walls
 
         # # check episode terminal condition
         if all_boxes_completed:
@@ -573,6 +612,7 @@ class AreaClearingEnv(gym.Env):
         channels.append(self.get_local_map(self.global_overhead_map, self.agent.body.position, self.agent.body.angle))
         channels.append(self.robot_state_channel)
         channels.append(self.get_local_distance_map(self.create_global_shortest_path_map(self.agent.body.position), self.agent.body.position, self.agent.body.angle))
+        channels.append(self.get_local_distance_map(self.goal_point_global_map, self.agent.body.position, self.agent.body.angle))
         try:
             observation = np.stack(channels)
         except Exception as e:
@@ -582,6 +622,7 @@ class AreaClearingEnv(gym.Env):
         return observation
     
     def create_padded_room_zeros(self):
+
         room_width = (self.max_x_boundary - self.min_x_boundary)
         room_length = (self.max_y_boundary - self.min_y_boundary)
         return np.zeros((
@@ -590,11 +631,9 @@ class AreaClearingEnv(gym.Env):
         ), dtype=np.float32)
     
     def create_padded_room_ones(self):
-        room_width = (self.max_x_boundary - self.min_x_boundary)
-        room_length = (self.max_y_boundary - self.min_y_boundary)
         return np.ones((
-            int(2 * np.ceil((room_width * LOCAL_MAP_PIXELS_PER_METER + LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)) / 2)),
-            int(2 * np.ceil((room_length * LOCAL_MAP_PIXELS_PER_METER + LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)) / 2))
+            int(2 * np.ceil((self.map_width * LOCAL_MAP_PIXELS_PER_METER + LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)) / 2)),
+            int(2 * np.ceil((self.map_height * LOCAL_MAP_PIXELS_PER_METER + LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)) / 2))
         ), dtype=np.float32)
     
     def update_global_overhead_map(self):
@@ -654,6 +693,19 @@ class AreaClearingEnv(gym.Env):
         # global_map *= self.cfg.env.shortest_path_channel_scale
         return global_map
     
+    def create_global_shortest_path_to_goal_points(self):
+        global_map = self.create_padded_room_zeros() + np.inf
+        for point in self.goal_points:
+            rx, ry = point.x, point.y
+            pixel_i, pixel_j = position_to_pixel_indices(rx, ry, self.configuration_space.shape, LOCAL_MAP_PIXELS_PER_METER)
+            pixel_i, pixel_j = self.closest_valid_cspace_indices(pixel_i, pixel_j)
+            shortest_path_image, _ = spfa.spfa(self.configuration_space, (pixel_i, pixel_j))
+            shortest_path_image /= LOCAL_MAP_PIXELS_PER_METER
+            global_map = np.minimum(global_map, shortest_path_image)
+        global_map /= (np.sqrt(2) * LOCAL_MAP_PIXEL_WIDTH) / LOCAL_MAP_PIXELS_PER_METER
+        # global_map *= self.cfg.env.shortest_path_channel_scale
+        return global_map
+    
     def closest_valid_cspace_indices(self, i, j):
         return self.closest_cspace_indices[:, i, j]
     
@@ -687,14 +739,17 @@ class AreaClearingEnv(gym.Env):
 
         # Dilate obstacles and walls based on robot size
         robot_pixel_width = int(2 * self.robot_radius * LOCAL_MAP_PIXELS_PER_METER)
-        selem = disk(np.floor(robot_pixel_width / 2))
+        selem = disk(np.floor(robot_pixel_width / 4))
         self.configuration_space = 1 - binary_dilation(obstacle_map, selem).astype(np.float32)
         
         selem_thin = disk(np.floor(robot_pixel_width / 4))
         self.configuration_space_thin = 1 - binary_dilation(obstacle_map, selem_thin).astype(np.float32)
 
-        self.closest_cspace_indices = distance_transform_edt(self.configuration_space, return_distances=False, return_indices=True)
+        self.closest_cspace_indices = distance_transform_edt(1 - self.configuration_space, return_distances=False, return_indices=True)
         self.small_obstacle_map = 1 - small_obstacle_map
+
+        dist_transform = distance_transform_edt(self.configuration_space, return_distances=True)
+        dist_transform_np = np.array(dist_transform)
     
     def boxes_completed(self, updated_obstacles, boundary_polygon):
         """
@@ -734,9 +789,6 @@ class AreaClearingEnv(gym.Env):
                 
                 self.state_fig.savefig(os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx), str(self.t) + '_obs.png'))
 
-            fig, ax = plt.subplots(figsize=(10, 10))
-            ax.imshow(self.configuration_space, cmap='gray')
-            fig.savefig(os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx), str(self.t) + '_config_space.png'))
         else:
             self.renderer.render(save=False)
 
