@@ -9,8 +9,8 @@ import numpy as np
 
 env = gym.make('ship-ice-v0')
 # env = gym.make('object-pushing-v0')
-# env = gym.make('maze-NAMO-v0')
-observation, info = env.reset()
+# env = gym.make('area-clearing-v0')
+env.reset()
 
 for i in range(500):
 
