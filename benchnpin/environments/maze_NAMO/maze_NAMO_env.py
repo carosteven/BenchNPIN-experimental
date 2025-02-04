@@ -183,12 +183,19 @@ class MazeNAMO(gym.Env):
             for i in arbiter.contact_point_set.points:
                 self.contact_pts.append(list(arbiter.shapes[0].body.world_to_local((i.point_b + i.point_a) / 2)))
 
+        def pre_solve_handler_walls(arbiter, space, data):
+            self.wall_collision = True
+
         # handler = space.add_default_collision_handler()
         self.handler = self.space.add_collision_handler(1, 2)
+        #handle collision between robot and walls (ternimate the episode)
+        self.handler_robot_wall = self.space.add_collision_handler(1, 3)
         # from pymunk docs
         # post_solve: two shapes are touching and collision response processed
         self.handler.pre_solve = pre_solve_handler
         self.handler.post_solve = post_solve_handler
+        # pre handler for robot-wall collision
+        self.handler_robot_wall.pre_solve = pre_solve_handler_walls
 
         if self.renderer is None:
             self.renderer = Renderer(self.space, env_width=self.cfg.occ.map_width, env_height=self.cfg.occ.map_height, render_scale=40, 
@@ -235,7 +242,7 @@ class MazeNAMO(gym.Env):
         for p in self.polygons:
             p.collision_type = 2
 
-        self.robot_body, self.robot_shape = Robot.sim(self.cfg.robot.vertices, self.start, body_type=pymunk.Body.DYNAMIC, color=(64, 64, 64, 255))
+        self.robot_body, self.robot_shape = Robot.sim(self.cfg.robot.vertices, self.start, body_type=pymunk.Body.KINEMATIC, color=(64, 64, 64, 255))
         self.robot_shape.collision_type = 1
         self.space.add(self.robot_body, self.robot_shape)
         # run initial simulation steps to let environment settle
@@ -307,6 +314,9 @@ class MazeNAMO(gym.Env):
 
         self.t = 0
 
+        #reset termination flags
+        self.wall_collision = False
+
         # get updated obstacles
         updated_obstacles = CostMap.get_obs_from_poly(self.polygons)
         info = {'state': (round(self.robot_body.position.x, 2),
@@ -363,24 +373,24 @@ class MazeNAMO(gym.Env):
     def step(self, action):
         """Executes one time step in the environment and returns the result."""
         self.t += 1
-
+        
         if self.cfg.demo_mode:
 
             if action == FORWARD:
-                self.linear_speed = 1
+                self.linear_speed = .01
             elif action == STOP_TURNING:
                 self.angular_speed = 0
             elif action == BACKWARD:
-                self.linear_speed = -1
+                self.linear_speed = -.01
             elif action == LEFT:
-                self.angular_speed = 0.5
+                self.angular_speed = 0.01
             elif action == RIGHT:
-                self.angular_speed = -0.5
+                self.angular_speed = -0.01
 
             elif action == SMALL_LEFT:
-                self.angular_speed = 0.05
+                self.angular_speed = 0.005
             elif action == SMALL_RIGHT:
-                self.angular_speed = -0.05
+                self.angular_speed = -0.005
 
             elif action == STOP:
                 self.linear_speed = 0.0
@@ -421,6 +431,7 @@ class MazeNAMO(gym.Env):
             boundary_violation_terminal = True
         if self.robot_body.position.x > self.cfg.occ.map_width and abs(self.robot_body.position.x - self.cfg.occ.map_width) >= self.boundary_violation_limit:
             boundary_violation_terminal = True
+
         
         # get updated obstacles
         updated_obstacles = CostMap.get_obs_from_poly(self.polygons)
@@ -434,7 +445,7 @@ class MazeNAMO(gym.Env):
         self.obstacles = updated_obstacles
 
         # check episode terminal condition
-        if self.goal_is_reached():
+        if self.goal_is_reached() or self.wall_collision:
             terminated = True
         else:
             terminated = False
@@ -449,7 +460,7 @@ class MazeNAMO(gym.Env):
         reward = self.beta * collision_reward + dist_reward
 
         # apply constraint penalty
-        if boundary_constraint_violated:
+        if boundary_constraint_violated or self.wall_collision:
             reward += BOUNDARY_PENALTY
 
         # apply terminal reward
