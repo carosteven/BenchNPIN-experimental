@@ -5,6 +5,7 @@ import benchnpin.environments
 import gymnasium as gym
 import numpy as np
 import pickle
+from os.path import dirname
 # from pynput import keyboard
 
 
@@ -72,7 +73,8 @@ class ClickAgent:
         plt.close()
 
 def main():
-    env = gym.make('object-pushing-v0')
+    cfg_file = f'{dirname(__file__)}/config_pc.yaml'
+    env = gym.make('object-pushing-v0', cfg_file=cfg_file)
     agent = ClickAgent(env)
     agent.run()
     env.close()

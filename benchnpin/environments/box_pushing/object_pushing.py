@@ -160,7 +160,7 @@ class ObjectPushing(gym.Env):
 
         else:
             self.observation_shape = (LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH, self.num_channels)
-            self.observation_space = spaces.Box(low=0, high=1, shape=self.observation_shape, dtype=np.float32)
+            self.observation_space = spaces.Box(low=0, high=255, shape=self.observation_shape, dtype=np.uint8)
 
         self.yaw_lim = (0, np.pi)       # lower and upper limit of ship yaw  
         self.boundary_violation_limit = 0.0       # if the ship is out of boundary more than this limit, terminate and truncate the episode 
@@ -754,7 +754,7 @@ class ObjectPushing(gym.Env):
             # update distance moved
             robot_distance = distance(robot_initial_position, robot_position)
 
-        elif self.cfg.action_type == 'position':
+        elif self.cfg.env.action_type == 'position':
             ################################ Position Control ################################
             robot_action = np.unravel_index(action, (LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH))
             
@@ -1119,6 +1119,7 @@ class ObjectPushing(gym.Env):
         channels.append(self.get_local_distance_map(self.create_global_shortest_path_map(self.robot.body.position), self.robot.body.position, self.robot.body.angle))
         # observation = np.stack(channels)
         observation = np.stack(channels, axis=2)
+        observation = (observation * 255).astype(np.uint8)
         return observation
     
     def get_local_overhead_map(self):
