@@ -36,14 +36,16 @@ for eps_idx in range(total_episodes):
         action = policy.act(observation=(observation / 255).astype(np.float64), agent_pos=info['state'], obstacles=obstacles)
         env.update_path(policy.path)
 
-        observation, reward, terminated, truncated, info = env.step(action)
+        scaled_action = [action[0] / env.target_speed, action[1] / env.max_yaw_rate_step]
+
+        observation, reward, terminated, truncated, info = env.step(scaled_action)
         obstacles = info['obs']
         env.render()
 
         # print("reward: ", reward, "; dist reward: ", info['dist reward'], "; col reward: ", info['collision reward'], "; col reward scaled: ", info['scaled collision reward'])
         total_diff_reward += info['diff reward']
         total_col_reward += info['collision reward']
-        total_scaled_col_reward += info['scaled collision reward']
+        # total_scaled_col_reward += info['scaled collision reward']
 
         if terminated or truncated:
             print('Terminated:', terminated)
