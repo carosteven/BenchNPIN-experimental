@@ -75,17 +75,17 @@ class ObjectPushing(gym.Env):
     """Custom Environment that follows gym interface"""
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
 
-    def __init__(self):
+    def __init__(self, cfg_file = None):
         super(ObjectPushing, self).__init__()
 
         # get current directory of this script
         self.current_dir = os.path.dirname(__file__)
 
         # construct absolute path to the env_config folder
-        cfg_file = os.path.join(self.current_dir, 'config.yaml')
+        if cfg_file is None:
+            cfg_file = os.path.join(self.current_dir, 'config.yaml')
 
         cfg = DotDict.load_from_file(cfg_file)
-        # self.occupancy = OccupancyGrid(grid_width=cfg.occ.grid_size, grid_height=cfg.occ.grid_size, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, robot.body=None)
         self.cfg = cfg
 
         # state
@@ -143,7 +143,10 @@ class ObjectPushing(gym.Env):
         # Define action space
         max_yaw_rate_step = (np.pi/2) / 15        # rad/sec
         print("max yaw rate per step: ", max_yaw_rate_step)
-        self.action_space = spaces.Box(low=0, high=LOCAL_MAP_PIXEL_WIDTH * LOCAL_MAP_PIXEL_WIDTH, dtype=np.float64)
+        if self.cfg.env.action_type == 'velocity':
+            self.action_space = spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float64)
+        elif self.cfg.env.action_type == 'position':
+            self.action_space = spaces.Box(low=0, high=LOCAL_MAP_PIXEL_WIDTH * LOCAL_MAP_PIXEL_WIDTH, dtype=np.float64)
 
         # Define observation space
         self.show_observation = False
@@ -718,59 +721,40 @@ class ObjectPushing(gym.Env):
             # update distance moved
             robot_distance = distance(robot_initial_position, robot_position)
         
-            # # get updated cubes
-            # # all_cubes_completed = self.cubes_completed()
-            # updated_cubes = CostMap.get_obs_from_poly(self.cubes)
+        elif self.cfg.env.action_type == 'velocity':
+            ################################ Velocity Control ################################
+            linear_speed = action[0]
+            angular_speed = action[1]
+            if abs(linear_speed) >= self.target_speed:
+                linear_speed = self.target_speed*np.sign(linear_speed)
 
-            # # compute work done
-            # work = total_work_done(self.prev_obs, updated_cubes)
-            # self.total_work[0] += work
-            # self.total_work[1].append(work)
-            # self.prev_obs = updated_cubes
-            # # self.cubes = updated_cubes
+            # apply linear and angular speeds
+            global_velocity = R(self.robot.body.angle) @ [linear_speed, 0]
 
-            # # check episode terminal condition
-            # if self.cumulative_cubes == self.num_box:
-            #     terminated = True
-            # else:
-            #     terminated = False
+            # apply velocity controller
+            self.robot.body.angular_velocity = angular_speed
+            self.robot.body.velocity = Vec2d(global_velocity[0], global_velocity[1])
+            
+            # move simulation forward
+            for _ in range(self.steps):
+                # ensure robot moving in the direction it is facing
+                global_velocity = R(self.robot.body.angle) @ [linear_speed, 0]
+                self.robot.body.velocity = Vec2d(global_velocity[0], global_velocity[1])
 
-            # # compute reward
-            # if self.robot.body.position.y < self.goal[1]:
-            #     dist_reward = -1
-            # else:
-            #     dist_reward = 0
-            # collision_reward = -work
+                self.space.step(self.dt / self.steps)
+                # self.render()
 
-            # reward = self.beta * collision_reward + dist_reward
+                if self.robot_hit_obstacle:
+                    break
+            
+            # get new robot pose
+            robot_position, robot_heading = self.robot.body.position, restrict_heading_range(self.robot.body.angle)
+            robot_position = list(robot_position)
+            
+            # update distance moved
+            robot_distance = distance(robot_initial_position, robot_position)
 
-            # # apply constraint penalty
-            # # if boundary_constraint_violated:
-            # #     reward += BOUNDARY_PENALTY
-
-            # # apply terminal reward
-            # # if terminated and not boundary_violation_terminal:
-            # #     reward += TERMINAL_REWARD
-            # terminated = False
-            # truncated = False
-            # # Optionally, we can add additional info
-            # info = {'state': (round(self.robot.body.position.x, 2),
-            #                         round(self.robot.body.position.y, 2),
-            #                         round(self.robot.body.angle, 2)), 
-            #         # 'total_work': self.total_work[0], 
-            #         # 'collision reward': collision_reward, 
-            #         # 'scaled collision reward': collision_reward * self.beta, 
-            #         # 'dist reward': dist_reward, 
-            #         # 'cubes': updated_cubes, 
-            #         'box_count': self.cumulative_cubes}
-        
-            # # generate observation
-            # if self.low_dim_state:
-            #     self.observation = self.generate_observation_low_dim(updated_cubes=updated_cubes)
-            # else:
-            #     self.observation = self.generate_observation()
-
-        else:
+        elif self.cfg.action_type == 'position':
             ################################ Position Control ################################
             robot_action = np.unravel_index(action, (LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH))
             
@@ -937,7 +921,6 @@ class ObjectPushing(gym.Env):
                 if sim_steps % MAP_UPDATE_STEPS == 0:
                     self.update_global_overhead_map()
 
-            # ********************************************** Can probably untab from here (Combine with demo mode) **********************************************
         # step the simulation until everything is still
         self.step_simulation_until_still()
         # get new cube positions

@@ -4,16 +4,24 @@ Uncomment the code blocks to train/evaluate each baseline algorithms
 """
 import argparse
 from benchnpin.baselines.box_pushing.SAM.policy import BoxPushingSAM
+from benchnpin.baselines.box_pushing.ppo.policy import BoxPushingPPO
 from benchnpin.common.utils.utils import DotDict
 from os.path import dirname
 
 def main(args):
-    # ========================= Spatial Action Map Policy =====================================
     cfg = DotDict.load_from_file(args.config_file)
-    sam_policy = BoxPushingSAM()
+    # ========================= Spatial Action Map Policy =========================
+    # sam_policy = BoxPushingSAM()
     # sam_policy.train(job_id=args.job_id, **cfg.train)
-    evaluations = sam_policy.evaluate(num_eps=5)
+    # evaluations = sam_policy.evaluate(num_eps=5)
     # print("sam Eval: ", evaluations)
+
+    # ================================ PPO Policy =================================
+    ppo_policy = BoxPushingPPO(cfg=args.config_file)
+    # ppo_policy.train(job_id=args.job_id, **cfg.train)
+    ppo_policy.train()
+    # evaluations = ppo_policy.evaluate(num_eps=5)
+    # print("ppo Eval: ", evaluations)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -24,7 +32,7 @@ if __name__ == '__main__':
         '--config_file',
         type=str,
         help='path to the config file',
-        default=f'{dirname(dirname(__file__))}/benchnpin/environments/box_pushing/config.yaml'
+        default=f'{dirname(dirname(__file__))}/benchnpin/environments/box_pushing/config_vc.yaml'
     )
 
     parser.add_argument(

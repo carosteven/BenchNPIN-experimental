@@ -196,7 +196,7 @@ class BoxPushingSAM(BasePolicy):
 
         # create environment
         env = gym.make('object-pushing-v0')
-        env = env.unwrapped # NOTE why?
+        env = env.unwrapped
 
         # policy
         policy = DenseActionSpacePolicy(env.action_space.high, env.num_channels, self.final_exploration,

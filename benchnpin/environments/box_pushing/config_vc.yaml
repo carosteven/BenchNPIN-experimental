@@ -1,5 +1,5 @@
 #############################################################################
-# config for loading ship-ice simulation #
+# config for loading box-pushing simulation : config for velocity control   #
 #############################################################################
 ### GLOBAL PARAMS
 output_dir: "logs/" # 'output/trial0'
@@ -86,12 +86,12 @@ agent:
 ### SIMULATION PARAMS
 render:
   log_obs: false        # whether to log occupancy observation
-  show: true            # if true show animation plots
+  show: false            # if true show animation plots
   show_obs: false       # if true show occupancy observation
   frequency: 20         # frequency of rendering
 sim:
   t_max: 2000  # max number of iterations in simulation loop (originally 5000)
-  steps: 100    # number of simulation steps per iteration (originally 10)
+  steps: 1000    # number of simulation steps per iteration (originally 10)
   gravity: !!python/tuple
     - 0
     - 0
@@ -111,7 +111,7 @@ seed: 1
 
 ### SHIP MODEL AND CONTROLLER PARAMS
 controller:
-  dt: 0.2  # the ship dynamics model was discretized with this dt (originally 0.02)
+  dt: 2  # the ship dynamics model was discretized with this dt (originally 0.02)
   # States: [r, u, v] : yaw rate (deg/s), surge velocity (m/s), sway velocity (m/s)
   A:
     - [ 0.9909, 0., 0. ]
@@ -139,10 +139,11 @@ env:
   room_width: 5 # 5 for small, 10 for large
   receptacle_width: 1.5
   shortest_path_channel_scale: 0.25
+  action_type: 'velocity' # options are 'velocity' or 'position'
 
 misc:
   ministep_size: 2.5
-  inactivity_cutoff: 100
+  inactivity_cutoff: 1000
   # random_seed: 42
   # use_gui: true
   # show_obs: false
