@@ -616,18 +616,14 @@ class AreaClearingEnv(gym.Env):
         try:
             observation = np.stack(channels)
         except Exception as e:
-            print(e)
             print(channels[0].shape, channels[1].shape)
             raise e
         return observation
     
     def create_padded_room_zeros(self):
-
-        room_width = (self.max_x_boundary - self.min_x_boundary)
-        room_length = (self.max_y_boundary - self.min_y_boundary)
         return np.zeros((
-            int(2 * np.ceil((room_width * LOCAL_MAP_PIXELS_PER_METER + LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)) / 2)),
-            int(2 * np.ceil((room_length * LOCAL_MAP_PIXELS_PER_METER + LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)) / 2))
+            int(2 * np.ceil((self.map_width * LOCAL_MAP_PIXELS_PER_METER + LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)) / 2)),
+            int(2 * np.ceil((self.map_height * LOCAL_MAP_PIXELS_PER_METER + LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)) / 2))
         ), dtype=np.float32)
     
     def create_padded_room_ones(self):
