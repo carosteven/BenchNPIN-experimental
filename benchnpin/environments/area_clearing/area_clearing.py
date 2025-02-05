@@ -114,7 +114,7 @@ class AreaClearingEnv(gym.Env):
         
         self.action_space = spaces.Box(low= np.array([-1, -1]), 
                                        high=np.array([1, 1]),
-                                       dtype=np.float64)
+                                       dtype=np.float32)
 
         self.max_yaw_rate_step = max_yaw_rate_step
 
@@ -122,10 +122,10 @@ class AreaClearingEnv(gym.Env):
         self.low_dim_state = self.cfg.low_dim_state
         if self.low_dim_state:
             self.fixed_trial_idx = self.cfg.fixed_trial_idx
-            self.observation_space = spaces.Box(low=-10, high=30, shape=(self.cfg.num_obstacles * 2,), dtype=np.float64)
+            self.observation_space = spaces.Box(low=-10, high=30, shape=(self.cfg.num_obstacles * 2,), dtype=np.float32)
         else:
             self.observation_shape = (self.num_channels, LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH)
-            self.observation_space = spaces.Box(low=0, high=1, shape=self.observation_shape, dtype=np.float64)
+            self.observation_space = spaces.Box(low=0, high=255, shape=self.observation_shape, dtype=np.uint8)
 
         self.yaw_lim = (0, np.pi)       # lower and upper limit of ship yaw  
 
@@ -611,16 +611,28 @@ class AreaClearingEnv(gym.Env):
         
         # Overhead map
         channels = []
-        channels.append(self.get_local_map(self.global_overhead_map, self.agent.body.position, self.agent.body.angle))
-        channels.append(self.robot_state_channel)
-        channels.append(self.get_local_distance_map(self.create_global_shortest_path_map(self.agent.body.position), self.agent.body.position, self.agent.body.angle))
-        channels.append(self.get_local_distance_map(self.goal_point_global_map, self.agent.body.position, self.agent.body.angle))
+        obs_array_1 = self.get_local_map(self.global_overhead_map, self.agent.body.position, self.agent.body.angle)
+        channels.append(self.scale_obs_to_image_space(obs_array_1))
+        
+        obs_array_2 = self.robot_state_channel.copy()
+        channels.append(self.scale_obs_to_image_space(obs_array_2))
+
+        obs_array_3 = self.get_local_distance_map(self.create_global_shortest_path_map(self.agent.body.position), self.agent.body.position, self.agent.body.angle)
+        channels.append(self.scale_obs_to_image_space(obs_array_3))
+
+        obs_array_4 = self.get_local_distance_map(self.goal_point_global_map, self.agent.body.position, self.agent.body.angle)
+        channels.append(self.scale_obs_to_image_space(obs_array_4))
+
         try:
-            observation = np.stack(channels)
+            observation = np.stack(channels).astype(np.uint8)
         except Exception as e:
             print(channels[0].shape, channels[1].shape)
             raise e
         return observation
+    
+    def scale_obs_to_image_space(self, obs_array):
+        obs_array = (obs_array * 255).astype(np.uint8)
+        return obs_array
     
     def create_padded_room_zeros(self):
         return np.zeros((

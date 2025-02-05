@@ -36,6 +36,9 @@ class AreaClearingTD3(BasePolicy):
         env = gym.make('area-clearing-v0')
         env = env.unwrapped
 
+        print("Checking environment")
+        check_env(env)
+
         # The noise objects for TD3
         n_actions = env.action_space.shape[-1]
         action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.1 * np.ones(n_actions))

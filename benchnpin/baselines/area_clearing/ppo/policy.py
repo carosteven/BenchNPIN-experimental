@@ -37,6 +37,9 @@ class AreaClearingPPO(BasePolicy):
         env = gym.make('area-clearing-v0')
         env = env.unwrapped
 
+        # Check the environment
+        check_env(env)
+
         self.model = PPO(
             "CnnPolicy",
             env,

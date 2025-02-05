@@ -33,12 +33,13 @@ for eps_idx in range(total_episodes):
     # start a new rollout
     while True:
         # call planning based policy
-        action = policy.act(observation=(observation / 255).astype(np.float64), agent_pos=info['state'], obstacles=obstacles)
+        action = policy.act(observation=(observation).astype(np.float64), agent_pos=info['state'], obstacles=obstacles)
         env.update_path(policy.path)
 
         scaled_action = [action[0] / env.target_speed, action[1] / env.max_yaw_rate_step]
 
         observation, reward, terminated, truncated, info = env.step(scaled_action)
+
         obstacles = info['obs']
         env.render()
 
