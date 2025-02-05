@@ -10,12 +10,11 @@ from matplotlib import pyplot as plt
 
 # ship-ice related imports
 from benchnpin.common.cost_map import CostMap
-from benchnpin.common.evaluation.metrics import total_work_done
+from benchnpin.common.evaluation.metrics import total_work_done, obs_to_goal_difference
 from benchnpin.common.geometry.polygon import poly_area
 from benchnpin.common.utils.sim_utils import generate_sim_obs, generate_sim_agent, get_color
 from benchnpin.common.geometry.polygon import poly_centroid, create_polygon_from_line
 from benchnpin.common.utils.utils import DotDict
-from benchnpin.common.occupancy_grid.occupancy_map import OccupancyGrid
 from benchnpin.common.types import ObstacleType
 from benchnpin.common.utils.renderer import Renderer
 
@@ -517,14 +516,19 @@ class AreaClearingEnv(gym.Env):
         updated_obstacles = CostMap.get_obs_from_poly(self.box_shapes)
         num_completed, all_boxes_completed = self.boxes_completed(updated_obstacles, self.boundary_polygon)
         
+        box_completion_reward = (num_completed - self.cleared_box_count) * 10
+        diff_reward = obs_to_goal_difference(self.prev_obs, updated_obstacles, self.goal_points, self.boundary_polygon)
+
         if(self.cleared_box_count < num_completed):
             print("Boxes completed: ", num_completed)
             self.cleared_box_count = num_completed
 
-        # compute work done
+        ### compute work done
         work = total_work_done(self.prev_obs, updated_obstacles)
         self.total_work[0] += work
         self.total_work[1].append(work)
+        collision_reward = -work
+
         self.prev_obs = updated_obstacles
         self.obstacles = updated_obstacles
 
@@ -538,16 +542,7 @@ class AreaClearingEnv(gym.Env):
         else:
             terminated = False
 
-        ### TODO: NEED TO FIGURE OUT WHAT THE REWARD function should be
-        # compute reward
-        # if self.agent.body.position.y < self.goal[1]:
-        #     dist_reward = -1
-        # else:
-        #     dist_reward = 0
-        dist_reward = 0
-        collision_reward = -work
-
-        reward = self.beta * collision_reward + dist_reward
+        reward = box_completion_reward + diff_reward
         truncated = self.t >= self.t_max
 
         # apply constraint penalty
@@ -566,8 +561,8 @@ class AreaClearingEnv(gym.Env):
                                 round(self.agent.body.angle, 2)), 
                 'total_work': self.total_work[0], 
                 'collision reward': collision_reward, 
-                'scaled collision reward': collision_reward * self.beta, 
-                'dist reward': dist_reward, 
+                'diff reward': diff_reward,
+                'box completed reward': box_completion_reward, 
                 'obs': updated_obstacles,
                 'box_count': num_completed}
         

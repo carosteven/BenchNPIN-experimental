@@ -17,7 +17,7 @@ env = env.unwrapped
 # initialize RL policy
 policy = PlanningBasedPolicy()
 
-total_dist_reward = 0
+total_diff_reward = 0
 total_col_reward = 0
 total_scaled_col_reward = 0
 
@@ -41,7 +41,7 @@ for eps_idx in range(total_episodes):
         env.render()
 
         # print("reward: ", reward, "; dist reward: ", info['dist reward'], "; col reward: ", info['collision reward'], "; col reward scaled: ", info['scaled collision reward'])
-        total_dist_reward += info['dist reward']
+        total_diff_reward += info['diff reward']
         total_col_reward += info['collision reward']
         total_scaled_col_reward += info['scaled collision reward']
 
@@ -51,4 +51,4 @@ for eps_idx in range(total_episodes):
             policy.reset()
             break
 
-print(total_dist_reward, total_col_reward, total_scaled_col_reward)
+print(total_diff_reward, total_col_reward, total_scaled_col_reward)
