@@ -172,13 +172,13 @@ class PlanningBasedPolicy(BasePolicy):
             self.current_point_id = 1
 
         if(self.current_point_id >= len(self.path)):
-            return np.array([0.0, 0.0]), 0.0
+            return 0.0, 0.0
 
         if(euclid_dist(agent_pos, self.path[self.current_point_id]) < 0.4):
             self.current_point_id += 1
 
             if(self.current_point_id >= len(self.path)):
-                return np.array([0.0, 0.0]), 0.0
+                return 0.0, 0.0
             
             # update setpoint
             x_s, y_s, h_s = self.path[self.current_point_id]
@@ -187,7 +187,9 @@ class PlanningBasedPolicy(BasePolicy):
         # call ideal controller to get angular velocity control
         omega, velocity = self.dp.ideal_control(agent_pos[0], agent_pos[1], agent_pos[2])
 
-        return velocity, omega
+        global_velocity = np.linalg.norm(velocity)
+
+        return global_velocity, omega
 
 
     def evaluate(self, num_eps: int, model_eps: str ='latest') -> list:

@@ -491,7 +491,10 @@ class AreaClearingEnv(gym.Env):
 
             # apply velocity controller
             self.agent.body.angular_velocity = action[1] / 2
-            self.agent.body.velocity = action[0].tolist()
+
+            # apply linear and angular speeds
+            global_velocity = R(self.agent.body.angle) @ [action[0], 0]
+            self.agent.body.velocity = Vec2d(global_velocity[0], global_velocity[1])
 
         # move simulation forward
         collision_with_static_or_walls = False
