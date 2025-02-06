@@ -179,6 +179,52 @@ class OccupancyGrid:
         self.local_obstacle_map = local_obstacle_map  
         return local_obstacle_map
 
+    def eagle_view_map_maze(self, agent_state, agent_vertices, obstacles, maze_walls , global_dist_map):
+        #get local window of movable agent
+        #the center of the local window is the agent's position
+        #This method is different from eagle_view_obstacle_map() because it calls compute_occ_img() instead of compute_con_gridmap()
+        global_obstacle_map = self.compute_occ_img(obstacles , ice_binary_w=int(self.map_width * self.meter_to_pixel_scale), 
+                        ice_binary_h=int(self.map_height * self.meter_to_pixel_scale))
+        
+        global_wall_map = self.compute_occ_img_walls(maze_walls, self.occ_map_width, self.occ_map_height)
+
+        robot_global_footprint = self._compute_global_footprint(agent_state, agent_vertices)
+        #robot position in meter with respect to the global map
+        robot_x, robot_y = agent_state[:2]
+        #center the local window on the agent's position 
+        window_x, window_y = int(robot_x * self.meter_to_pixel_scale), int(robot_y * self.meter_to_pixel_scale)
+        #initialize the local robot footprint as zeros (out of bound = 0.0)
+        local_footprint = np.zeros((self.local_window_height, self.local_window_width))
+        #initialize the local obstacle map as zeros (out of bound = 0.0)
+        local_obstacle_map = np.zeros((self.local_window_height, self.local_window_width))
+        #initialize the local wall map as zeros (out of bound = 0.0)
+        local_wall_map = np.zeros((self.local_window_height, self.local_window_width))
+        #initialize the local global distance map as ones (out of bound = 1.0) higher cost for out of bound
+        local_dist_map = np.ones((self.local_window_height, self.local_window_width))
+
+        for local_i in range(self.local_window_height):
+            for local_j in range(self.local_window_width):
+                global_i = int(local_i + window_y - (self.local_window_height / 2))
+                global_j = int(local_j + window_x - (self.local_window_width / 2))
+                # check out-of-bound
+                if global_i < 0 or global_i >= global_obstacle_map.shape[0] or global_j < 0 or global_j >= global_obstacle_map.shape[1]:
+                    continue #zero padding for out of bound
+                
+                local_footprint[local_i, local_j] = robot_global_footprint[global_i, global_j]   
+                local_obstacle_map[local_i, local_j] = global_obstacle_map[global_i, global_j]
+                local_wall_map[local_i, local_j] = global_wall_map[global_i, global_j]
+                local_dist_map[local_i, local_j] = global_dist_map[global_i, global_j]
+        
+        self.local_footprint = local_footprint
+        self.local_obstacle_map = local_obstacle_map
+        self.local_wall_map = local_wall_map
+        self.local_dist_map = local_dist_map
+
+
+        return local_footprint, local_obstacle_map, local_wall_map, local_dist_map
+
+
+
 
     def compute_ship_footprint(self, body, ship_vertices, padding=0.25):
         self.footprint = np.zeros((self.occ_map_height, self.occ_map_width))

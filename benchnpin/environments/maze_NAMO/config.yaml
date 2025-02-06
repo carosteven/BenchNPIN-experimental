@@ -39,6 +39,8 @@ occ:     # occupancy map grid size
   m_to_pix_scale: 40   # number of pixels per meter when generating the raw occupancy map
   map_height: 20       # occupancy map height (in meter)
   map_width: 20       # occupancy map width (in meter)
+  local_width: 8      # local moving window width (in meter)
+  local_height: 8     # local moving window height (in meter)
 a_star:
   horizon: 30  # receding horizon in metres (needs to be an int for it to be enabled)
   replan: true
