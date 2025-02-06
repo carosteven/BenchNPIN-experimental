@@ -10,7 +10,7 @@ from benchnpin.baselines.area_clearing.td3.policy import AreaClearingTD3
 # ========================= PPO Policy =====================================
 ppo_policy = AreaClearingPPO()
 ppo_policy.train(total_timesteps=int(2e5), checkpoint_freq=10000)
-evaluations = ppo_policy.evaluate(num_eps=5, model_eps='300')
+evaluations = ppo_policy.evaluate(num_eps=5, model_eps='200000')
 print("PPO Eval: ", evaluations)
 
 

@@ -33,6 +33,7 @@ R = lambda theta: np.asarray([
 ])
 
 BOUNDARY_PENALTY = -50
+TRUNCATION_PENALTY = -100
 TERMINAL_REWARD = 200
 
 LOCAL_MAP_PIXEL_WIDTH = 96
@@ -429,6 +430,8 @@ class AreaClearingEnv(gym.Env):
 
         self.t = 0
 
+        self.cleared_box_count = 0
+
         # get updated obstacles
         updated_obstacles = CostMap.get_obs_from_poly(self.box_shapes)
         info = {'state': (round(self.agent.body.position.x, 2),
@@ -520,12 +523,13 @@ class AreaClearingEnv(gym.Env):
         updated_obstacles = CostMap.get_obs_from_poly(self.box_shapes)
         num_completed, all_boxes_completed = self.boxes_completed(updated_obstacles, self.boundary_polygon)
         
-        box_completion_reward = (num_completed - self.cleared_box_count) * 10
         diff_reward = obs_to_goal_difference(self.prev_obs, updated_obstacles, self.goal_points, self.boundary_polygon)
 
+        box_completion_reward = 0
         if(self.cleared_box_count < num_completed):
             print("Boxes completed: ", num_completed)
             self.cleared_box_count = num_completed
+            box_completion_reward = (num_completed - self.cleared_box_count) * 100
 
         ### compute work done
         work = total_work_done(self.prev_obs, updated_obstacles)
@@ -552,9 +556,10 @@ class AreaClearingEnv(gym.Env):
         # apply constraint penalty
         if failure:
             reward += BOUNDARY_PENALTY
-
+        elif truncated:
+            reward += TRUNCATION_PENALTY
         # apply terminal reward
-        if (terminated or truncated) and not failure:
+        elif terminated and not failure:
             reward += TERMINAL_REWARD
         
         done = terminated or truncated
