@@ -35,9 +35,8 @@ goal_x: 2
 goal_y: 10
 threshold_dist: 0.5   # fraction of path length for deciding whether to update planned path
 threshold_cost: 0.95  # fraction of path cost for deciding whether to update planned path
-occ:
-  grid_size: 0.2       # occupancy map grid size
-  m_to_pix_scale: 5   # number of pixels per meter when generating the raw occupancy map
+occ:     # occupancy map grid size
+  m_to_pix_scale: 40   # number of pixels per meter when generating the raw occupancy map
   map_height: 20       # occupancy map height (in meter)
   map_width: 20       # occupancy map width (in meter)
 a_star:

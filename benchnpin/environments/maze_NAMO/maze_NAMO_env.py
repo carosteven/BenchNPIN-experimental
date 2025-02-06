@@ -54,7 +54,8 @@ class MazeNAMO(gym.Env):
         cfg_file = os.path.join(self.current_dir, 'config.yaml')
 
         cfg = DotDict.load_from_file(cfg_file)
-        self.occupancy = OccupancyGrid(grid_width=cfg.occ.grid_size, grid_height=cfg.occ.grid_size, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, ship_body=None)
+        grid_size = 1/cfg.occ.m_to_pix_scale
+        self.occupancy = OccupancyGrid(grid_width=grid_size, grid_height= grid_size, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, ship_body=None, meter_to_pixel_scale=cfg.occ.m_to_pix_scale)
         self.cfg = cfg
 
         self.beta = 500         # amount to scale the collision reward
@@ -245,6 +246,11 @@ class MazeNAMO(gym.Env):
         self.robot_body, self.robot_shape = Robot.sim(self.cfg.robot.vertices, self.start, body_type=pymunk.Body.KINEMATIC, color=(64, 64, 64, 255))
         self.robot_shape.collision_type = 1
         self.space.add(self.robot_body, self.robot_shape)
+
+        #compute the global distance map
+        self.global_distance_map = self.occupancy.global_goal_point_dist_transform(self.goal, self.maze_walls)
+        print("global distance map shape: ", self.global_distance_map.shape)
+        print("global distance map: ", self.global_distance_map)
         # run initial simulation steps to let environment settle
         for _ in range(1000):
             self.space.step(self.dt / self.steps)
@@ -523,6 +529,7 @@ class MazeNAMO(gym.Env):
         movable_obstacles = self.occupancy.compute_occ_img(obstacles=self.obstacles, 
                         ice_binary_w=int(self.occupancy.map_width * self.cfg.occ.m_to_pix_scale), 
                         ice_binary_h=int(self.occupancy.map_height * self.cfg.occ.m_to_pix_scale))
+        #compute fixed obstacles binary occupancy grid
         fixed_obstacles = self.occupancy.compute_occ_img_walls(walls=self.maze_walls, 
                         width=int(self.occupancy.map_width * self.cfg.occ.m_to_pix_scale), 
                         height=int(self.occupancy.map_height * self.cfg.occ.m_to_pix_scale))
@@ -608,6 +615,18 @@ class MazeNAMO(gym.Env):
                 save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
                 fp = os.path.join(save_fig_dir, str(self.t) + '_goal_img.png')
                 self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
+
+                #visualize distance map
+                self.con_ax.clear()
+                occ_map_render = np.copy(self.global_distance_map)
+                occ_map_render = np.flip(occ_map_render, axis=0)
+                self.con_ax.imshow(occ_map_render, cmap='gray')
+                self.con_ax.axis('off')
+                save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
+                fp = os.path.join(save_fig_dir, str(self.t) + '_distance_map.png')
+                self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
+
+                
 
         else:
             self.renderer.render(save=False)

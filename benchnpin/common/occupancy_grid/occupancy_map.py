@@ -81,8 +81,6 @@ class OccupancyGrid:
             vertices.append(wall[1] + wall_radius * perpendicular_unit_vector + wall_radius * unit_direction_vector)
             vertices = np.array(vertices) * meter_to_pixel_scale
 
-            print("vertices: ", vertices)
-            print("shape: ", vertices.shape)
             # get pixel coordinates on costmap that are contained inside obstacle/polygon
             rr, cc = draw.polygon(vertices[:, 1], vertices[:, 0], shape=raw_wall_binary.shape)
 
@@ -371,7 +369,62 @@ class OccupancyGrid:
 
         return global_edt
 
+    def global_goal_point_dist_transform(self, goal, walls,wall_radius = 0.5,connectivity= "8-connectivity"):
+        """
+        Compute a global normalized goal-point distance transform image using wavefront algorithm
+        """
+        grid_to_meter_scale = self.map_width / self.occ_map_width
+        goal_x, goal_y = goal
+        goal_x_idx = int(goal_x / grid_to_meter_scale)
+        goal_y_idx = int(goal_y / grid_to_meter_scale)
 
+        global_edt = np.zeros((self.occ_map_height, self.occ_map_width))
+        global_edt[goal_y_idx, goal_x_idx] = 1.0
+
+        # compute occupancy of the walls
+        global_wall_binary = self.compute_occ_img_walls(walls, self.occ_map_width, self.occ_map_height, wall_radius = wall_radius)
+        
+        # neighbors 
+        if connectivity == "4-connectivity":
+            neighbors = [(0, 1), (0, -1), (1, 0), (-1, 0)]
+        elif connectivity == "8-connectivity":
+            neighbors = [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (1, -1), (-1, 1), (-1, -1)]
+
+        # wavefront algorithm
+        queue = [(goal_y_idx, goal_x_idx)]
+        visited = set()
+        visited.add((goal_y_idx, goal_x_idx))
+
+        while queue:
+            y, x = queue.pop(0)
+            for dy, dx in neighbors:
+                new_y, new_x = y + dy, x + dx
+                # check if neighbor is out-of-bound
+                if new_y < 0 or new_y >= self.occ_map_height or new_x < 0 or new_x >= self.occ_map_width:
+                    continue
+                # check if neighbor is already visited
+                if (new_y, new_x) in visited:
+                    continue
+                # check if neighbor is inside the wall
+                if global_wall_binary[new_y, new_x] == 1.0:
+                    continue
+                # otherwise, update the distance, add to visited and queue
+                visited.add((new_y, new_x))
+                global_edt[new_y, new_x] = global_edt[y, x] + 1
+                queue.append((new_y, new_x))
+
+        #normalize the distance
+        global_edt = global_edt / global_edt.max()
+
+        #add walls to the normalized distance map as 1.0
+        global_edt[global_wall_binary == 1.0] = 1.0
+
+        return global_edt
+        
+
+
+
+            
     
     def eagle_view_goal_dist_transform(self, goal_y, ship_state, vertical_shift=2):
         """
