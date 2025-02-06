@@ -36,7 +36,7 @@ BOUNDARY_PENALTY = -50
 TRUNCATION_PENALTY = -100
 TERMINAL_REWARD = 200
 
-LOCAL_MAP_PIXEL_WIDTH = 96
+LOCAL_MAP_PIXEL_WIDTH = 192
 LOCAL_MAP_WIDTH = 20 #  meters
 LOCAL_MAP_PIXELS_PER_METER = LOCAL_MAP_PIXEL_WIDTH / LOCAL_MAP_WIDTH
 
@@ -606,7 +606,8 @@ class AreaClearingEnv(gym.Env):
 
     def update_path(self, new_path):
         self.path = new_path
-        self.renderer.update_path(path=self.path)
+        if(self.renderer):
+            self.renderer.update_path(path=self.path)
 
     def generate_observation(self, done=False):
         self.update_global_overhead_map()
@@ -789,7 +790,8 @@ class AreaClearingEnv(gym.Env):
         if self.t % self.cfg.anim.plot_steps == 0:
 
             path = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx), str(self.t) + '.png')
-            self.renderer.render(save=True, path=path)
+            if(self.renderer):
+                self.renderer.render(save=True, path=path)
 
             if self.cfg.render.log_obs and not self.low_dim_state:
 
@@ -805,7 +807,8 @@ class AreaClearingEnv(gym.Env):
                 self.state_fig.savefig(os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx), str(self.t) + '_obs.png'))
 
         else:
-            self.renderer.render(save=False)
+            if(self.renderer):
+                self.renderer.render(save=False)
 
 
     def close(self):
