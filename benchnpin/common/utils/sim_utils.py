@@ -140,6 +140,7 @@ def generate_sim_maze(space, maze_walls):
         print(pos)
         body = pymunk.Body(body_type=pymunk.Body.STATIC)
         shape = pymunk.Segment(body, pos[0], pos[1], 0.5)
+        shape.collision_type = 3
         shape.elasticity = 0.5
         shape.friction = 0.5
         space.add(body, shape)
