@@ -526,8 +526,8 @@ class OccupancyGrid:
         tail_pos = np.array(tail) @ R.T + np.array(position)
 
         # convert to grid coordinate
-        head_pix = np.array([head_pos[0] * meter_to_grid_scale_x, head_pos[1] * meter_to_grid_scale_y]).astype(np.uint8)       # (x, y)
-        tail_pix = np.array([tail_pos[0] * meter_to_grid_scale_x, tail_pos[1] * meter_to_grid_scale_y]).astype(np.uint8)       # (x, y)
+        head_pix = np.array([head_pos[0] * meter_to_grid_scale_x, head_pos[1] * meter_to_grid_scale_y]).astype(np.uint16)       # (x, y)
+        tail_pix = np.array([tail_pos[0] * meter_to_grid_scale_x, tail_pos[1] * meter_to_grid_scale_y]).astype(np.uint16)       # (x, y)
 
         cv2.line(global_orientation, head_pix, tail_pix, color=0.5, thickness=1)
         global_orientation[head_pix[1], head_pix[0]] = 1.0              # mark the head
