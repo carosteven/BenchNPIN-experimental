@@ -48,7 +48,7 @@ for eps_idx in range(total_episodes):
         total_col_reward += info['collision reward']
         # total_scaled_col_reward += info['scaled collision reward']
 
-        if(reward > 0):
+        if(reward != 0):
             print('Reward:', reward)
 
         if terminated or truncated:

@@ -569,6 +569,9 @@ class AreaClearingEnv(gym.Env):
         if(self.cleared_box_count < num_completed):
             print("Boxes completed: ", num_completed)            
             self.cleared_box_count = num_completed
+        elif(self.cleared_box_count > num_completed):
+            print("Boxes completed: ", num_completed)
+            self.cleared_box_count = num_completed
 
         ### compute work done
         work = total_work_done(self.prev_obs, updated_obstacles)
