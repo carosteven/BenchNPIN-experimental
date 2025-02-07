@@ -32,11 +32,13 @@ R = lambda theta: np.asarray([
     [np.sin(theta), np.cos(theta)]
 ])
 
-BOUNDARY_PENALTY = -50
-TRUNCATION_PENALTY = -100
+BOUNDARY_PENALTY = -100
+TRUNCATION_PENALTY = -30
 TERMINAL_REWARD = 200
+BOX_CLEARED_REWARD = 50
+BOX_PUSHING_REWARD_MULTIPLIER = 1.5
 
-LOCAL_MAP_PIXEL_WIDTH = 192
+LOCAL_MAP_PIXEL_WIDTH = 144
 LOCAL_MAP_WIDTH = 20 #  meters
 LOCAL_MAP_PIXELS_PER_METER = LOCAL_MAP_PIXEL_WIDTH / LOCAL_MAP_WIDTH
 
@@ -523,13 +525,13 @@ class AreaClearingEnv(gym.Env):
         updated_obstacles = CostMap.get_obs_from_poly(self.box_shapes)
         num_completed, all_boxes_completed = self.boxes_completed(updated_obstacles, self.boundary_polygon)
         
-        diff_reward = obs_to_goal_difference(self.prev_obs, updated_obstacles, self.goal_points, self.boundary_polygon)
+        diff_reward = obs_to_goal_difference(self.prev_obs, updated_obstacles, self.goal_points, self.boundary_polygon) * BOX_PUSHING_REWARD_MULTIPLIER
 
         box_completion_reward = 0
         if(self.cleared_box_count < num_completed):
             print("Boxes completed: ", num_completed)
             self.cleared_box_count = num_completed
-            box_completion_reward = (num_completed - self.cleared_box_count) * 100
+            box_completion_reward = (num_completed - self.cleared_box_count) * BOX_CLEARED_REWARD
 
         ### compute work done
         work = total_work_done(self.prev_obs, updated_obstacles)
@@ -721,6 +723,7 @@ class AreaClearingEnv(gym.Env):
             shortest_path_image /= LOCAL_MAP_PIXELS_PER_METER
             global_map = np.minimum(global_map, shortest_path_image)
         global_map /= (np.sqrt(2) * LOCAL_MAP_PIXEL_WIDTH) / LOCAL_MAP_PIXELS_PER_METER
+
         # global_map *= self.cfg.env.shortest_path_channel_scale
 
         global_map += 1 - self.configuration_space
@@ -768,9 +771,6 @@ class AreaClearingEnv(gym.Env):
 
         self.closest_cspace_indices = distance_transform_edt(1 - self.configuration_space, return_distances=False, return_indices=True)
         self.small_obstacle_map = 1 - small_obstacle_map
-
-        dist_transform = distance_transform_edt(self.configuration_space, return_distances=True)
-        dist_transform_np = np.array(dist_transform)
     
     def boxes_completed(self, updated_obstacles, boundary_polygon):
         """
