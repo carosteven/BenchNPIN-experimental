@@ -94,7 +94,7 @@ controller:
   Lfc: 0.5
   
   # target speed
-  target_speed: 0.3  # m/s
+  target_speed: 0.2  # m/s
 
   PID_gains:  # gains for 3 PIDs
     - [ 5, 0, 5 ]
