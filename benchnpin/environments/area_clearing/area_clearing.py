@@ -18,9 +18,9 @@ from benchnpin.common.utils.utils import DotDict
 from benchnpin.common.types import ObstacleType
 from benchnpin.common.utils.renderer import Renderer
 
-from shapely.geometry import Polygon, LineString
+from shapely.geometry import Polygon, LineString, Point
 
-from benchnpin.environments.area_clearing.utils import round_up_to_even, position_to_pixel_indices
+from benchnpin.environments.area_clearing.utils import round_up_to_even, position_to_pixel_indices, pixel_indices_to_position
 from scipy.ndimage import distance_transform_edt, rotate as rotate_image
 from skimage.morphology import disk, binary_dilation
 import spfa
@@ -746,8 +746,6 @@ class AreaClearingEnv(gym.Env):
         global_map /= LOCAL_MAP_PIXELS_PER_METER
         global_map /= (np.sqrt(2) * LOCAL_MAP_PIXEL_WIDTH) / LOCAL_MAP_PIXELS_PER_METER
         # global_map *= self.cfg.env.shortest_path_channel_scale
-
-        global_map += 1 - self.configuration_space
         return global_map
     
     def create_global_shortest_path_to_goal_points(self):
@@ -760,6 +758,13 @@ class AreaClearingEnv(gym.Env):
             shortest_path_image /= LOCAL_MAP_PIXELS_PER_METER
             global_map = np.minimum(global_map, shortest_path_image)
         global_map /= (np.sqrt(2) * LOCAL_MAP_PIXEL_WIDTH) / LOCAL_MAP_PIXELS_PER_METER
+
+        # fill points outside boundary polygon with 0
+        for i in range(global_map.shape[0]):
+            for j in range(global_map.shape[1]):
+                x, y = pixel_indices_to_position(i, j, self.configuration_space.shape, LOCAL_MAP_PIXELS_PER_METER)
+                if not self.boundary_polygon.contains(Point(x, y)):
+                    global_map[i, j] = 0
 
         # global_map *= self.cfg.env.shortest_path_channel_scale
 
