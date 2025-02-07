@@ -563,6 +563,7 @@ class AreaClearingEnv(gym.Env):
         num_completed, all_boxes_completed = self.boxes_completed(updated_obstacles, self.boundary_polygon)
         
         diff_reward = obs_to_goal_difference(self.prev_obs, updated_obstacles, self.goal_points, self.boundary_polygon) * BOX_PUSHING_REWARD_MULTIPLIER
+        movement_reward = 0 if abs(diff_reward) > 0 else TIME_PENALTY
 
         box_completion_reward = 0
         if(self.cleared_box_count < num_completed):
@@ -589,7 +590,7 @@ class AreaClearingEnv(gym.Env):
         else:
             terminated = False
 
-        reward = box_completion_reward + diff_reward + TIME_PENALTY
+        reward = box_completion_reward + movement_reward
         truncated = self.t >= self.t_max
 
         # apply constraint penalty
