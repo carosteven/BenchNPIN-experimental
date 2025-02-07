@@ -32,11 +32,12 @@ R = lambda theta: np.asarray([
     [np.sin(theta), np.cos(theta)]
 ])
 
-BOUNDARY_PENALTY = -100
-TRUNCATION_PENALTY = -50
-TERMINAL_REWARD = 200
-BOX_CLEARED_REWARD = 50
+BOUNDARY_PENALTY = -50
+TRUNCATION_PENALTY = -25
+TERMINAL_REWARD = 100
+BOX_CLEARED_REWARD = 10
 BOX_PUSHING_REWARD_MULTIPLIER = 1.5
+TIME_PENALTY = -0.1
 
 LOCAL_MAP_PIXEL_WIDTH = 144
 LOCAL_MAP_WIDTH = 20 #  meters
@@ -588,7 +589,7 @@ class AreaClearingEnv(gym.Env):
         else:
             terminated = False
 
-        reward = box_completion_reward + diff_reward
+        reward = box_completion_reward + diff_reward + TIME_PENALTY
         truncated = self.t >= self.t_max
 
         # apply constraint penalty
