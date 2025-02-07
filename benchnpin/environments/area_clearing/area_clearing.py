@@ -566,11 +566,8 @@ class AreaClearingEnv(gym.Env):
         movement_reward = 0 if abs(diff_reward) > 0 else TIME_PENALTY
 
         box_completion_reward = (num_completed - self.cleared_box_count) * BOX_CLEARED_REWARD
-        if(self.cleared_box_count < num_completed):
+        if(self.cleared_box_count != num_completed):
             print("Boxes completed: ", num_completed)            
-            self.cleared_box_count = num_completed
-        elif(self.cleared_box_count > num_completed):
-            print("Boxes completed: ", num_completed)
             self.cleared_box_count = num_completed
 
         ### compute work done
