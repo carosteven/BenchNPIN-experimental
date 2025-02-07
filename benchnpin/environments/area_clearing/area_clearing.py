@@ -749,6 +749,8 @@ class AreaClearingEnv(gym.Env):
         global_map /= LOCAL_MAP_PIXELS_PER_METER
         global_map /= (np.sqrt(2) * LOCAL_MAP_PIXEL_WIDTH) / LOCAL_MAP_PIXELS_PER_METER
         # global_map *= self.cfg.env.shortest_path_channel_scale
+
+        global_map += 1 - self.configuration_space
         return global_map
     
     def create_global_shortest_path_to_goal_points(self):
