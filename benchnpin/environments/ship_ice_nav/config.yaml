@@ -76,7 +76,7 @@ ship:
 ### SIMULATION PARAMS
 render:
   log_obs: false       # whether to log occupancy observation
-  show: false                # if true show animation plots
+  show: true             # if true show animation plots
 sim:
   t_max: 500  # max number of iterations in simulation loop (originally 5000)
   steps: 400    # number of simulation steps per iteration (originally 10)

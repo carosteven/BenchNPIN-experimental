@@ -2,6 +2,7 @@ import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
 import os
+import time
 
 import pickle
 import random
@@ -362,7 +363,9 @@ class ShipIceEnv(gym.Env):
         if self.low_dim_state:
             observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles)
         else:
+            start_time = time.time()
             observation = self.generate_observation()
+            print("time to generate observation ship: ", time.time() - start_time)
         return observation, reward, terminated, False, info
 
 
