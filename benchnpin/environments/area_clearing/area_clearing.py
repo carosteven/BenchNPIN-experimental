@@ -33,8 +33,8 @@ R = lambda theta: np.asarray([
 ])
 
 BOUNDARY_PENALTY = -50
-TRUNCATION_PENALTY = -25
-TERMINAL_REWARD = 100
+TRUNCATION_PENALTY = 0
+TERMINAL_REWARD = 200
 BOX_CLEARED_REWARD = 25
 BOX_PUSHING_REWARD_MULTIPLIER = 1.5
 TIME_PENALTY = -0.1
@@ -565,10 +565,9 @@ class AreaClearingEnv(gym.Env):
         diff_reward = obs_to_goal_difference(self.prev_obs, updated_obstacles, self.goal_points, self.boundary_polygon) * BOX_PUSHING_REWARD_MULTIPLIER
         movement_reward = 0 if abs(diff_reward) > 0 else TIME_PENALTY
 
-        box_completion_reward = 0
+        box_completion_reward = (num_completed - self.cleared_box_count) * BOX_CLEARED_REWARD
         if(self.cleared_box_count < num_completed):
-            print("Boxes completed: ", num_completed)
-            box_completion_reward = (num_completed - self.cleared_box_count) * BOX_CLEARED_REWARD
+            print("Boxes completed: ", num_completed)            
             self.cleared_box_count = num_completed
 
         ### compute work done
@@ -590,7 +589,7 @@ class AreaClearingEnv(gym.Env):
         else:
             terminated = False
 
-        reward = box_completion_reward + movement_reward
+        reward = box_completion_reward + diff_reward + TIME_PENALTY
         truncated = self.t >= self.t_max
 
         # apply constraint penalty
