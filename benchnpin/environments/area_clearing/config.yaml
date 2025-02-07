@@ -58,7 +58,7 @@ render:
   log_obs: true       # whether to log occupancy observation
   show: true                # if true show animation plots
 sim:
-  t_max: 2000  # max number of iterations in simulation loop (originally 5000)
+  t_max: 3000  # max number of iterations in simulation loop (originally 5000)
   steps: 100    # number of simulation steps per iteration (originally 10)
   gravity: !!python/tuple
     - 0
