@@ -269,6 +269,14 @@ class AreaClearingEnv(gym.Env):
             # find the impact locations in the local coordinates of the ship
             for i in arbiter.contact_point_set.points:
                 self.contact_pts.append(list(arbiter.shapes[0].body.world_to_local((i.point_b + i.point_a) / 2)))
+        
+        def robot_boundary_pre_solve(arbiter, space, data):
+            self.robot_hit_obstacle = self.prevent_boundary_intersection(arbiter)
+            return True
+        
+        def cube_boundary_pre_solve(arbiter, space, data):
+            self.prevent_boundary_intersection(arbiter)
+            return True
 
         # handler = space.add_default_collision_handler()
         self.handler = self.space.add_collision_handler(1, 2)
@@ -276,6 +284,12 @@ class AreaClearingEnv(gym.Env):
         # post_solve: two shapes are touching and collision response processed
         self.handler.pre_solve = pre_solve_handler
         self.handler.post_solve = post_solve_handler
+
+        self.robot_boundary_handler = self.space.add_collision_handler(1, 3)
+        self.robot_boundary_handler.pre_solve = robot_boundary_pre_solve
+        
+        self.cube_boundary_handler = self.space.add_collision_handler(2, 3)
+        self.cube_boundary_handler.pre_solve = cube_boundary_pre_solve
 
         if self.cfg.render.show:
             if self.renderer is None:
@@ -305,6 +319,9 @@ class AreaClearingEnv(gym.Env):
         self.obs_dicts.extend(obs_dicts)
         obs_dicts, self.wall_shapes = self.generate_walls()
         self.obs_dicts.extend(obs_dicts)
+
+        for b in self.static_obs_shapes + self.wall_shapes:
+            b.collision_type = 3
         
         # filter out obstacles that have zero area
         self.obs_dicts[:] = [ob for ob in self.obs_dicts if (poly_area(ob['vertices']) != 0)]
@@ -325,6 +342,25 @@ class AreaClearingEnv(gym.Env):
         for _ in range(1000):
             self.space.step(self.dt / self.steps)
         self.prev_obs = CostMap.get_obs_from_poly(self.box_shapes)
+
+    def prevent_boundary_intersection(self, arbiter):
+        collision = False
+        normal = arbiter.contact_point_set.normal
+        current_velocity = arbiter.shapes[0].body.velocity
+        reflection = current_velocity - 2 * current_velocity.dot(normal) * normal
+
+        elasticity = 0.5
+        new_velocity = reflection * elasticity
+
+        penetration_depth = arbiter.contact_point_set.points[0].distance
+        if penetration_depth < 0:
+            collision = True
+        correction_vector = normal * penetration_depth
+        arbiter.shapes[0].body.position += correction_vector
+
+        arbiter.shapes[0].body.velocity = new_velocity
+
+        return collision
 
     def generate_static_obstacles(self):
         obs_dict = []
