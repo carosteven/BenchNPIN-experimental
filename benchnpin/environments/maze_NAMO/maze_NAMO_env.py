@@ -63,7 +63,7 @@ class MazeNAMO(gym.Env):
 
         self.beta = 0         # amount to scale the collision reward
         self.k = 2        # amount to scale the distance reward
-
+        self.k_increment = 50
         self.episode_idx = None     # the increment of this index is handled in reset()
 
         self.path = None
@@ -73,16 +73,18 @@ class MazeNAMO(gym.Env):
 
         
         self.env_max_trial = 4000
+        
+        self.prev_dist_value = 0
 
         #robot head and tail for orientation map
         self.robot_head = (self.cfg.robot.vertices[0][0]+self.cfg.robot.vertices[3][0])/2, (self.cfg.robot.vertices[0][1]+self.cfg.robot.vertices[3][1])/2
         self.robot_tail = (self.cfg.robot.vertices[1][0]+self.cfg.robot.vertices[2][0])/2, (self.cfg.robot.vertices[1][1]+self.cfg.robot.vertices[2][1])/2
         # Define action space
-        max_linear_speed = 1.0
-        max_yaw_rate_step = (np.pi/2) / 15        # rad/sec
-        print("max yaw rate per step: ", max_yaw_rate_step)
-        self.action_space = spaces.Box(low= np.array([0, -max_yaw_rate_step]), 
-                                       high=np.array([max_linear_speed, max_yaw_rate_step]),
+        self.max_linear_speed = 1.0
+        self.max_linear_speed = 0.0
+        self.max_yaw_rate_step = (np.pi/2) / 15        # rad/sec
+        self.action_space = spaces.Box(low= np.array([-1, -1]), 
+                                       high=np.array([1, 1]),
                                        dtype=np.float64)
         
         # Define observation space
@@ -389,7 +391,8 @@ class MazeNAMO(gym.Env):
         robot_pose = (self.robot_body.position.x, self.robot_body.position.y, self.robot_body.angle)
         robot_pixel_x = int(robot_pose[0] * self.cfg.occ.m_to_pix_scale) 
         robot_pixel_y = int(robot_pose[1] * self.cfg.occ.m_to_pix_scale)
-        return self.global_distance_map[robot_pixel_y, robot_pixel_x]
+        dist_value = 1/np.exp(self.global_distance_map[robot_pixel_y, robot_pixel_x] * self.k)
+        return dist_value
 
     def step(self, action):
         """Executes one time step in the environment and returns the result."""
@@ -431,10 +434,13 @@ class MazeNAMO(gym.Env):
             self.robot_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
 
         else:
+            #scale the action
+            action[0] = (action[0] + self.max_linear_speed) / 2 #scaling from [-1, 1] to [0, 1] 
+            action[1] = action[1] * self.max_yaw_rate_step #scaling from [-1, 1] to [-max_yaw_rate_step, max_yaw_rate_step]
 
             # apply linear velocity
             global_velocity = R(self.robot_body.angle) @ [action[0], 0]
-            print("env action0 : ", action[0])
+            
 
             # apply velocity controller
             self.robot_body.angular_velocity = action[1]
@@ -473,15 +479,20 @@ class MazeNAMO(gym.Env):
             terminated = False
 
         # compute reward
+        #rewards -> distance_value_increment, collision_reward, terminal_reward
         if self.robot_body.position.x != self.goal[0] and self.robot_body.position.y != self.goal[1]:
-            dist_reward = 1/np.exp(self.get_distance_value(self.robot_body.position.x, self.robot_body.position.y) * self.k)
+            dist_value = self.get_distance_value(self.robot_body.position.x, self.robot_body.position.y)
+            dist_increment_reward = max(0,dist_value - self.prev_dist_value)*self.k_increment
+            #
+            self.prev_dist_value = dist_value
             #print("dist reward: ", dist_reward)
             #print("distance value: ", self.get_distance_value(self.robot_body.position.x, self.robot_body.position.y))
         else:
-            dist_reward = 0
+            dist_increment_reward = 0
         collision_reward = -work
 
-        reward = self.beta * collision_reward + dist_reward
+        reward = self.beta * collision_reward + dist_increment_reward
+        print("reward: ", reward)
 
         # apply constraint penalty
         if boundary_constraint_violated or self.wall_collision:
@@ -499,7 +510,7 @@ class MazeNAMO(gym.Env):
                 'total_work': self.total_work[0], 
                 'collision reward': collision_reward, 
                 'scaled collision reward': collision_reward * self.beta, 
-                'dist reward': dist_reward, 
+                'dist INCREMENT reward': dist_increment_reward, 
                 'obs': updated_obstacles, 
                }    
         

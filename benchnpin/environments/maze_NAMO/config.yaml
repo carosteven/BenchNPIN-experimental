@@ -8,7 +8,7 @@ plot:
   y_axis_limit: 18  # limits the y-axis of the plot
   show: false       # true will show planner plots
 
-demo_mode: false     # when using demo mode, control both forward and angular speed
+demo_mode: true     # when using demo mode, control both forward and angular speed
 
 # obstacles information
 randomize_obstacles: true
