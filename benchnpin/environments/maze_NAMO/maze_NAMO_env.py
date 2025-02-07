@@ -8,6 +8,7 @@ import random
 import pymunk
 from pymunk import Vec2d
 from matplotlib import pyplot as plt
+import time
 
 # maze NAMO specific imports
 from benchnpin.common.cost_map import CostMap
@@ -60,7 +61,8 @@ class MazeNAMO(gym.Env):
                                        ship_body=None, meter_to_pixel_scale=cfg.occ.m_to_pix_scale)
         self.cfg = cfg
 
-        self.beta = 500         # amount to scale the collision reward
+        self.beta = 0         # amount to scale the collision reward
+        self.k = 2        # amount to scale the distance reward
 
         self.episode_idx = None     # the increment of this index is handled in reset()
 
@@ -195,6 +197,7 @@ class MazeNAMO(gym.Env):
 
         def pre_solve_handler_walls(arbiter, space, data):
             self.wall_collision = True
+            return True
 
         # handler = space.add_default_collision_handler()
         self.handler = self.space.add_collision_handler(1, 2)
@@ -206,12 +209,12 @@ class MazeNAMO(gym.Env):
         self.handler.post_solve = post_solve_handler
         # pre handler for robot-wall collision
         self.handler_robot_wall.pre_solve = pre_solve_handler_walls
-
-        if self.renderer is None:
-            self.renderer = Renderer(self.space, env_width=self.cfg.occ.map_width, env_height=self.cfg.occ.map_height, render_scale=40, 
-                    background_color=(28, 107, 160), caption="ASV Navigation", goal_point= (self.cfg.goal_x, self.cfg.goal_y))
-        else:
-            self.renderer.reset(new_space=self.space)
+        if self.cfg.render.show:
+            if self.renderer is None:
+                self.renderer = Renderer(self.space, env_width=self.cfg.occ.map_width, env_height=self.cfg.occ.map_height, render_scale=40, 
+                        background_color=(28, 107, 160), caption="ASV Navigation", goal_point= (self.cfg.goal_x, self.cfg.goal_y))
+            else:
+                self.renderer.reset(new_space=self.space)
         
     def init_maze_NAMO_env(self):
 
@@ -258,8 +261,6 @@ class MazeNAMO(gym.Env):
 
         #compute the global distance map
         self.global_distance_map = self.occupancy.global_goal_point_dist_transform(self.goal, self.maze_walls)
-        print("global distance map shape: ", self.global_distance_map.shape)
-        print("global distance map: ", self.global_distance_map)
         # run initial simulation steps to let environment settle
         for _ in range(1000):
             self.space.step(self.dt / self.steps)
@@ -384,6 +385,11 @@ class MazeNAMO(gym.Env):
             obs['vertices'] = obs['vertices'] - prev_centre + new_centre
             obs['centre'] = new_centre
     
+    def get_distance_value(self, x, y):
+        robot_pose = (self.robot_body.position.x, self.robot_body.position.y, self.robot_body.angle)
+        robot_pixel_x = int(robot_pose[0] * self.cfg.occ.m_to_pix_scale) 
+        robot_pixel_y = int(robot_pose[1] * self.cfg.occ.m_to_pix_scale)
+        return self.global_distance_map[robot_pixel_y, robot_pixel_x]
 
     def step(self, action):
         """Executes one time step in the environment and returns the result."""
@@ -392,15 +398,15 @@ class MazeNAMO(gym.Env):
         if self.cfg.demo_mode:
 
             if action == FORWARD:
-                self.linear_speed = .01
+                self.linear_speed = 0.5
             elif action == STOP_TURNING:
                 self.angular_speed = 0
             elif action == BACKWARD:
                 self.linear_speed = -.01
             elif action == LEFT:
-                self.angular_speed = 0.01
+                self.angular_speed = 0.1
             elif action == RIGHT:
-                self.angular_speed = -0.01
+                self.angular_speed = -0.1
 
             elif action == SMALL_LEFT:
                 self.angular_speed = 0.005
@@ -428,6 +434,7 @@ class MazeNAMO(gym.Env):
 
             # apply linear velocity
             global_velocity = R(self.robot_body.angle) @ [action[0], 0]
+            print("env action0 : ", action[0])
 
             # apply velocity controller
             self.robot_body.angular_velocity = action[1]
@@ -466,8 +473,10 @@ class MazeNAMO(gym.Env):
             terminated = False
 
         # compute reward
-        if self.robot_body.position.y < self.goal[1]:
-            dist_reward = -1
+        if self.robot_body.position.x != self.goal[0] and self.robot_body.position.y != self.goal[1]:
+            dist_reward = 1/np.exp(self.get_distance_value(self.robot_body.position.x, self.robot_body.position.y) * self.k)
+            #print("dist reward: ", dist_reward)
+            #print("distance value: ", self.get_distance_value(self.robot_body.position.x, self.robot_body.position.y))
         else:
             dist_reward = 0
         collision_reward = -work
@@ -479,9 +488,10 @@ class MazeNAMO(gym.Env):
             reward += BOUNDARY_PENALTY
 
         # apply terminal reward
-        if terminated and not boundary_violation_terminal:
+        if terminated and not self.wall_collision:
             reward += TERMINAL_REWARD
-
+        #print("reward: ", reward)
+        
         # Optionally, we can add additional info
         info = {'state': (round(self.robot_body.position.x, 2),
                                 round(self.robot_body.position.y, 2),
@@ -497,6 +507,7 @@ class MazeNAMO(gym.Env):
         if self.low_dim_state:
             observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles)
         else:
+            start_time = time.time()
             observation = self.generate_observation()
         
         return observation, reward, terminated, False, info
