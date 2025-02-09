@@ -651,9 +651,6 @@ class AreaClearingEnv(gym.Env):
 
     def generate_observation(self, done=False):
         self.update_global_overhead_map()
-
-        if done:
-            return None
         
         # Overhead map
         channels = []
