@@ -81,7 +81,7 @@ class MazeNAMO(gym.Env):
         self.robot_tail = (self.cfg.robot.vertices[1][0]+self.cfg.robot.vertices[2][0])/2, (self.cfg.robot.vertices[1][1]+self.cfg.robot.vertices[2][1])/2
         # Define action space
         self.max_linear_speed = 1.0
-        self.max_linear_speed = 0.0
+        self.min_linear_speed = 0.0
         self.max_yaw_rate_step = (np.pi/2) / 15        # rad/sec
         self.action_space = spaces.Box(low= np.array([-1, -1]), 
                                        high=np.array([1, 1]),
@@ -437,6 +437,7 @@ class MazeNAMO(gym.Env):
             #scale the action
             action[0] = (action[0] + self.max_linear_speed) / 2 #scaling from [-1, 1] to [0, 1] 
             action[1] = action[1] * self.max_yaw_rate_step #scaling from [-1, 1] to [-max_yaw_rate_step, max_yaw_rate_step]
+            print("velocity: ", action[0], "angular velocity: ", action[1])
 
             # apply linear velocity
             global_velocity = R(self.robot_body.angle) @ [action[0], 0]
@@ -492,7 +493,7 @@ class MazeNAMO(gym.Env):
         collision_reward = -work
 
         reward = self.beta * collision_reward + dist_increment_reward
-        print("reward: ", reward)
+        #print("reward: ", reward)
 
         # apply constraint penalty
         if boundary_constraint_violated or self.wall_collision:
@@ -510,7 +511,7 @@ class MazeNAMO(gym.Env):
                 'total_work': self.total_work[0], 
                 'collision reward': collision_reward, 
                 'scaled collision reward': collision_reward * self.beta, 
-                'dist INCREMENT reward': dist_increment_reward, 
+                'dist increment reward': dist_increment_reward, 
                 'obs': updated_obstacles, 
                }    
         
