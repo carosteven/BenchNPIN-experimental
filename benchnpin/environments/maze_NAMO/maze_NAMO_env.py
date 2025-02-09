@@ -437,7 +437,7 @@ class MazeNAMO(gym.Env):
             #scale the action
             action[0] = (action[0] + self.max_linear_speed) / 2 #scaling from [-1, 1] to [0, 1] 
             action[1] = action[1] * self.max_yaw_rate_step #scaling from [-1, 1] to [-max_yaw_rate_step, max_yaw_rate_step]
-            print("velocity: ", action[0], "angular velocity: ", action[1])
+            #print("velocity: ", action[0], "angular velocity: ", action[1])
 
             # apply linear velocity
             global_velocity = R(self.robot_body.angle) @ [action[0], 0]
@@ -483,7 +483,7 @@ class MazeNAMO(gym.Env):
         #rewards -> distance_value_increment, collision_reward, terminal_reward
         if self.robot_body.position.x != self.goal[0] and self.robot_body.position.y != self.goal[1]:
             dist_value = self.get_distance_value(self.robot_body.position.x, self.robot_body.position.y)
-            dist_increment_reward = max(0,dist_value - self.prev_dist_value)*self.k_increment
+            dist_increment_reward = (dist_value - self.prev_dist_value)*self.k_increment
             #
             self.prev_dist_value = dist_value
             #print("dist reward: ", dist_reward)
