@@ -86,7 +86,7 @@ agent:
 ### SIMULATION PARAMS
 render:
   log_obs: false        # whether to log occupancy observation
-  show: false            # if true show animation plots
+  show: true            # if true show animation plots
   show_obs: false       # if true show occupancy observation
   frequency: 20         # frequency of rendering
 sim:
@@ -140,6 +140,8 @@ env:
   receptacle_width: 1.5
   shortest_path_channel_scale: 0.25
   action_type: 'velocity' # options are 'velocity' or 'position'
+  local_map_pixel_width: 224
+  invert_receptacle_map: true
 
 misc:
   ministep_size: 2.5

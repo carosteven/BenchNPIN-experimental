@@ -48,9 +48,9 @@ SMALL_RIGHT = 7
 CUBE_MASS = 0.01
 WALL_THICKNESS = 1.4*10
 
-LOCAL_MAP_PIXEL_WIDTH = 96
-LOCAL_MAP_WIDTH = 10 # 10 meters
-LOCAL_MAP_PIXELS_PER_METER = LOCAL_MAP_PIXEL_WIDTH / LOCAL_MAP_WIDTH
+LOCAL_MAP_PIXEL_WIDTH = None
+LOCAL_MAP_WIDTH = None
+LOCAL_MAP_PIXELS_PER_METER = None
 MAP_UPDATE_STEPS = 250
 
 OBSTACLE_SEG_INDEX = 0
@@ -87,6 +87,11 @@ class ObjectPushing(gym.Env):
 
         cfg = DotDict.load_from_file(cfg_file)
         self.cfg = cfg
+
+        global LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_WIDTH, LOCAL_MAP_PIXELS_PER_METER
+        LOCAL_MAP_PIXEL_WIDTH = self.cfg.env.local_map_pixel_width
+        LOCAL_MAP_WIDTH = 10 # 10 meters
+        LOCAL_MAP_PIXELS_PER_METER = LOCAL_MAP_PIXEL_WIDTH / LOCAL_MAP_WIDTH
 
         # state
         self.num_channels = 4
@@ -687,6 +692,7 @@ class ObjectPushing(gym.Env):
 
     def step(self, action):
         """Executes one time step in the environment and returns the result."""
+        # print("Action: ", action)
         self.t += 1
         self.dp = None
 
@@ -1173,6 +1179,9 @@ class ObjectPushing(gym.Env):
         global_map = np.minimum(global_map, shortest_path_image)
         global_map /= (np.sqrt(2) * LOCAL_MAP_PIXEL_WIDTH) / LOCAL_MAP_PIXELS_PER_METER
         global_map *= self.cfg.env.shortest_path_channel_scale
+        if self.cfg.env.invert_receptacle_map:
+            global_map += 1-self.configuration_space
+            global_map[global_map==(1-self.configuration_space)] = 1
         return global_map
     
     def create_global_shortest_path_map(self, robot_position):

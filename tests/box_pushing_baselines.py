@@ -19,8 +19,8 @@ def main(args):
     # ================================ PPO Policy =================================
     ppo_policy = BoxPushingPPO(cfg=args.config_file)
     # ppo_policy.train(job_id=args.job_id, **cfg.train)
-    ppo_policy.train()
-    # evaluations = ppo_policy.evaluate(num_eps=5)
+    # ppo_policy.train()
+    evaluations = ppo_policy.evaluate(num_eps=5)
     # print("ppo Eval: ", evaluations)
 
 if __name__ == '__main__':

@@ -76,7 +76,7 @@ class BoxPushingPPO(BasePolicy):
             model_checkpoint = self.model_name + '_' + model_eps + '_steps'
             self.model = PPO.load(os.path.join(self.model_path, model_checkpoint))
 
-        env = gym.make('object-pushing-v0')
+        env = gym.make('object-pushing-v0', cfg_file=self.cfg)
         env = env.unwrapped
 
         rewards_list = []
@@ -87,6 +87,7 @@ class BoxPushingPPO(BasePolicy):
             eps_reward = 0.0
             while True:
                 action, _ = self.model.predict(obs)
+                print("Action: ", action)
                 obs, reward, done, truncated, info = env.step(action)
                 eps_reward += reward
                 if done or truncated:

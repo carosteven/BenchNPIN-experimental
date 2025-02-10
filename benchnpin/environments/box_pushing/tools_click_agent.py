@@ -19,6 +19,7 @@ class ClickAgent:
         self.fig.canvas.mpl_connect('button_press_event', self.mouse_callback)
         self.fig.canvas.mpl_connect('key_press_event', self.key_callback)
         self.key_pressed = None
+        self.map_scale = env.cfg.env.local_map_pixel_width
         plt.ion()
         plt.show()
 
@@ -55,7 +56,7 @@ class ClickAgent:
                     break
 
             if self.selected_action is not None:
-                action = self.selected_action[0] * 96 + self.selected_action[1]
+                action = self.selected_action[0] * self.map_scale + self.selected_action[1] # 300 is current resolution
                 state, reward, done, _, info = self.env.step(action)
                 last_reward = reward
                 # last_ministeps = info['ministeps']
