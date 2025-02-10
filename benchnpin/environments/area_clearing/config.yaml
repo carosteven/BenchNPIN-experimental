@@ -7,12 +7,13 @@ output_dir: "logs/" # 'output/trial0'
 plot:
   show: false       # true will show planner plots
 
+env: 'clear_env_small'
 # env: 'clear_env'
-env: 'walled_env'
+# env: 'walled_env'
 # env: 'walled_env_with_columns'
 
 # obstacles information
-num_obstacles: 3
+num_obstacles: 1
 obstacle_size: 0.5
 min_obs_dist: 3.5       # minimum obstacle distance during random initialization
 
@@ -58,7 +59,7 @@ render:
   log_obs: true       # whether to log occupancy observation
   show: true                # if true show animation plots
 sim:
-  t_max: 2000  # max number of iterations in simulation loop (originally 5000)
+  t_max: 500  # max number of iterations in simulation loop (originally 5000)
   steps: 100    # number of simulation steps per iteration (originally 10)
   gravity: !!python/tuple
     - 0

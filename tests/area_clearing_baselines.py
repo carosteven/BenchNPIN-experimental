@@ -8,17 +8,17 @@ from benchnpin.baselines.area_clearing.sac.policy import AreaClearingSAC
 from benchnpin.baselines.area_clearing.td3.policy import AreaClearingTD3
 
 # ========================= PPO Policy =====================================
-ppo_policy = AreaClearingPPO()
-ppo_policy.train(total_timesteps=int(5e5), checkpoint_freq=10000)
-evaluations = ppo_policy.evaluate(num_eps=5)
-print("PPO Eval: ", evaluations)
+# ppo_policy = AreaClearingPPO()
+# ppo_policy.train(total_timesteps=int(5e5), checkpoint_freq=10000)
+# evaluations = ppo_policy.evaluate(num_eps=5)
+# print("PPO Eval: ", evaluations)
 
 
 # ========================= SAC Policy =====================================
-# sac_policy = AreaClearingSAC()
-# sac_policy.train(total_timesteps=int(2e5), checkpoint_freq=10000)
-# evaluations = sac_policy.evaluate(num_eps=5)
-# print("SAC Eval: ", evaluations)
+sac_policy = AreaClearingSAC()
+sac_policy.train(total_timesteps=int(2e5), checkpoint_freq=10000)
+evaluations = sac_policy.evaluate(num_eps=5)
+print("SAC Eval: ", evaluations)
 
 
 # ========================= TD3 Policy =====================================

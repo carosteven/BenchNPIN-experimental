@@ -37,12 +37,14 @@ TRUNCATION_PENALTY = 0
 TERMINAL_REWARD = 100
 BOX_CLEARED_REWARD = 10
 BOX_PUSHING_REWARD_MULTIPLIER = 1
-TIME_PENALTY = -0.01
-# TIME_PENALTY = 0
+# TIME_PENALTY = -0.01
+TIME_PENALTY = 0
 
-LOCAL_MAP_PIXEL_WIDTH = 144
-LOCAL_MAP_WIDTH = 20 #  meters
+LOCAL_MAP_PIXEL_WIDTH = 96
+LOCAL_MAP_WIDTH = 12 #  meters
+# LOCAL_MAP_WIDTH = 20 #  meters
 LOCAL_MAP_PIXELS_PER_METER = LOCAL_MAP_PIXEL_WIDTH / LOCAL_MAP_WIDTH
+DISTANCE_SCALE_MAX = 0.75
 
 OBSTACLE_SEG_INDEX = 0
 FLOOR_SEG_INDEX = 1
@@ -573,7 +575,7 @@ class AreaClearingEnv(gym.Env):
         else:
             terminated = False
 
-        reward = box_completion_reward + diff_reward
+        reward = box_completion_reward
         truncated = self.t >= self.t_max
 
         # apply constraint penalty
@@ -724,7 +726,7 @@ class AreaClearingEnv(gym.Env):
         global_map, _ = spfa.spfa(self.configuration_space, (pixel_i, pixel_j))
         global_map /= LOCAL_MAP_PIXELS_PER_METER
         global_map /= (np.sqrt(2) * LOCAL_MAP_PIXEL_WIDTH) / LOCAL_MAP_PIXELS_PER_METER
-        # global_map *= self.cfg.env.shortest_path_channel_scale
+        
         return global_map
     
     def create_global_shortest_path_to_goal_points(self):
@@ -745,7 +747,9 @@ class AreaClearingEnv(gym.Env):
                 if not self.boundary_polygon.contains(Point(x, y)):
                     global_map[i, j] = 0
 
-        # global_map *= self.cfg.env.shortest_path_channel_scale
+        max_value = np.max(global_map)
+        min_value = np.min(global_map)
+        global_map = (global_map - min_value) / (max_value - min_value) * DISTANCE_SCALE_MAX
 
         global_map += 1 - self.configuration_space
 
