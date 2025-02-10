@@ -16,12 +16,12 @@ print("PPO Eval: ", evaluations)
 
 # ========================= SAC Policy =====================================
 # sac_policy = AreaClearingSAC()
-# sac_policy.train(total_timesteps=500)
-# evaluations = sac_policy.evaluate(num_eps=5, model_eps='300')
-# print("PPO Eval: ", evaluations)
+# sac_policy.train(total_timesteps=int(2e5), checkpoint_freq=10000)
+# evaluations = sac_policy.evaluate(num_eps=5)
+# print("SAC Eval: ", evaluations)
 
 
-# ========================= PPO Policy =====================================
+# ========================= TD3 Policy =====================================
 # td3_policy = AreaClearingTD3()
 # td3_policy.train(total_timesteps=500)
 # evaluations = td3_policy.evaluate(num_eps=5, model_eps='latest')
