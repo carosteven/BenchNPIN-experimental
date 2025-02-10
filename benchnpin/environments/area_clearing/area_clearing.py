@@ -34,10 +34,10 @@ R = lambda theta: np.asarray([
 
 BOUNDARY_PENALTY = -50
 TRUNCATION_PENALTY = 0
-TERMINAL_REWARD = 200
-BOX_CLEARED_REWARD = 25
-BOX_PUSHING_REWARD_MULTIPLIER = 1.5
-TIME_PENALTY = -0.1
+TERMINAL_REWARD = 100
+BOX_CLEARED_REWARD = 10
+BOX_PUSHING_REWARD_MULTIPLIER = 1
+TIME_PENALTY = -0.01
 # TIME_PENALTY = 0
 
 LOCAL_MAP_PIXEL_WIDTH = 144
@@ -543,21 +543,8 @@ class AreaClearingEnv(gym.Env):
             self.agent.body.velocity = Vec2d(global_velocity[0], global_velocity[1])
 
         # move simulation forward
-        collision_with_static_or_walls = False
         for _ in range(self.steps):
             self.space.step(self.dt / self.steps)
-
-            for obs in self.static_obs_shapes + self.wall_shapes:
-                contact_pts = self.agent.shapes_collide(obs)
-                if len(contact_pts.points) > 1:
-                    collision_with_static_or_walls = True
-                    break
-
-        for obs in self.static_obs_shapes + self.wall_shapes:
-            contact_pts = self.agent.shapes_collide(obs)
-            if len(contact_pts.points) > 1:
-                collision_with_static_or_walls = True
-                break
             
         # get updated obstacles
         updated_obstacles = CostMap.get_obs_from_poly(self.box_shapes)
@@ -580,26 +567,20 @@ class AreaClearingEnv(gym.Env):
         self.prev_obs = updated_obstacles
         self.obstacles = updated_obstacles
 
-        failure = collision_with_static_or_walls
-
         # # check episode terminal condition
         if all_boxes_completed:
-            terminated = True
-        elif failure:
             terminated = True
         else:
             terminated = False
 
-        reward = box_completion_reward + diff_reward + TIME_PENALTY
+        reward = box_completion_reward + diff_reward
         truncated = self.t >= self.t_max
 
         # apply constraint penalty
-        if failure:
-            reward += BOUNDARY_PENALTY
-        elif truncated:
+        if truncated:
             reward += TRUNCATION_PENALTY
         # apply terminal reward
-        elif terminated and not failure:
+        elif terminated:
             reward += TERMINAL_REWARD
         
         done = terminated or truncated
@@ -622,7 +603,7 @@ class AreaClearingEnv(gym.Env):
             low_level_observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles)
             info['low_level_observation'] = low_level_observation
             
-            observation = self.generate_observation(done=done)
+            observation = self.generate_observation()
             self.observation = observation
 
         self.update_global_overhead_map()
@@ -649,7 +630,7 @@ class AreaClearingEnv(gym.Env):
         if(self.renderer):
             self.renderer.update_path(path=self.path)
 
-    def generate_observation(self, done=False):
+    def generate_observation(self):
         self.update_global_overhead_map()
         
         # Overhead map
