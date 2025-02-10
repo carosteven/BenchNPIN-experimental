@@ -19,7 +19,7 @@ class ClickAgent:
         self.fig.canvas.mpl_connect('button_press_event', self.mouse_callback)
         self.fig.canvas.mpl_connect('key_press_event', self.key_callback)
         self.key_pressed = None
-        self.map_scale = env.cfg.env.local_map_pixel_width
+        self.map_scale = 96
         plt.ion()
         plt.show()
 
@@ -74,7 +74,7 @@ class ClickAgent:
         plt.close()
 
 def main():
-    cfg_file = f'{dirname(__file__)}/config_pc.yaml'
+    cfg_file = f'{dirname(__file__)}/config_ppo.yaml'
     env = gym.make('object-pushing-v0', cfg_file=cfg_file)
     agent = ClickAgent(env)
     agent.run()

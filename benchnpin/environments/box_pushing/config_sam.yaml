@@ -124,7 +124,8 @@ env:
   room_width: 10 # 5 for small, 10 for large
   receptacle_width: 1.5
   shortest_path_channel_scale: 0.25
-  action_type: 'position' # options are 'velocity' or 'position'
+  action_type: 'position' # options are velocity, heading, position
+  step_size: 2 # distance travelled per step in heading control
   local_map_pixel_width: 96
   invert_receptacle_map: false
 

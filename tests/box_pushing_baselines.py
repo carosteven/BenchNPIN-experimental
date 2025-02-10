@@ -18,9 +18,8 @@ def main(args):
 
     # ================================ PPO Policy =================================
     ppo_policy = BoxPushingPPO(cfg=args.config_file)
-    # ppo_policy.train(job_id=args.job_id, **cfg.train)
-    # ppo_policy.train()
-    evaluations = ppo_policy.evaluate(num_eps=5)
+    ppo_policy.train()
+    # evaluations = ppo_policy.evaluate(num_eps=5)
     # print("ppo Eval: ", evaluations)
 
 if __name__ == '__main__':
@@ -32,7 +31,7 @@ if __name__ == '__main__':
         '--config_file',
         type=str,
         help='path to the config file',
-        default=f'{dirname(dirname(__file__))}/benchnpin/environments/box_pushing/config_vc.yaml'
+        default=f'{dirname(dirname(__file__))}/benchnpin/environments/box_pushing/config_ppo.yaml'
     )
 
     parser.add_argument(

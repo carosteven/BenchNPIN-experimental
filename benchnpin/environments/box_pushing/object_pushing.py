@@ -146,10 +146,10 @@ class ObjectPushing(gym.Env):
         self.scatter = False
 
         # Define action space
-        max_yaw_rate_step = (np.pi/2) / 15        # rad/sec
-        print("max yaw rate per step: ", max_yaw_rate_step)
         if self.cfg.env.action_type == 'velocity':
             self.action_space = spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float64)
+        elif self.cfg.env.action_type == 'heading':
+            self.action_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float64)
         elif self.cfg.env.action_type == 'position':
             self.action_space = spaces.Box(low=0, high=LOCAL_MAP_PIXEL_WIDTH * LOCAL_MAP_PIXEL_WIDTH, dtype=np.float64)
 
@@ -166,9 +166,6 @@ class ObjectPushing(gym.Env):
         else:
             self.observation_shape = (LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH, self.num_channels)
             self.observation_space = spaces.Box(low=0, high=255, shape=self.observation_shape, dtype=np.uint8)
-
-        self.yaw_lim = (0, np.pi)       # lower and upper limit of ship yaw  
-        self.boundary_violation_limit = 0.0       # if the ship is out of boundary more than this limit, terminate and truncate the episode 
 
         self.plot = None
         self.renderer = None
@@ -187,7 +184,7 @@ class ObjectPushing(gym.Env):
             self.colorbars = [None] * num_plots
             self.state_plot.ion()  # Interactive mode on        
 
-    def init_ship_ice_sim(self):
+    def init_box_pushing_sim(self):
 
         # initialize ship-ice environment
         self.steps = self.cfg.sim.steps
@@ -302,7 +299,7 @@ class ObjectPushing(gym.Env):
             else:
                 self.renderer.reset(new_space=self.space)
 
-    def init_ship_ice_env(self):
+    def init_box_pushing_env(self):
         
         self.receptacle_position, self.receptacle_size = self.get_receptacle_position_and_size()
 
@@ -642,8 +639,8 @@ class ObjectPushing(gym.Env):
         else:
             self.episode_idx += 1
 
-        self.init_ship_ice_sim()
-        self.init_ship_ice_env()
+        self.init_box_pushing_sim()
+        self.init_box_pushing_env()
 
         # reset map
         self.global_overhead_map = self.create_padded_room_zeros()
@@ -760,7 +757,26 @@ class ObjectPushing(gym.Env):
             # update distance moved
             robot_distance = distance(robot_initial_position, robot_position)
 
-        elif self.cfg.env.action_type == 'position':
+        elif self.cfg.env.action_type == 'position' or self.cfg.env.action_type == 'heading':
+            if self.cfg.env.action_type == 'heading':
+                ################################ Heading Control ################################
+                # convert heading action to a pixel index in order to use the position control code
+
+                # rescale heading action to be in range [0, 2*pi]
+                angle = (action + 1) * np.pi + np.pi / 2
+                step_size = self.cfg.env.step_size
+
+                # calculate target position
+                x_movement = step_size * np.cos(angle)
+                y_movement = step_size * np.sin(angle)
+
+                # convert target position to pixel coordinates
+                x_pixel = int(LOCAL_MAP_PIXEL_WIDTH / 2 + x_movement * LOCAL_MAP_PIXELS_PER_METER)
+                y_pixel = int(LOCAL_MAP_PIXEL_WIDTH / 2 - y_movement * LOCAL_MAP_PIXELS_PER_METER)
+
+                # convert pixel coordinates to a single index
+                action = y_pixel * LOCAL_MAP_PIXEL_WIDTH + x_pixel
+
             ################################ Position Control ################################
             robot_action = np.unravel_index(action, (LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH))
             

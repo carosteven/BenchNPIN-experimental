@@ -62,25 +62,10 @@ agent:
   length: 0.8
   width: 0.7
   vertices: [
-
-              # [0.69, -0.89],
-              # [-0.69, -0.89],
-
-              # [-0.69, 0.89],
-              # [0.69, 0.89], 
-
-              # [0.69, -1.2],
-              # [-0.69, -0.89],
-
-              # [-0.69, 0.89],
-              # [0.69, 1.2], 
-
               [0.4, -0.35],
               [0.4, 0.35],
               [-0.4, 0.25],
               [-0.4, -0.25]
-
-              
               ]
 
 ### SIMULATION PARAMS
@@ -91,7 +76,7 @@ render:
   frequency: 20         # frequency of rendering
 sim:
   t_max: 2000  # max number of iterations in simulation loop (originally 5000)
-  steps: 1000    # number of simulation steps per iteration (originally 10)
+  steps: 100    # number of simulation steps per iteration (originally 10)
   gravity: !!python/tuple
     - 0
     - 0
@@ -111,7 +96,7 @@ seed: 1
 
 ### SHIP MODEL AND CONTROLLER PARAMS
 controller:
-  dt: 2  # the ship dynamics model was discretized with this dt (originally 0.02)
+  dt: 0.2  # the ship dynamics model was discretized with this dt (originally 0.02)
   # States: [r, u, v] : yaw rate (deg/s), surge velocity (m/s), sway velocity (m/s)
   A:
     - [ 0.9909, 0., 0. ]
@@ -139,13 +124,14 @@ env:
   room_width: 5 # 5 for small, 10 for large
   receptacle_width: 1.5
   shortest_path_channel_scale: 0.25
-  action_type: 'velocity' # options are 'velocity' or 'position'
+  action_type: 'heading' # options are velocity, heading, position
+  step_size: 2 # distance travelled per step in heading control
   local_map_pixel_width: 224
   invert_receptacle_map: true
 
 misc:
   ministep_size: 2.5
-  inactivity_cutoff: 1000
+  inactivity_cutoff: 100
   # random_seed: 42
   # use_gui: true
   # show_obs: false
