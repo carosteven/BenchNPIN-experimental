@@ -1,4 +1,5 @@
 from benchnpin.baselines.base_class import BasePolicy
+from benchnpin.baselines.feature_extractors import ResNet18
 import benchnpin.environments
 import gymnasium as gym
 from stable_baselines3 import SAC
@@ -23,20 +24,21 @@ class AreaClearingSAC(BasePolicy):
         self.model = None
 
 
-    def train(self, policy_kwargs=dict(net_arch=[256, 256]),
+    def train(self, policy_kwargs=dict(features_extractor_class=ResNet18,
+                                        features_extractor_kwargs=dict(features_dim=512),
+                                        net_arch=[512, 256]),
             batch_size=64,
             buffer_size=15000,
-            learning_starts=200,
+            learning_starts=100,
             learning_rate=5e-4,
             gamma=0.97,
             verbose=2,
             total_timesteps=int(2e5), 
-            checkpoint_freq=100) -> None:
+            checkpoint_freq=10000) -> None:
 
         env = gym.make('area-clearing-v0')
         env = env.unwrapped
 
-        print("Checking environment")
         check_env(env)
 
         # The noise objects for SAC
