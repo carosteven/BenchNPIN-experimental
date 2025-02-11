@@ -551,7 +551,6 @@ class AreaClearingEnv(gym.Env):
         for _ in range(self.steps):
             self.space.step(self.dt / self.steps)
             
-        print(self.robot_hit_obstacle)
         collision_penalty = BOUNDARY_PENALTY if self.robot_hit_obstacle else 0
         
         # get updated obstacles
