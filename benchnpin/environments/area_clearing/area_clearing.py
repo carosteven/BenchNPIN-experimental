@@ -33,9 +33,10 @@ R = lambda theta: np.asarray([
 ])
 
 BOUNDARY_PENALTY = -0.5
+BOX_PUTBACK_PENALTY = -2
 TRUNCATION_PENALTY = 0
-TERMINAL_REWARD = 100
-BOX_CLEARED_REWARD = 10
+TERMINAL_REWARD = 10
+BOX_CLEARED_REWARD = 1
 BOX_PUSHING_REWARD_MULTIPLIER = 0.2
 # TIME_PENALTY = -0.01
 TIME_PENALTY = 0
@@ -44,7 +45,7 @@ LOCAL_MAP_PIXEL_WIDTH = 224
 LOCAL_MAP_WIDTH = 12 #  meters
 # LOCAL_MAP_WIDTH = 20 #  meters
 LOCAL_MAP_PIXELS_PER_METER = LOCAL_MAP_PIXEL_WIDTH / LOCAL_MAP_WIDTH
-DISTANCE_SCALE_MAX = 0.75
+DISTANCE_SCALE_MAX = 0.5
 
 OBSTACLE_SEG_INDEX = 0
 FLOOR_SEG_INDEX = 1
@@ -250,6 +251,7 @@ class AreaClearingEnv(gym.Env):
 
         # keep track of contact points
         self.contact_pts = []
+        self.robot_hit_obstacle = False
 
         # setup pymunk collision callbacks
         def pre_solve_handler(arbiter, space, data):
@@ -540,38 +542,28 @@ class AreaClearingEnv(gym.Env):
             self.agent.body.angular_velocity = self.max_yaw_rate_step * action[1] / 2
 
             # apply linear and angular speeds
-            scaled_vel = self.target_speed * np.sign(action[0])
+            scaled_vel = self.target_speed * action[0]
             global_velocity = R(self.agent.body.angle) @ [scaled_vel, 0]
             self.agent.body.velocity = Vec2d(global_velocity[0], global_velocity[1])
 
-
-        collision_with_static_or_walls = False
         # move simulation forward
         for _ in range(self.steps):
             self.space.step(self.dt / self.steps)
-
-            for obs in self.static_obs_shapes + self.wall_shapes:
-                contact_pts = self.agent.shapes_collide(obs)
-                if len(contact_pts.points) > 0:
-                    collision_with_static_or_walls = True
-                    break
-
-        for obs in self.static_obs_shapes + self.wall_shapes:
-            contact_pts = self.agent.shapes_collide(obs)
-            if len(contact_pts.points) > 0:
-                collision_with_static_or_walls = True
-                break
             
-        collision_penalty = BOUNDARY_PENALTY if collision_with_static_or_walls else 0
+        collision_penalty = BOUNDARY_PENALTY if self.robot_hit_obstacle else 0
         
         # get updated obstacles
         updated_obstacles = CostMap.get_obs_from_poly(self.box_shapes)
         num_completed, all_boxes_completed = self.boxes_completed(updated_obstacles, self.boundary_polygon)
         
         diff_reward = obs_to_goal_difference(self.prev_obs, updated_obstacles, self.goal_points, self.boundary_polygon) * BOX_PUSHING_REWARD_MULTIPLIER
+        pushing_reward = diff_reward * BOX_PUSHING_REWARD_MULTIPLIER
         movement_reward = 0 if abs(diff_reward) > 0 else TIME_PENALTY
 
-        box_completion_reward = (num_completed - self.cleared_box_count) * BOX_CLEARED_REWARD
+        if(num_completed >= self.cleared_box_count):
+            box_completion_reward = abs(num_completed - self.cleared_box_count) * BOX_CLEARED_REWARD
+        else:
+            box_completion_reward = abs(num_completed - self.cleared_box_count) * BOX_PUTBACK_PENALTY
         if(self.cleared_box_count != num_completed):
             print("Boxes completed: ", num_completed)            
             self.cleared_box_count = num_completed
@@ -591,7 +583,7 @@ class AreaClearingEnv(gym.Env):
         else:
             terminated = False
 
-        reward = box_completion_reward + collision_penalty
+        reward = box_completion_reward + collision_penalty + pushing_reward
         truncated = self.t >= self.t_max
 
         # apply constraint penalty
@@ -768,6 +760,7 @@ class AreaClearingEnv(gym.Env):
         global_map = (global_map - min_value) / (max_value - min_value) * DISTANCE_SCALE_MAX
 
         global_map += 1 - self.configuration_space
+        # global_map[global_map==(1 - self.configuration_space)] = 1
 
         return global_map
     

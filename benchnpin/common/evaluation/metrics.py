@@ -74,13 +74,12 @@ def obs_to_goal_difference(obs_initial, obs_final, goal_points, boundary_polygon
     """
     Computes the difference between the initial and final obstacles and the goal
     """
-    all_diffs = []
+    total_diff = 0
     
     for ob_a, ob_b in zip(obs_initial, obs_final):
         if(boundary_polygon is not None and type(boundary_polygon) == Polygon):
             ob_a_polygon = Polygon(ob_a)
             if(not boundary_polygon.contains(ob_a_polygon)):
-                all_diffs.append(-1)
                 continue
 
         min_a_dist, min_b_dist = np.inf, np.inf
@@ -90,11 +89,9 @@ def obs_to_goal_difference(obs_initial, obs_final, goal_points, boundary_polygon
             min_a_dist = min(min_a_dist, euclid_dist(centre_a, (point.x, point.y)))
             min_b_dist = min(min_b_dist, euclid_dist(centre_b, (point.x, point.y)))
         
-        all_diffs.append(abs(min_b_dist - min_a_dist))
+        total_diff += min_a_dist - min_b_dist
 
-    best_diff = 0 if len(all_diffs) == 0 else max(all_diffs)
-
-    return best_diff
+    return total_diff
 
 def total_work_done(obs_initial, obs_final, debug=False):
     """
