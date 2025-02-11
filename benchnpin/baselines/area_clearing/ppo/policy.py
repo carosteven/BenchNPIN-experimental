@@ -88,8 +88,10 @@ class AreaClearingPPO(BasePolicy):
             eps_reward = 0.0
             while True:
                 action, _ = self.model.predict(obs)
+                # print(action)
                 obs, reward, done, truncated, info = env.step(action)
                 eps_reward += reward
+                env.render()
                 if done or truncated:
                     rewards_list.append(eps_reward)
                     break

@@ -32,15 +32,15 @@ R = lambda theta: np.asarray([
     [np.sin(theta), np.cos(theta)]
 ])
 
-BOUNDARY_PENALTY = -50
+BOUNDARY_PENALTY = -0.5
 TRUNCATION_PENALTY = 0
 TERMINAL_REWARD = 100
 BOX_CLEARED_REWARD = 10
-BOX_PUSHING_REWARD_MULTIPLIER = 1
+BOX_PUSHING_REWARD_MULTIPLIER = 0.2
 # TIME_PENALTY = -0.01
 TIME_PENALTY = 0
 
-LOCAL_MAP_PIXEL_WIDTH = 96
+LOCAL_MAP_PIXEL_WIDTH = 224
 LOCAL_MAP_WIDTH = 12 #  meters
 # LOCAL_MAP_WIDTH = 20 #  meters
 LOCAL_MAP_PIXELS_PER_METER = LOCAL_MAP_PIXEL_WIDTH / LOCAL_MAP_WIDTH
@@ -544,10 +544,26 @@ class AreaClearingEnv(gym.Env):
             global_velocity = R(self.agent.body.angle) @ [scaled_vel, 0]
             self.agent.body.velocity = Vec2d(global_velocity[0], global_velocity[1])
 
+
+        collision_with_static_or_walls = False
         # move simulation forward
         for _ in range(self.steps):
             self.space.step(self.dt / self.steps)
+
+            for obs in self.static_obs_shapes + self.wall_shapes:
+                contact_pts = self.agent.shapes_collide(obs)
+                if len(contact_pts.points) > 0:
+                    collision_with_static_or_walls = True
+                    break
+
+        for obs in self.static_obs_shapes + self.wall_shapes:
+            contact_pts = self.agent.shapes_collide(obs)
+            if len(contact_pts.points) > 0:
+                collision_with_static_or_walls = True
+                break
             
+        collision_penalty = BOUNDARY_PENALTY if collision_with_static_or_walls else 0
+        
         # get updated obstacles
         updated_obstacles = CostMap.get_obs_from_poly(self.box_shapes)
         num_completed, all_boxes_completed = self.boxes_completed(updated_obstacles, self.boundary_polygon)
@@ -575,7 +591,7 @@ class AreaClearingEnv(gym.Env):
         else:
             terminated = False
 
-        reward = box_completion_reward
+        reward = box_completion_reward + collision_penalty
         truncated = self.t >= self.t_max
 
         # apply constraint penalty
