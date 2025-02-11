@@ -119,9 +119,9 @@ controller:
 
 ### ENVIRONMENT PARAMS
 env:
-  obstacle_config: large_divider # options are small_empty, small_columns, large_columns, large_divider
+  obstacle_config: small_empty # options are small_empty, small_columns, large_columns, large_divider
   room_length: 10
-  room_width: 10 # 5 for small, 10 for large
+  room_width: 5 # 5 for small, 10 for large
   receptacle_width: 1.5
   shortest_path_channel_scale: 0.25
   action_type: 'position' # options are velocity, heading, position

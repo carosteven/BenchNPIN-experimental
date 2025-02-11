@@ -13,6 +13,7 @@ import torch
 import torch.optim as optim
 from torch.nn.functional import smooth_l1_loss
 from torchvision import transforms
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 import logging
@@ -24,6 +25,44 @@ logging.getLogger('pymunk').propagate = False
 torch.backends.cudnn.benchmark = True
 
 Transition = namedtuple('Transition', ('state', 'action', 'reward', 'ministeps', 'next_state'))
+
+class AverageMeter:
+    def __init__(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val, n=1):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / self.count
+
+class Meters:
+    def __init__(self):
+        self.meters = {}
+
+    def get_names(self):
+        return self.meters.keys()
+
+    def reset(self):
+        for _, meter in self.meters.items():
+            meter.reset()
+
+    def update(self, name, val):
+        if name not in self.meters:
+            self.meters[name] = AverageMeter()
+        self.meters[name].update(val)
+
+    def avg(self, name):
+        return self.meters[name].avg
 
 class ReplayBuffer:
     def __init__(self, capacity):
@@ -232,7 +271,8 @@ class BoxPushingSAM(BasePolicy):
         target_net.eval()
 
         # logging
-        # not implemented
+        train_summary_writer = SummaryWriter(log_dir=os.path.join(log_dir, 'train'))
+        meters = Meters()
 
         state, _ = env.reset()
         total_timesteps_with_warmup = total_timesteps + learning_starts
@@ -278,7 +318,23 @@ class BoxPushingSAM(BasePolicy):
 
             ################################################################################
             # Logging
-            # not implemented
+            # meters
+            meters.update('step_time', step_time)
+            if timestep >= learning_starts:
+                for name, val in train_info.items():
+                    meters.update(name, val)
+            
+            if done:
+                for name in meters.get_names():
+                    train_summary_writer.add_scalar(name, meters.avg(name), timestep + 1)
+                eta_seconds = meters.avg('step_time') * (total_timesteps_with_warmup - timestep)
+                meters.reset()
+
+                train_summary_writer.add_scalar('episodes', episode, timestep + 1)
+                train_summary_writer.add_scalar('eta_hours', eta_seconds / 3600, timestep + 1)
+
+                for name in ['cumulative_cubes', 'cumulative_distance', 'cumulative_reward']:
+                    train_summary_writer.add_scalar(name, info[name], timestep + 1)
 
             ################################################################################
             # Checkpoint

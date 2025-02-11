@@ -639,26 +639,9 @@ class ObjectPushing(gym.Env):
         self.update_global_overhead_map()
 
         self.t = 0
-        
-        # close figure before opening new ones
-        # if self.plot is not None:
-        #     self.plot.close()
-
-        # self.plot = Plot(
-        #         np.zeros((self.cfg.costmap.m, self.cfg.costmap.n)), self.cubes_dicts,
-        #         ship_pos=self.start, ship_vertices=np.asarray(self.robot.get_vertices()),
-        #         map_figsize=None, y_axis_limit=self.cfg.plot.y_axis_limit, inf_stream=False, goal=self.goal[1], 
-        #         path=np.zeros((3, 50)), boundaries=self.boundary_dicts
-        #     )
 
         # get updated cubes
         updated_cubes = CostMap.get_obs_from_poly(self.cubes)
-        info = {'state': (round(self.robot.body.position.x, 2),
-                                round(self.robot.body.position.y, 2),
-                                round(self.robot.body.angle, 2)), 
-                'total_work': self.total_work[0], 
-                'cubes': updated_cubes, 
-                'cumulative_cubes': 0}
 
         # reset stats
         self.inactivity_counter = 0
@@ -676,6 +659,18 @@ class ObjectPushing(gym.Env):
         if self.cfg.render.show:
             self.show_observation = True
             self.render()
+        
+        info = {
+            'ministeps': 0,
+            'inactivity': self.inactivity_counter,
+            'cumulative_distance': self.robot_cumulative_distance,
+            'cumulative_cubes': self.robot_cumulative_cubes,
+            'cumulative_reward': self.robot_cumulative_reward,
+            'state': (round(self.robot.body.position.x, 2),
+                      round(self.robot.body.position.y, 2),
+                      round(self.robot.body.angle, 2)),
+        }
+
         return self.observation, info
     
 
