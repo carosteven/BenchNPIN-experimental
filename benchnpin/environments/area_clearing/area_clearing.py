@@ -148,6 +148,7 @@ class AreaClearingEnv(gym.Env):
 
         # move boundary to the center of the environment
         self.boundary_polygon = Polygon(self.boundary_vertices)
+        self.outer_boundary_polygon = Polygon(self.outer_boundary_vertices)
 
         self.min_x_boundary = min([x for x, y in self.boundary_vertices])
         self.max_x_boundary = max([x for x, y in self.boundary_vertices])
@@ -748,19 +749,21 @@ class AreaClearingEnv(gym.Env):
             global_map = np.minimum(global_map, shortest_path_image)
         global_map /= (np.sqrt(2) * LOCAL_MAP_PIXEL_WIDTH) / LOCAL_MAP_PIXELS_PER_METER
 
+        max_value = np.max(global_map)
+        min_value = np.min(global_map)
+        global_map = (global_map - min_value) / (max_value - min_value) * DISTANCE_SCALE_MAX
+
         # fill points outside boundary polygon with 0
         for i in range(global_map.shape[0]):
             for j in range(global_map.shape[1]):
                 x, y = pixel_indices_to_position(i, j, self.configuration_space.shape, LOCAL_MAP_PIXELS_PER_METER)
                 if not self.boundary_polygon.contains(Point(x, y)):
                     global_map[i, j] = 0
-
-        max_value = np.max(global_map)
-        min_value = np.min(global_map)
-        global_map = (global_map - min_value) / (max_value - min_value) * DISTANCE_SCALE_MAX
+                if not self.outer_boundary_polygon.contains(Point(x, y)):
+                    global_map[i, j] = 1
+        
 
         global_map += 1 - self.configuration_space
-        # global_map[global_map==(1 - self.configuration_space)] = 1
 
         return global_map
     
