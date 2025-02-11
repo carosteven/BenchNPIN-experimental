@@ -543,7 +543,7 @@ class AreaClearingEnv(gym.Env):
             self.agent.body.angular_velocity = self.max_yaw_rate_step * action[1] / 2
 
             # apply linear and angular speeds
-            scaled_vel = self.target_speed * action[0]
+            scaled_vel = self.target_speed * (action[0] + 1) / 2
             global_velocity = R(self.agent.body.angle) @ [scaled_vel, 0]
             self.agent.body.velocity = Vec2d(global_velocity[0], global_velocity[1])
 
