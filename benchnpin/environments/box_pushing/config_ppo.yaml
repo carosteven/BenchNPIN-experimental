@@ -71,7 +71,7 @@ agent:
 ### SIMULATION PARAMS
 render:
   log_obs: false        # whether to log occupancy observation
-  show: true            # if true show animation plots
+  show: false            # if true show animation plots
   show_obs: false       # if true show occupancy observation
   frequency: 20         # frequency of rendering
 sim:

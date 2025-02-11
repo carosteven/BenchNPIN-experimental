@@ -224,14 +224,6 @@ class ObjectPushing(gym.Env):
         # keep track of cubes pushed into receptacle
         self.cumulative_cubes = 0 # TODO remove
 
-        # setup a collision callback to keep track of total ke
-        # def pre_solve_handler(arbiter, space, data):
-        #     nonlocal ship_ke
-        #     ship_ke = arbiter.shapes[0].body.kinetic_energy
-        #     print('ship_ke', ship_ke, 'mass', arbiter.shapes[0].body.mass, 'velocity', arbiter.shapes[0].body.velocity)
-        #     return True
-        # # http://www.pymunk.org/en/latest/pymunk.html#pymunk.Body.each_arbiter
-
         # setup pymunk collision callbacks
         def pre_solve_handler(arbiter, space, data):
             ice_body = arbiter.shapes[1].body
@@ -1130,7 +1122,7 @@ class ObjectPushing(gym.Env):
     def generate_observation(self, done=False):
         self.update_global_overhead_map()
 
-        if done:
+        if done and self.cfg.env.action_type == 'position':
             return None
         
         # Overhead map
