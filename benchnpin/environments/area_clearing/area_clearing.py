@@ -551,6 +551,7 @@ class AreaClearingEnv(gym.Env):
         for _ in range(self.steps):
             self.space.step(self.dt / self.steps)
             
+        print(self.robot_hit_obstacle)
         collision_penalty = BOUNDARY_PENALTY if self.robot_hit_obstacle else 0
         
         # get updated obstacles
@@ -618,6 +619,7 @@ class AreaClearingEnv(gym.Env):
             self.observation = observation
 
         self.update_global_overhead_map()
+        self.robot_hit_obstacle = False
         
         return observation, reward, terminated, truncated, info
 
