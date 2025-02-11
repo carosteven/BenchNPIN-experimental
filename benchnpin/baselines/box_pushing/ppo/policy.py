@@ -31,7 +31,7 @@ class BoxPushingPPO(BasePolicy):
             batch_size=128,
             n_epochs=10,
             learning_rate=5e-4,
-            gamma=0.97,
+            gamma=0.99,
             verbose=2,
             total_timesteps=int(2e5), 
             checkpoint_freq=10000) -> None:

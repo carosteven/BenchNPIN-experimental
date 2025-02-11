@@ -610,14 +610,7 @@ class ObjectPushing(gym.Env):
         return cubes_dict
 
     def cube_position_in_receptacle(self, cube_vertices):
-        # (x, y), size = self.get_receptacle_position_and_size()
-        # receptacle_min_x = x - size / 2
-        # receptacle_max_x = x + size / 2
-        # receptacle_min_y = y - size / 2
-        # receptacle_max_y = y + size / 2
-    
         for vertex in cube_vertices:
-            # if not (receptacle_min_x <= vertex[0] <= receptacle_max_x and receptacle_min_y <= vertex[1] <= receptacle_max_y):
             query_info = self.space.point_query(vertex, 0, pymunk.ShapeFilter())
             if not any(query.shape.label == 'receptacle' for query in query_info):
                 return False
@@ -1255,8 +1248,8 @@ class ObjectPushing(gym.Env):
                 fillPoly(small_overhead_map, [vertices_px], color=RECEPTACLE_SEG_INDEX/MAX_SEG_INDEX)
             elif poly.label == 'cube':
                 fillPoly(small_overhead_map, [vertices_px], color=CUBE_SEG_INDEX/MAX_SEG_INDEX)
-            # elif poly.label == 'robot':
-            #     fillPoly(small_overhead_map, [vertices_px], color=ROBOT_SEG_INDEX/MAX_SEG_INDEX)
+            elif poly.label == 'robot':
+                fillPoly(small_overhead_map, [vertices_px], color=ROBOT_SEG_INDEX/MAX_SEG_INDEX)
 
         start_i, start_j = int(self.global_overhead_map.shape[0] / 2 - small_overhead_map.shape[0] / 2), int(self.global_overhead_map.shape[1] / 2 - small_overhead_map.shape[1] / 2)
         self.global_overhead_map[start_i:start_i + small_overhead_map.shape[0], start_j:start_j + small_overhead_map.shape[1]] = small_overhead_map
