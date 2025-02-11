@@ -11,14 +11,14 @@ from os.path import dirname
 def main(args):
     cfg = DotDict.load_from_file(args.config_file)
     # ========================= Spatial Action Map Policy =========================
-    # sam_policy = BoxPushingSAM()
-    # sam_policy.train(job_id=args.job_id, **cfg.train)
+    sam_policy = BoxPushingSAM(model_name=f'sam_model_{args.job_id}', cfg=args.config_file)
+    sam_policy.train(job_id=args.job_id, **cfg.train)
     # evaluations = sam_policy.evaluate(num_eps=5)
     # print("sam Eval: ", evaluations)
 
     # ================================ PPO Policy =================================
-    ppo_policy = BoxPushingPPO(model_name=f'ppo_model_{args.job_id}', cfg=args.config_file)
-    ppo_policy.train()
+    # ppo_policy = BoxPushingPPO(model_name=f'ppo_model_{args.job_id}', cfg=args.config_file)
+    # ppo_policy.train()
     # evaluations = ppo_policy.evaluate(num_eps=5)
     # print("ppo Eval: ", evaluations)
 

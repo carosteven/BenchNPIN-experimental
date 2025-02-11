@@ -140,7 +140,7 @@ class DenseActionSpacePolicy:
 
 class BoxPushingSAM(BasePolicy):
 
-    def __init__(self, model_name='sam_model', model_path=None) -> None:
+    def __init__(self, model_name='sam_model', model_path=None, cfg=None) -> None:
         super().__init__()
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -152,6 +152,8 @@ class BoxPushingSAM(BasePolicy):
 
         self.model_name = model_name
         self.model = None
+
+        self.cfg = cfg
 
 
 
@@ -229,12 +231,15 @@ class BoxPushingSAM(BasePolicy):
         log_dir = os.path.join(os.path.dirname(__file__), 'output_logs/')
         if not os.path.exists(log_dir):
             os.mkdir(log_dir)
-        logging.basicConfig(filename=os.path.join(log_dir, 'box_pushing_sam.log'), level=logging.DEBUG)
+        logging.basicConfig(filename=os.path.join(log_dir, f'{self.model_name}.log'), level=logging.DEBUG)
         logging.info("starting training...")
         logging.info(f"Job ID: {job_id}")
 
         # create environment
-        env = gym.make('object-pushing-v0')
+        if self.cfg is not None:
+            env = gym.make('object-pushing-v0', cfg_file=self.cfg)
+        else:
+            env = gym.make('object-pushing-v0')
         env = env.unwrapped
 
         # policy
@@ -340,10 +345,10 @@ class BoxPushingSAM(BasePolicy):
             # Checkpoint
             if (timestep + 1) % checkpoint_freq == 0 or timestep + 1 == total_timesteps_with_warmup:
                 checkpoint_dir = os.path.dirname(checkpoint_path)
-                model_path = f'{checkpoint_dir}/model-{self.model_name}.pt'
+                model_path = f'{checkpoint_dir}/model-{self.model_name+str(timestep+1)}.pt'
                 if not os.path.exists(checkpoint_dir):
                     os.makedirs(checkpoint_dir)
-                temp_model_path = f'{checkpoint_dir}/model-temp.pt'
+                # temp_model_path = f'{checkpoint_dir}/model-temp.pt'
                 model = {
                     'timestep': timestep + 1,
                     'state_dict': policy.policy_net.state_dict(),
@@ -358,13 +363,13 @@ class BoxPushingSAM(BasePolicy):
                 }
 
                 # save model and checkpoint
-                torch.save(model, temp_model_path)
+                torch.save(model, model_path)
                 torch.save(checkpoint, temp_checkpoint_path)
 
                 # according to the GNU spec of rename, the state of checkpoint_path
                 # is atomic, i.e. it will either be modified or not modified, but not in
                 # between, during a system crash (i.e. preemtion)
-                os.replace(temp_model_path, model_path)
+                # os.replace(temp_model_path, model_path)
                 os.replace(temp_checkpoint_path, checkpoint_path)
                 msg = datetime.now().strftime("%Y-%m-%d %H:%M:%S") + ": Checkpoint saved at " + checkpoint_path + self.model_name
                 logging.info(msg)

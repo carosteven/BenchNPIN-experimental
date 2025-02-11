@@ -36,7 +36,10 @@ class BoxPushingPPO(BasePolicy):
             total_timesteps=int(2e5), 
             checkpoint_freq=10000) -> None:
 
-        env = gym.make('object-pushing-v0', cfg_file=self.cfg)
+        if self.cfg is not None:
+            env = gym.make('object-pushing-v0', cfg_file=self.cfg)
+        else:
+            env = gym.make('object-pushing-v0')
         env = env.unwrapped
 
         self.model = PPO(
@@ -76,7 +79,10 @@ class BoxPushingPPO(BasePolicy):
             model_checkpoint = self.model_name + '_' + model_eps + '_steps'
             self.model = PPO.load(os.path.join(self.model_path, model_checkpoint))
 
-        env = gym.make('object-pushing-v0', cfg_file=self.cfg)
+        if self.cfg is not None:
+            env = gym.make('object-pushing-v0', cfg_file=self.cfg)
+        else:
+            env = gym.make('object-pushing-v0')
         env = env.unwrapped
 
         rewards_list = []
