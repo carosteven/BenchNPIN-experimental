@@ -9,9 +9,7 @@ class BaseMetric(ABC):
     A base metric class
     """
 
-    def __init__(self, env, alg_name) -> None:
-        self.env = env
-
+    def __init__(self, alg_name) -> None:
         self.rewards = []
         self.efficiency_scores = []
         self.effort_scores = []
@@ -19,13 +17,10 @@ class BaseMetric(ABC):
         self.alg_name = alg_name
 
     
-    def plot_scores(self, save_fig_dir=None):
+    def plot_scores(self, save_fig_dir):
         """
         Generate box plots for efficiency scores, effort scores, and rewards on a single algorithm
         """
-
-        if save_fig_dir is None:
-            save_fig_dir = self.env.cfg.output_dir
 
         fig, ax = plt.subplots()
 
@@ -127,7 +122,7 @@ class BaseMetric(ABC):
 
 
     @abstractmethod
-    def step(self, action):
+    def update(self, info, reward, eps_complete=False):
         """
         Implement this function for any accumulative metrics
         """
@@ -135,7 +130,7 @@ class BaseMetric(ABC):
 
 
     @abstractmethod
-    def reset(self):
+    def reset(self, info):
         """
         Implement this function to reset any trial-specific values upon starting a new trial
         """

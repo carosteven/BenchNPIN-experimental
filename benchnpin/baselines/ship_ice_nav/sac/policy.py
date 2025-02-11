@@ -79,27 +79,29 @@ class ShipIceSAC(BasePolicy):
     def evaluate(self, num_eps: int, model_eps: str ='latest') -> Tuple[List[float], List[float], List[float], str]:
 
         if model_eps == 'latest':
-            self.model = SAC.load(os.path.join(self.model_path, self.model_name))
+            self.model = SAC.load(os.path.join(self.model_path, self.model_name), device='cpu')
         else:
             model_checkpoint = self.model_name + '_' + model_eps + '_steps'
-            self.model = SAC.load(os.path.join(self.model_path, model_checkpoint))
+            self.model = SAC.load(os.path.join(self.model_path, model_checkpoint), device='cpu')
 
         env = gym.make('ship-ice-v0')
         env = env.unwrapped
-        metric = ShipIceMetric(env=env, alg_name="SAC")
+        metric = ShipIceMetric(alg_name="SAC", ship_mass=env.cfg.ship.mass, goal=env.goal)
 
         for eps_idx in range(num_eps):
             print("Progress: ", eps_idx, " / ", num_eps, " episodes")
-            obs, info = metric.reset()
+            obs, info = env.reset()
+            metric.reset(info)
             done = truncated = False
             while True:
                 action, _ = self.model.predict(obs, deterministic=True)
-                obs, reward, done, truncated, info = metric.step(action)
+                obs, reward, done, truncated, info = env.step(action)
+                metric.update(info=info, reward=reward, eps_complete=(done or truncated))
                 if done or truncated:
                     break
         
         env.close()
-        metric.plot_scores()
+        metric.plot_scores(save_fig_dir=env.cfg.output_dir)
         return metric.efficiency_scores, metric.effort_scores, metric.rewards, "SAC"
 
 

@@ -8,8 +8,8 @@ class ShipIceMetric(BaseMetric):
     Link: https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=8954627
     """
 
-    def __init__(self, env, alg_name) -> None:
-        super().__init__(env=env, alg_name=alg_name)
+    def __init__(self, alg_name, ship_mass, goal) -> None:
+        super().__init__(alg_name=alg_name)
 
         self.eps_reward = 0
 
@@ -18,8 +18,9 @@ class ShipIceMetric(BaseMetric):
         # which is more applicable to indoor environments, less suitable for an ice field.
         self.total_mass_dist = 0               # \sum_{i=1}^{k}m_il_i
 
-        self.ship_mass = env.cfg.ship.mass          # m_0
+        self.ship_mass = ship_mass          # m_0
         self.total_ship_dist = 0                    # l_0
+        self.goal_line = goal[1]
 
 
     def compute_efficiency_score(self):
@@ -42,8 +43,7 @@ class ShipIceMetric(BaseMetric):
         return effort
 
     
-    def step(self, action):
-        obs, reward, done, truncated, info = self.env.step(action)
+    def update(self, info, reward, eps_complete=False):
         self.eps_reward += reward
 
         self.total_mass_dist = info['total_work']
@@ -54,26 +54,19 @@ class ShipIceMetric(BaseMetric):
         self.total_ship_dist += np.linalg.norm(np.array(self.ship_state[:2]) - np.array(ship_state[:2]))
         self.ship_state = ship_state
         
-        if done or truncated:
+        if eps_complete:
             self.rewards.append(self.eps_reward)
             self.efficiency_scores.append(self.compute_efficiency_score())
             self.effort_scores.append(self.compute_effort_score())
 
-        return obs, reward, done, truncated, info
 
-
-    def reset(self):
-        obs, info = self.env.reset()
-
+    def reset(self, info):
         self.eps_reward = 0
         self.total_mass_dist = 0
         self.total_ship_dist = 0
         self.trial_success = False
 
         self.ship_state = info['state']
-        self.goal_line = self.env.goal[1]
 
         # shortest obstacle-free path length for the ship
         self.L = self.goal_line - self.ship_state[1]
-
-        return obs, info

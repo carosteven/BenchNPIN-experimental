@@ -71,11 +71,12 @@ class PlanningBasedPolicy(BasePolicy):
     def evaluate(self, num_eps: int, model_eps: str ='latest') -> Tuple[List[float], List[float], List[float], str]:
         env = gym.make('ship-ice-v0')
         env = env.unwrapped
-        metric = ShipIceMetric(env=env, alg_name="planningBased")
+        metric = ShipIceMetric(alg_name="planningBased", ship_mass=env.cfg.ship.mass, goal=env.goal)
 
         for eps_idx in range(num_eps):
             print("Progress: ", eps_idx, " / ", num_eps, " episodes")
-            observation, info = metric.reset()
+            observation, info = env.reset()
+            metric.reset(info)
             obstacles = info['obs']
             done = truncated = False
 
@@ -84,13 +85,14 @@ class PlanningBasedPolicy(BasePolicy):
                                     goal=env.goal,
                                     conc=env.cfg.concentration, 
                                     action_scale=env.max_yaw_rate_step)
-                observation, reward, done, truncated, info = metric.step(action)
+                observation, reward, done, truncated, info = env.step(action)
+                metric.update(info=info, reward=reward, eps_complete=(done or truncated))
                 obstacles = info['obs']
                 if done or truncated:
                     break
 
         env.close()
-        metric.plot_scores()
+        metric.plot_scores(save_fig_dir=env.cfg.output_dir)
         return metric.efficiency_scores, metric.effort_scores, metric.rewards, "planning-Based"
 
     
