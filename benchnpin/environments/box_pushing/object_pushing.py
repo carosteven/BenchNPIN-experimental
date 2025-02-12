@@ -807,7 +807,6 @@ class ObjectPushing(gym.Env):
                 robot_waypoint_headings.append(waypoint_headings)
             
             # compute movement from final waypoint to the target and apply robot radius offset to the final waypoint
-            # robot_pixel_width = int(np.ceil(self.robot_info.length * LOCAL_MAP_PIXELS_PER_METER))
             dist_to_target_end_effector_position = distance(robot_waypoint_positions[-2], robot_waypoint_positions[-1])
             signed_dist = dist_to_target_end_effector_position - self.robot_radius
 
@@ -920,7 +919,6 @@ class ObjectPushing(gym.Env):
                 
                 sim_steps += 1
                 if sim_steps % 5 == 0 and self.cfg.render.show:
-                    # self.observation = self.generate_observation()
                     self.render()
 
                 # break if robot is stuck
@@ -1255,8 +1253,8 @@ class ObjectPushing(gym.Env):
                 fillPoly(small_overhead_map, [vertices_px], color=RECEPTACLE_SEG_INDEX/MAX_SEG_INDEX)
             elif poly.label == 'cube':
                 fillPoly(small_overhead_map, [vertices_px], color=CUBE_SEG_INDEX/MAX_SEG_INDEX)
-            # elif poly.label == 'robot':
-            #     fillPoly(small_overhead_map, [vertices_px], color=ROBOT_SEG_INDEX/MAX_SEG_INDEX)
+            elif poly.label == 'robot':
+                fillPoly(small_overhead_map, [vertices_px], color=ROBOT_SEG_INDEX/MAX_SEG_INDEX)
 
         start_i, start_j = int(self.global_overhead_map.shape[0] / 2 - small_overhead_map.shape[0] / 2), int(self.global_overhead_map.shape[1] / 2 - small_overhead_map.shape[1] / 2)
         self.global_overhead_map[start_i:start_i + small_overhead_map.shape[0], start_j:start_j + small_overhead_map.shape[1]] = small_overhead_map
