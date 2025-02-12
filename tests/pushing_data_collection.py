@@ -6,6 +6,7 @@ A simple script to run a teleoperation pipeline for demonstration dataset collec
 'X': stop turning (note: this does not stop linear motion)
 'esc': exit teleoperation
 """
+# TODO record high and low dimenstion states
 import random
 
 import benchnpin.environments
@@ -13,8 +14,10 @@ import gymnasium as gym
 import numpy as np
 import pickle
 from pynput import keyboard
+from os.path import dirname
 
-env = gym.make('object-pushing-v0')
+cfg_file = f'{dirname(dirname(__file__))}/benchnpin/environments/box_pushing/config_ppo.yaml'
+env = gym.make('object-pushing-v0', cfg_file=cfg_file)
 
 observations = []
 actions = []                # this is actually the states (i.e. 3 dof pose)
@@ -90,8 +93,9 @@ def collect_demos():
             while listener.running:  # While the listener is active
                 global command
                 print("command: ", command, "; step: ", t, \
-                    "; num completed: ", info['box_count'],  end="\r")
+                    "; num completed: ", info['cumulative_cubes'],  end="\r")
                 observation, reward, terminated, truncated, info = env.step(command)
+                # observation, reward, terminated, truncated, info = env.step(-1)
                 # random action
                 # action_space = 96*96
                 # action = random.randrange(action_space)

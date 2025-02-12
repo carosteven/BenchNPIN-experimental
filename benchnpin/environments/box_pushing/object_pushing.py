@@ -48,9 +48,9 @@ SMALL_RIGHT = 7
 CUBE_MASS = 0.01
 WALL_THICKNESS = 1.4*10
 
-LOCAL_MAP_PIXEL_WIDTH = 96
-LOCAL_MAP_WIDTH = 10 # 10 meters
-LOCAL_MAP_PIXELS_PER_METER = LOCAL_MAP_PIXEL_WIDTH / LOCAL_MAP_WIDTH
+LOCAL_MAP_PIXEL_WIDTH = None
+LOCAL_MAP_WIDTH = None
+LOCAL_MAP_PIXELS_PER_METER = None
 MAP_UPDATE_STEPS = 250
 
 OBSTACLE_SEG_INDEX = 0
@@ -75,18 +75,23 @@ class ObjectPushing(gym.Env):
     """Custom Environment that follows gym interface"""
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
 
-    def __init__(self):
+    def __init__(self, cfg_file = None):
         super(ObjectPushing, self).__init__()
 
         # get current directory of this script
         self.current_dir = os.path.dirname(__file__)
 
         # construct absolute path to the env_config folder
-        cfg_file = os.path.join(self.current_dir, 'config.yaml')
+        if cfg_file is None:
+            cfg_file = os.path.join(self.current_dir, 'config.yaml')
 
         cfg = DotDict.load_from_file(cfg_file)
-        # self.occupancy = OccupancyGrid(grid_width=cfg.occ.grid_size, grid_height=cfg.occ.grid_size, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, robot.body=None)
         self.cfg = cfg
+
+        global LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_WIDTH, LOCAL_MAP_PIXELS_PER_METER
+        LOCAL_MAP_PIXEL_WIDTH = self.cfg.env.local_map_pixel_width
+        LOCAL_MAP_WIDTH = 10 # 10 meters
+        LOCAL_MAP_PIXELS_PER_METER = LOCAL_MAP_PIXEL_WIDTH / LOCAL_MAP_WIDTH
 
         # state
         self.num_channels = 4
@@ -97,11 +102,16 @@ class ObjectPushing(gym.Env):
         self.configuration_space_thin = None
         self.closest_cspace_indices = None
 
-        # robot state
+        # robot
+        self.robot_cumulative_distance = None
+        self.robot_cumulative_cubes = None
+        self.robot_cumulative_reward = None
         self.robot_hit_obstacle = False
+
         self.robot_info = self.cfg.agent
         self.robot_info['color'] = get_color('red')
         self.robot_radius = ((self.robot_info.length**2 + self.robot_info.width**2)**0.5 / 2) * 1.2
+        self.robot_half_width = max(self.robot_info.length, self.robot_info.width) / 2
         robot_pixel_width = int(2 * self.robot_radius * LOCAL_MAP_PIXELS_PER_METER)
         self.robot_state_channel = np.zeros((LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH), dtype=np.float32)
         start = int(np.floor(LOCAL_MAP_PIXEL_WIDTH / 2 - robot_pixel_width / 2))
@@ -110,6 +120,21 @@ class ObjectPushing(gym.Env):
                 # Circular robot mask
                 if (((i + 0.5) - LOCAL_MAP_PIXEL_WIDTH / 2)**2 + ((j + 0.5) - LOCAL_MAP_PIXEL_WIDTH / 2)**2)**0.5 < robot_pixel_width / 2:
                     self.robot_state_channel[i, j] = 1
+        
+        # rewards
+        self.partial_rewards_scale = cfg.rewards.partial_rewards_scale
+        self.goal_reward = cfg.rewards.goal_reward
+        self.collision_penalty = cfg.rewards.collision_penalty
+        self.non_movement_penalty = cfg.rewards.non_movement_penalty
+
+        # misc
+        self.ministep_size = self.cfg.misc.ministep_size
+        self.inactivity_cutoff = self.cfg.misc.inactivity_cutoff
+        # self.random_seed = self.cfg.misc.random_seed
+        # self.use_gui = self.cfg.misc.use_gui
+        # self.show_obs = self.cfg.misc.show_obs
+
+        self.inactivity_counter = None
 
         self.env_max_trial = 4000
 
@@ -121,11 +146,15 @@ class ObjectPushing(gym.Env):
         self.scatter = False
 
         # Define action space
-        max_yaw_rate_step = (np.pi/2) / 15        # rad/sec
-        print("max yaw rate per step: ", max_yaw_rate_step)
-        self.action_space = spaces.Box(low=-max_yaw_rate_step, high=max_yaw_rate_step, dtype=np.float64)
+        if self.cfg.env.action_type == 'velocity':
+            self.action_space = spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float64)
+        elif self.cfg.env.action_type == 'heading':
+            self.action_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float64)
+        elif self.cfg.env.action_type == 'position':
+            self.action_space = spaces.Box(low=0, high=LOCAL_MAP_PIXEL_WIDTH * LOCAL_MAP_PIXEL_WIDTH, dtype=np.float64)
 
         # Define observation space
+        self.show_observation = False
         self.low_dim_state = self.cfg.low_dim_state
         if self.low_dim_state:
             self.fixed_trial_idx = self.cfg.fixed_trial_idx
@@ -135,14 +164,8 @@ class ObjectPushing(gym.Env):
                 self.observation_space = spaces.Box(low=-10, high=30, shape=(6,), dtype=np.float64)
 
         else:
-            # self.observation_shape = (2, self.occupancy.occ_map_height, self.occupancy.occ_map_width)
-            # self.observation_space = spaces.Box(low=0, high=1, shape=self.observation_shape, dtype=np.float64)
-            self.observation_shape = (self.num_channels, LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH)
-            # self.observation_shape = (self.num_channels, 232, 232)
-            self.observation_space = spaces.Box(low=0, high=1, shape=self.observation_shape, dtype=np.float32)
-
-        self.yaw_lim = (0, np.pi)       # lower and upper limit of ship yaw  
-        self.boundary_violation_limit = 0.0       # if the ship is out of boundary more than this limit, terminate and truncate the episode 
+            self.observation_shape = (LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH, self.num_channels)
+            self.observation_space = spaces.Box(low=0, high=255, shape=self.observation_shape, dtype=np.uint8)
 
         self.plot = None
         self.renderer = None
@@ -153,6 +176,7 @@ class ObjectPushing(gym.Env):
             self.linear_speed = 0.0
             self.linear_speed_increment = 0.02
 
+        if self.cfg.render.show_obs:
             # show state
             num_plots = self.num_channels
             self.state_plot = plt
@@ -160,7 +184,7 @@ class ObjectPushing(gym.Env):
             self.colorbars = [None] * num_plots
             self.state_plot.ion()  # Interactive mode on        
 
-    def init_ship_ice_sim(self):
+    def init_box_pushing_sim(self):
 
         # initialize ship-ice environment
         self.steps = self.cfg.sim.steps
@@ -198,15 +222,7 @@ class ObjectPushing(gym.Env):
         self.contact_pts = []
 
         # keep track of cubes pushed into receptacle
-        self.cumulative_cubes = 0
-
-        # setup a collision callback to keep track of total ke
-        # def pre_solve_handler(arbiter, space, data):
-        #     nonlocal ship_ke
-        #     ship_ke = arbiter.shapes[0].body.kinetic_energy
-        #     print('ship_ke', ship_ke, 'mass', arbiter.shapes[0].body.mass, 'velocity', arbiter.shapes[0].body.velocity)
-        #     return True
-        # # http://www.pymunk.org/en/latest/pymunk.html#pymunk.Body.each_arbiter
+        self.cumulative_cubes = 0 # TODO remove
 
         # setup pymunk collision callbacks
         def pre_solve_handler(arbiter, space, data):
@@ -244,7 +260,8 @@ class ObjectPushing(gym.Env):
         
         def recept_collision_begin(arbiter, space, data):
             if arbiter.shapes[0].label == 'cube':
-                self.cubes_completed(arbiter.shapes[0])
+                # self.cubes_completed(arbiter.shapes[0])
+                pass
             return False
 
         # handler = space.add_default_collision_handler()
@@ -274,7 +291,9 @@ class ObjectPushing(gym.Env):
             else:
                 self.renderer.reset(new_space=self.space)
 
-    def init_ship_ice_env(self):
+    def init_box_pushing_env(self):
+        
+        self.receptacle_position, self.receptacle_size = self.get_receptacle_position_and_size()
 
         # generate random start point, if specified
         if self.cfg.random_start:
@@ -291,12 +310,6 @@ class ObjectPushing(gym.Env):
 
         self.boundary_dicts = self.generate_boundary()
         self.cubes_dicts = self.generate_cubes()
-
-        # filter out cubes that have zero area NOTE probably not needed
-        # self.cubes_dicts[:] = [c for c in self.cubes_dicts if poly_area(c['vertices']) != 0]
-        # self.cubes = [c['vertices'] for c in self.cubes_dicts]
-
-        self.goal = (0, self.cfg.goal_y) # TODO remove
 
         # initialize ship sim objects
         self.robot = generate_sim_agent(self.space, self.robot_info, label='robot', body_type=pymunk.Body.KINEMATIC)
@@ -328,26 +341,6 @@ class ObjectPushing(gym.Env):
         for _ in range(1000):
             self.space.step(self.dt / self.steps)
         self.prev_obs = CostMap.get_obs_from_poly(self.cubes)
-
-    def is_point_inside_polygon(self, point, polygon_vertices):
-        # Ray-casting algorithm to check if a point is inside a polygon
-        x, y = point
-        n = len(polygon_vertices)
-        inside = False
-
-        p1x, p1y = polygon_vertices[0][:2]  # Unpack only the first two elements
-        for i in range(n + 1):
-            p2x, p2y = polygon_vertices[i % n][:2]  # Unpack only the first two elements
-            if y > min(p1y, p2y):
-                if y <= max(p1y, p2y):
-                    if x <= max(p1x, p2x):
-                        if p1y != p2y:
-                            xinters = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
-                        if p1x == p2x or x <= xinters:
-                            inside = not inside
-            p1x, p1y = p2x, p2y
-
-        return inside
     
     def prevent_boundary_intersection(self, arbiter):
         collision = False
@@ -375,7 +368,7 @@ class ObjectPushing(gym.Env):
     def generate_boundary(self):
         boundary_dicts = []
         # generate receptacle
-        (x, y), size = self.get_receptacle_position_and_size()
+        (x, y), size = self.receptacle_position, self.receptacle_size
         boundary_dicts.append(
             {'type': 'receptacle',
              'position': (x, y),
@@ -428,7 +421,7 @@ class ObjectPushing(gym.Env):
                     
                     overlapped = False
                     # check if column overlaps with receptacle
-                    (rx, ry), size = self.get_receptacle_position_and_size()
+                    (rx, ry), size = self.receptacle_position, self.receptacle_size
                     if ((x - rx)**2 + (y - ry)**2)**(0.5) <= col_min_dist / 2 + size / 2:
                         overlapped = True
                         break
@@ -595,10 +588,10 @@ class ObjectPushing(gym.Env):
         
         else:
             cubes.append([3, 2, 0])
-            # cubes.append([3, 1.5, 0])
-            # cubes.append([3, 1, 0])
-            # cubes.append([3, 3, 0])
-            self.num_box = 1
+            cubes.append([2.5, 2, 0])
+            cubes.append([2, 2, 0])
+            cubes.append([3, 3, 0])
+            self.num_box = 4
         
         # convert to cubes dict
         cubes_dict = []
@@ -617,14 +610,9 @@ class ObjectPushing(gym.Env):
         return cubes_dict
 
     def cube_position_in_receptacle(self, cube_vertices):
-        (x, y), size = self.get_receptacle_position_and_size()
-        receptacle_min_x = x - size / 2
-        receptacle_max_x = x + size / 2
-        receptacle_min_y = y - size / 2
-        receptacle_max_y = y + size / 2
-    
         for vertex in cube_vertices:
-            if not (receptacle_min_x <= vertex[0] <= receptacle_max_x and receptacle_min_y <= vertex[1] <= receptacle_max_y):
+            query_info = self.space.point_query(vertex, 0, pymunk.ShapeFilter())
+            if not any(query.shape.label == 'receptacle' for query in query_info):
                 return False
         return True
 
@@ -636,63 +624,143 @@ class ObjectPushing(gym.Env):
         else:
             self.episode_idx += 1
 
-        self.init_ship_ice_sim()
-        self.init_ship_ice_env()
+        self.init_box_pushing_sim()
+        self.init_box_pushing_env()
 
         # reset map
         self.global_overhead_map = self.create_padded_room_zeros()
         self.update_global_overhead_map()
 
         self.t = 0
-        
-        # close figure before opening new ones
-        # if self.plot is not None:
-        #     self.plot.close()
-
-        # self.plot = Plot(
-        #         np.zeros((self.cfg.costmap.m, self.cfg.costmap.n)), self.cubes_dicts,
-        #         ship_pos=self.start, ship_vertices=np.asarray(self.robot.get_vertices()),
-        #         map_figsize=None, y_axis_limit=self.cfg.plot.y_axis_limit, inf_stream=False, goal=self.goal[1], 
-        #         path=np.zeros((3, 50)), boundaries=self.boundary_dicts
-        #     )
 
         # get updated cubes
         updated_cubes = CostMap.get_obs_from_poly(self.cubes)
-        info = {'state': (round(self.robot.body.position.x, 2),
-                                round(self.robot.body.position.y, 2),
-                                round(self.robot.body.angle, 2)), 
-                'total_work': self.total_work[0], 
-                'cubes': updated_cubes, 
-                'box_count': 0}
+
+        # reset stats
+        self.inactivity_counter = 0
+        self.robot_cumulative_distance = 0
+        self.robot_cumulative_cubes = 0
+        self.robot_cumulative_reward = 0
 
         if self.low_dim_state:
-            observation = self.generate_observation_low_dim(updated_cubes=updated_cubes)
+            updated_cubes = CostMap.get_obs_from_poly(self.cubes)
+            self.observation = self.generate_observation_low_dim(updated_cubes=updated_cubes)
 
         else:
-            observation = self.generate_observation()
-        return observation, info
+            self.observation = self.generate_observation()
+
+        if self.cfg.render.show:
+            self.show_observation = True
+            self.render()
+        
+        info = {
+            'ministeps': 0,
+            'inactivity': self.inactivity_counter,
+            'cumulative_distance': self.robot_cumulative_distance,
+            'cumulative_cubes': self.robot_cumulative_cubes,
+            'cumulative_reward': self.robot_cumulative_reward,
+            'state': (round(self.robot.body.position.x, 2),
+                      round(self.robot.body.position.y, 2),
+                      round(self.robot.body.angle, 2)),
+        }
+
+        return self.observation, info
     
 
     def step(self, action):
         """Executes one time step in the environment and returns the result."""
+        # print("Action: ", action)
         self.t += 1
         self.dp = None
+
+        self.robot_hit_obstacle = False
+        robot_cubes = 0
+        robot_reward = 0
+
+        # get initial state
+
+        # initial pose
+        robot_initial_position, robot_initial_heading = self.robot.body.position, restrict_heading_range(self.robot.body.angle)
+        robot_initial_position = list(robot_initial_position)  
+
+        # store initial cube distances for partial reward calculation
+        initial_cube_distances = {}
+        for cube in self.cubes:
+            cube_position = cube.body.position
+            dist = self.shortest_path_distance(cube_position, self.receptacle_position)
+            initial_cube_distances[cube.idx] = dist
 
         if self.cfg.demo_mode:
             self.demo_control(action)
 
-        else:
-            robot_action = np.unravel_index(action, (LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH))
+            # move simulation forward
+            for _ in range(self.steps):
+                self.space.step(self.dt / self.steps)
+
+            # get new robot pose
+            robot_position, robot_heading = self.robot.body.position, restrict_heading_range(self.robot.body.angle)
+            robot_position = list(robot_position)
+            
+            # update distance moved
+            robot_distance = distance(robot_initial_position, robot_position)
         
-        if not self.cfg.demo_mode:
-            robot_cubes = 0
-            robot_reward = 0
-            robot_hit_obstacle = False
+        elif self.cfg.env.action_type == 'velocity':
+            ################################ Velocity Control ################################
+            linear_speed = action[0]
+            angular_speed = action[1]
+            if abs(linear_speed) >= self.target_speed:
+                linear_speed = self.target_speed*np.sign(linear_speed)
+
+            # apply linear and angular speeds
+            global_velocity = R(self.robot.body.angle) @ [linear_speed, 0]
+
+            # apply velocity controller
+            self.robot.body.angular_velocity = angular_speed
+            self.robot.body.velocity = Vec2d(global_velocity[0], global_velocity[1])
+            
+            # move simulation forward
+            for _ in range(self.steps):
+                # ensure robot moving in the direction it is facing
+                global_velocity = R(self.robot.body.angle) @ [linear_speed, 0]
+                self.robot.body.velocity = Vec2d(global_velocity[0], global_velocity[1])
+
+                self.space.step(self.dt / self.steps)
+                # self.render()
+
+                if self.robot_hit_obstacle:
+                    break
+            
+            # get new robot pose
+            robot_position, robot_heading = self.robot.body.position, restrict_heading_range(self.robot.body.angle)
+            robot_position = list(robot_position)
+            
+            # update distance moved
+            robot_distance = distance(robot_initial_position, robot_position)
+
+        elif self.cfg.env.action_type == 'position' or self.cfg.env.action_type == 'heading':
+            if self.cfg.env.action_type == 'heading':
+                ################################ Heading Control ################################
+                # convert heading action to a pixel index in order to use the position control code
+
+                # rescale heading action to be in range [0, 2*pi]
+                angle = (action + 1) * np.pi + np.pi / 2
+                step_size = self.cfg.env.step_size
+
+                # calculate target position
+                x_movement = step_size * np.cos(angle)
+                y_movement = step_size * np.sin(angle)
+
+                # convert target position to pixel coordinates
+                x_pixel = int(LOCAL_MAP_PIXEL_WIDTH / 2 + x_movement * LOCAL_MAP_PIXELS_PER_METER)
+                y_pixel = int(LOCAL_MAP_PIXEL_WIDTH / 2 - y_movement * LOCAL_MAP_PIXELS_PER_METER)
+
+                # convert pixel coordinates to a single index
+                action = y_pixel * LOCAL_MAP_PIXEL_WIDTH + x_pixel
+
+            ################################ Position Control ################################
+            robot_action = np.unravel_index(action, (LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH))
             
             # ****************** Make into function ******************
-            # initial pose
-            robot_initial_position, robot_initial_heading = self.robot.body.position, restrict_heading_range(self.robot.body.angle)
-            robot_initial_position = list(robot_initial_position)        
 
             # compute target position for front of robot:
             # computes distance from front of robot (not center), which is used to find the
@@ -757,23 +825,12 @@ class ObjectPushing(gym.Env):
             for position, heading in zip(robot_waypoint_positions, robot_waypoint_headings):
                 self.path.append([position[0], position[1], heading])
             self.path = np.array(self.path)
-            self.renderer.update_path(self.path)
+            if self.cfg.render.show:
+                self.renderer.update_path(self.path)
             # ****************** Make into function ******************
-            
-            # store the initial configuration space at the start of the step( for partial reward calculation)
-            # TODO check if this is needed
-            initial_configuration_space = self.configuration_space.copy()
-
-            # store initial cube distances for partial reward calculation
-            initial_cube_distances = {}
-            receptacle_position, _ = self.get_receptacle_position_and_size()
-            for cube in self.cubes:
-                cube_position = cube.body.position
-                dist = self.shortest_path_distance(cube_position, receptacle_position)
-                initial_cube_distances[cube] = dist
 
             ############################################################################################################
-            # movement
+            # Movement
             robot_position = robot_initial_position.copy()
             robot_heading = robot_initial_heading
             robot_is_moving = True
@@ -798,9 +855,7 @@ class ObjectPushing(gym.Env):
                 robot_new_position = robot_position.copy()
                 robot_new_heading = robot_heading
                 heading_diff = heading_difference(robot_heading, robot_waypoint_heading)
-                # print(heading_diff, prev_heading_diff, np.abs(heading_diff - prev_heading_diff), end=' ')
                 if np.abs(heading_diff) > TURN_STEP_SIZE and np.abs(heading_diff - prev_heading_diff) > 0.001:
-                    # print(np.abs(heading_diff), end=' ')
                     # turn towards next waypoint first
                     robot_new_heading += np.sign(heading_diff) * TURN_STEP_SIZE
                 else:
@@ -833,7 +888,7 @@ class ObjectPushing(gym.Env):
                 # stop moving if robot collided with obstacle
                 if distance(robot_prev_waypoint_position, robot_position) > MOVE_STEP_SIZE:
                     if self.robot_hit_obstacle:
-                        self.robot_hit_obstacle = False
+                        # self.robot_hit_obstacle = False
                         robot_is_moving = False
                         break  # Note: self.robot_distance does not get not updated
                 
@@ -856,79 +911,99 @@ class ObjectPushing(gym.Env):
                         self.dp = None
                         self.path = self.path[1:]
                 
-                # break if robot is stuck
                 sim_steps += 1
-                if sim_steps % 5 == 0:
-                    self.observation = self.generate_observation()
+                if sim_steps % 5 == 0 and self.cfg.render.show:
+                    # self.observation = self.generate_observation()
                     self.render()
+
+                # break if robot is stuck
                 if sim_steps > STEP_LIMIT:
-                    print('stuck')
                     break
 
                 if sim_steps % MAP_UPDATE_STEPS == 0:
                     self.update_global_overhead_map()
 
-            # step the simulation until everything is still
-            self.step_simulation_until_still()
+        # step the simulation until everything is still
+        self.step_simulation_until_still()
+        # get new cube positions
+        final_cube_distances = {}
+        for cube in self.cubes:
+            cube_position = cube.body.position
+            dist = self.shortest_path_distance(cube_position, self.receptacle_position)
+            final_cube_distances[cube.idx] = dist
 
-        else:
-            # move simulation forward
-            for _ in range(self.steps):
-                self.space.step(self.dt / self.steps)
+        ############################################################################################################
+        # Rewards
+
+        # partial reward for moving cubes towards receptacle
+        for cube in self.cubes:
+            dist_moved = initial_cube_distances[cube.idx] - final_cube_distances[cube.idx]
+            robot_reward += self.partial_rewards_scale * dist_moved
+
+        # reward for cubes in receptacle
+        to_remove = []
+        for cube in self.cubes:
+            cube_vertices = [cube.body.local_to_world(v) for v in cube.get_vertices()]
+            if self.cube_position_in_receptacle(cube_vertices):
+                to_remove.append(cube)
+                self.inactivity_counter = 0
+                robot_cubes += 1
+                robot_reward += self.goal_reward
+        for cube in to_remove:
+            self.space.remove(cube.body, cube)
+            self.cubes.remove(cube)
+
+        # penalty for hitting obstacles
+        if self.robot_hit_obstacle:
+            robot_reward -= self.collision_penalty
         
-            # get updated cubes
-            # all_cubes_completed = self.cubes_completed()
-            updated_cubes = CostMap.get_obs_from_poly(self.cubes)
+        # penalty for small movements
+        robot_heading = restrict_heading_range(self.robot.body.angle)
+        robot_turn_angle = heading_difference(robot_initial_heading, robot_heading)
+        if robot_distance < NONMOVEMENT_DIST_THRESHOLD and abs(robot_turn_angle) < NONMOVEMENT_TURN_THRESHOLD:
+            robot_reward -= self.non_movement_penalty
+        
+        ############################################################################################################
+        # Compute stats
+        self.robot_cumulative_distance += robot_distance
+        self.robot_cumulative_cubes += robot_cubes
+        self.robot_cumulative_reward += robot_reward
 
-            # compute work done
-            work = total_work_done(self.prev_obs, updated_cubes)
-            self.total_work[0] += work
-            self.total_work[1].append(work)
-            self.prev_obs = updated_cubes
-            # self.cubes = updated_cubes
-
-            # check episode terminal condition
-            if self.cumulative_cubes == self.num_box:
-                terminated = True
-            else:
-                terminated = False
-
-            # compute reward
-            if self.robot.body.position.y < self.goal[1]:
-                dist_reward = -1
-            else:
-                dist_reward = 0
-            collision_reward = -work
-
-            reward = self.beta * collision_reward + dist_reward
-
-            # apply constraint penalty
-            # if boundary_constraint_violated:
-            #     reward += BOUNDARY_PENALTY
-
-            # apply terminal reward
-            # if terminated and not boundary_violation_terminal:
-            #     reward += TERMINAL_REWARD
-        reward = 0
+        # increment inactivity counter, which measures steps elapsed since the previus cube was stashed
+        if robot_cubes == 0:
+            self.inactivity_counter += 1
+        
+        # check if episode is done
         terminated = False
-        # Optionally, we can add additional info
-        info = {'state': (round(self.robot.body.position.x, 2),
-                                round(self.robot.body.position.y, 2),
-                                round(self.robot.body.angle, 2)), 
-                # 'total_work': self.total_work[0], 
-                # 'collision reward': collision_reward, 
-                # 'scaled collision reward': collision_reward * self.beta, 
-                # 'dist reward': dist_reward, 
-                # 'cubes': updated_cubes, 
-                'box_count': self.cumulative_cubes}
+        if self.robot_cumulative_cubes == self.num_box:
+            terminated = True
         
-        # generate observation
-        if self.low_dim_state:
-            self.observation = self.generate_observation_low_dim(updated_cubes=updated_cubes)
-        else:
-            self.observation = self.generate_observation()
+        truncated = False
+        if self.inactivity_counter >= self.inactivity_cutoff:
+            terminated = True
+            truncated = True
         
-        return self.observation, reward, terminated, False, info
+        # items to return
+        self.observation = self.generate_observation(done=terminated)
+        reward = robot_reward
+        ministeps = robot_distance / self.ministep_size
+        info = {
+            'ministeps': ministeps,
+            'inactivity': self.inactivity_counter,
+            'cumulative_distance': self.robot_cumulative_distance,
+            'cumulative_cubes': self.robot_cumulative_cubes,
+            'cumulative_reward': self.robot_cumulative_reward,
+            'state': (round(self.robot.body.position.x, 2),
+                      round(self.robot.body.position.y, 2),
+                      round(self.robot.body.angle, 2)),
+        }
+        
+        # render environment
+        if self.cfg.render.show:
+            self.show_observation = True
+            self.render()
+        
+        return self.observation, reward, terminated, truncated, info
 
     def demo_control(self, action):
         if action == FORWARD:
@@ -1035,7 +1110,7 @@ class ObjectPushing(gym.Env):
     def generate_observation(self, done=False):
         self.update_global_overhead_map()
 
-        if done:
+        if done and self.cfg.env.action_type == 'position':
             return None
         
         # Overhead map
@@ -1044,7 +1119,9 @@ class ObjectPushing(gym.Env):
         channels.append(self.robot_state_channel)
         channels.append(self.get_local_distance_map(self.create_global_shortest_path_to_receptacle_map(), self.robot.body.position, self.robot.body.angle))
         channels.append(self.get_local_distance_map(self.create_global_shortest_path_map(self.robot.body.position), self.robot.body.position, self.robot.body.angle))
-        observation = np.stack(channels)
+        # observation = np.stack(channels)
+        observation = np.stack(channels, axis=2)
+        observation = (observation * 255).astype(np.uint8)
         return observation
     
     def get_local_overhead_map(self):
@@ -1090,7 +1167,7 @@ class ObjectPushing(gym.Env):
 
     def create_global_shortest_path_to_receptacle_map(self):
         global_map = self.create_padded_room_zeros() + np.inf
-        (rx, ry), _ = self.get_receptacle_position_and_size()
+        (rx, ry) = self.receptacle_position
         pixel_i, pixel_j = position_to_pixel_indices(rx, ry, self.configuration_space.shape)
         pixel_i, pixel_j = self.closest_valid_cspace_indices(pixel_i, pixel_j)
         shortest_path_image, _ = spfa.spfa(self.configuration_space, (pixel_i, pixel_j))
@@ -1098,6 +1175,9 @@ class ObjectPushing(gym.Env):
         global_map = np.minimum(global_map, shortest_path_image)
         global_map /= (np.sqrt(2) * LOCAL_MAP_PIXEL_WIDTH) / LOCAL_MAP_PIXELS_PER_METER
         global_map *= self.cfg.env.shortest_path_channel_scale
+        if self.cfg.env.invert_receptacle_map:
+            global_map += 1-self.configuration_space
+            global_map[global_map==(1-self.configuration_space)] = 1
         return global_map
     
     def create_global_shortest_path_map(self, robot_position):
@@ -1136,11 +1216,10 @@ class ObjectPushing(gym.Env):
         obstacle_map[start_i:start_i + small_obstacle_map.shape[0], start_j:start_j + small_obstacle_map.shape[1]] = small_obstacle_map
 
         # Dilate obstacles and walls based on robot size
-        robot_pixel_width = int(2 * self.robot_radius * LOCAL_MAP_PIXELS_PER_METER)
-        selem = disk(np.floor(robot_pixel_width / 2))
+        selem = disk(np.floor(self.robot_radius * LOCAL_MAP_PIXELS_PER_METER))
         self.configuration_space = 1 - binary_dilation(obstacle_map, selem).astype(np.float32)
         
-        selem_thin = disk(np.floor(robot_pixel_width / 4))
+        selem_thin = disk(np.floor(self.robot_half_width * LOCAL_MAP_PIXELS_PER_METER))
         self.configuration_space_thin = 1 - binary_dilation(obstacle_map, selem_thin).astype(np.float32)
 
         self.closest_cspace_indices = distance_transform_edt(1 - self.configuration_space, return_distances=False, return_indices=True)
@@ -1164,6 +1243,7 @@ class ObjectPushing(gym.Env):
             vertices_px[:, 1] = small_overhead_map.shape[0] - vertices_px[:, 1]
 
             # draw the boundary on the small_overhead_map
+            small_overhead_map[small_overhead_map == 1] = FLOOR_SEG_INDEX / MAX_SEG_INDEX
             if poly.label == 'receptacle':
                 fillPoly(small_overhead_map, [vertices_px], color=RECEPTACLE_SEG_INDEX/MAX_SEG_INDEX)
             elif poly.label == 'cube':
@@ -1247,7 +1327,7 @@ class ObjectPushing(gym.Env):
 
     def render(self, mode='human', close=False):
         """Renders the environment."""
-        if self.t % self.cfg.anim.plot_steps == 0:
+        if self.t % self.cfg.anim.plot_steps == 0 and False:
             direc = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx), str(self.t) + '.png')
             self.renderer.render(save=False, path=direc, manual_draw=True)
 
@@ -1267,27 +1347,27 @@ class ObjectPushing(gym.Env):
         else:
             self.renderer.render(save=False, manual_draw=True)
 
-            if self.cfg.render.log_obs and not self.low_dim_state:# and self.t % self.cfg.render.frequency == 1:
-                # print(self.observation[0].shape)
-                # print(self.spy.shape)
-                # self.observation[0] = self.spy
+            if self.cfg.render.show_obs and not self.low_dim_state and self.show_observation:# and self.t % self.cfg.render.frequency == 1:
+                self.show_observation = False
                 for ax, i in zip(self.state_ax, range(self.num_channels)):
                     ax.clear()
                     ax.set_title(f'Channel {i}')
-                    im = ax.imshow(self.observation[i,:,:], cmap='hot', interpolation='nearest')
+                    im = ax.imshow(self.observation[:,:,i], cmap='hot', interpolation='nearest')
                     if self.colorbars[i] is not None:
                         self.colorbars[i].update_normal(im)
                     else:
                         self.colorbars[i] = self.state_fig.colorbar(im, ax=ax)
                 
                 self.state_plot.draw()
-                self.state_plot.pause(0.001)
+                # self.state_plot.pause(0.001)
+                self.state_plot.pause(0.1)
 
 
     def close(self):
         """Optional: close any resources or cleanup if necessary."""
         plt.close('all')
-        self.renderer.close()
+        if self.cfg.render.show:
+            self.renderer.close()
 
 
 # Helper functions
