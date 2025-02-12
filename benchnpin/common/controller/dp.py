@@ -72,7 +72,6 @@ class TargetCourse:
         self.ch = ch
         self.Lfc = Lfc
         self.path_length = path_length(np.asarray([cx, cy]).T, cumsum=True)
-        print(self.path_length)
         self.setpoint_al = 0
 
     def init_setpoint(self, x, y):
