@@ -9,6 +9,8 @@ from pymunk import Vec2d
 from matplotlib import pyplot as plt
 
 # ship-ice related imports
+from benchnpin.common.controller.dp import DP
+from benchnpin.common.controller.position_controller import PositionController
 from benchnpin.common.cost_map import CostMap
 from benchnpin.common.evaluation.metrics import total_work_done, obs_to_goal_difference
 from benchnpin.common.geometry.polygon import poly_area
@@ -62,6 +64,13 @@ STOP = 4
 BACKWARD = 5
 SMALL_LEFT = 6
 SMALL_RIGHT = 7
+
+MOVE_STEP_SIZE = 0.05
+TURN_STEP_SIZE = np.radians(15)
+WAYPOINT_MOVING_THRESHOLD = 0.6
+WAYPOINT_TURNING_THRESHOLD = np.radians(10)
+STEP_LIMIT = 500
+MAP_UPDATE_STEPS = 250
 
 class AreaClearingEnv(gym.Env):
     """Custom Environment that follows gym interface"""
@@ -120,9 +129,12 @@ class AreaClearingEnv(gym.Env):
         max_yaw_rate_step = (np.pi/2) / 15        # rad/sec
         print("max yaw rate per step: ", max_yaw_rate_step)
         
-        self.action_space = spaces.Box(low= np.array([-1, -1]), 
-                                       high=np.array([1, 1]),
-                                       dtype=np.float32)
+        if self.cfg.agent.action_type == 'velocity':
+            self.action_space = spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float32)
+        elif self.cfg.agent.action_type == 'position':
+            self.action_space = spaces.Box(low=0, high=LOCAL_MAP_PIXEL_WIDTH * LOCAL_MAP_PIXEL_WIDTH, shape=(1,), dtype=np.int32)
+        elif self.cfg.agent.action_type == 'heading':
+            self.action_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
 
         self.max_yaw_rate_step = max_yaw_rate_step
 
@@ -171,6 +183,8 @@ class AreaClearingEnv(gym.Env):
         self.colorbars = [None] * self.num_channels
 
         self.boundary_goals, self.goal_points = self._compute_boundary_goals()
+
+        self.position_controller = None
 
     def _compute_boundary_goals(self, interpolated_points=10):
         if self.boundary_vertices is None:
@@ -350,6 +364,13 @@ class AreaClearingEnv(gym.Env):
             self.space.step(self.dt / self.steps)
         self.prev_obs = CostMap.get_obs_from_poly(self.box_shapes)
 
+        self.position_controller = PositionController(self.cfg, self.robot_radius, self.map_width, self.map_height, 
+                                                      self.configuration_space, self.configuration_space_thin, self.closest_cspace_indices,
+                                                      LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_WIDTH, LOCAL_MAP_PIXELS_PER_METER, 
+                                                      TURN_STEP_SIZE, MOVE_STEP_SIZE, WAYPOINT_MOVING_THRESHOLD, WAYPOINT_TURNING_THRESHOLD)
+        
+        self.dp = None
+
     def prevent_boundary_intersection(self, arbiter):
         collision = False
         normal = arbiter.contact_point_set.normal
@@ -505,6 +526,12 @@ class AreaClearingEnv(gym.Env):
         """Executes one time step in the environment and returns the result."""
         self.t += 1
 
+        # initial pose
+        robot_initial_position, robot_initial_heading = self.agent.body.position, restrict_heading_range(self.agent.body.angle)
+        robot_initial_position = list(robot_initial_position)  
+
+        self.dp = None
+
         if self.demo_mode:
 
             if action == FORWARD:
@@ -537,15 +564,40 @@ class AreaClearingEnv(gym.Env):
             self.agent.body.angular_velocity = self.angular_speed
             self.agent.body.velocity = Vec2d(global_velocity[0], global_velocity[1])
 
-        else:
-
+        elif self.cfg.agent.action_type == 'velocity':
             # apply velocity controller
             self.agent.body.angular_velocity = self.max_yaw_rate_step * action[1] / 2
 
             # apply linear and angular speeds
-            scaled_vel = self.target_speed if action[0] >= 0 else 0
+            scaled_vel = self.target_speed * action[0]
             global_velocity = R(self.agent.body.angle) @ [scaled_vel, 0]
             self.agent.body.velocity = Vec2d(global_velocity[0], global_velocity[1])
+
+        elif self.cfg.agent.action_type == 'position' or self.cfg.agent.action_type == 'heading':
+            if self.cfg.agent.action_type == 'heading':
+                ################################ Heading Control ################################
+                # convert heading action to a pixel index in order to use the position control code
+
+                # rescale heading action to be in range [0, 2*pi]
+                angle = (action + 1) * np.pi + np.pi / 2
+                step_size = self.cfg.agent.movement_step_size
+
+                # calculate target position
+                x_movement = step_size * np.cos(angle)
+                y_movement = step_size * np.sin(angle)
+
+                # convert target position to pixel coordinates
+                x_pixel = int(LOCAL_MAP_PIXEL_WIDTH / 2 + x_movement * LOCAL_MAP_PIXELS_PER_METER)
+                y_pixel = int(LOCAL_MAP_PIXEL_WIDTH / 2 - y_movement * LOCAL_MAP_PIXELS_PER_METER)
+
+                # convert pixel coordinates to a single index
+                action = y_pixel * LOCAL_MAP_PIXEL_WIDTH + x_pixel
+
+            self.path, robot_move_sign = self.position_controller.get_waypoints_to_spatial_action(robot_initial_position, robot_initial_heading, action)
+            if self.cfg.render.show:
+                self.renderer.update_path(self.path)
+
+            self.execute_robot_path(robot_initial_position, robot_initial_heading, robot_move_sign)
 
         # move simulation forward
         for _ in range(self.steps):
@@ -621,7 +673,129 @@ class AreaClearingEnv(gym.Env):
         self.robot_hit_obstacle = False
         
         return observation, reward, terminated, truncated, info
+    
+    def controller(self, curr_position, curr_heading):
+        x = curr_position[0]
+        y = curr_position[1]
+        h = curr_heading
 
+        if self.dp == None:
+            cx = self.path.T[0][0:2]
+            cy = self.path.T[1][0:2]
+            ch = self.path.T[2][0:2]
+            self.dp = DP(x=x, y=y, yaw=h, cx=cx, cy=cy, ch=ch, **self.cfg.controller)
+        
+        # call ideal controller to get angular and linear speeds
+        omega, v = self.dp.ideal_control(x, y, h)
+
+        # update setpoint
+        x_s, y_s, h_s = self.dp.get_setpoint()
+        # self.dp.setpoint = np.asarray([x_s, y_s, np.unwrap([self.dp.state.yaw, h_s])[1]])
+        self.dp.setpoint = np.asarray([x_s, y_s, h_s])
+        return omega, v
+    
+    def execute_robot_path(self, robot_initial_position, robot_initial_heading, robot_move_sign):
+        ############################################################################################################
+        # Movement
+        robot_position = robot_initial_position.copy()
+        robot_heading = robot_initial_heading
+        robot_is_moving = True
+        robot_distance = 0
+        robot_waypoint_index = 1
+
+        robot_waypoint_positions = [(waypoint[0], waypoint[1]) for waypoint in self.path]
+        robot_waypoint_headings = [waypoint[2] for waypoint in self.path]
+
+        robot_prev_waypoint_position = robot_waypoint_positions[robot_waypoint_index - 1]
+        robot_waypoint_position = robot_waypoint_positions[robot_waypoint_index]
+        robot_waypoint_heading = robot_waypoint_headings[robot_waypoint_index]
+
+        sim_steps = 0
+        done_turning = False
+        prev_heading_diff = 0
+        while True:
+            if not robot_is_moving:
+                break
+
+            # store pose to determine distance moved during simulation step
+            robot_prev_position = robot_position.copy()
+            robot_prev_heading = robot_heading
+
+            # compute robot pose for new constraint
+            robot_new_position = robot_position.copy()
+            robot_new_heading = robot_heading
+            heading_diff = heading_difference(robot_heading, robot_waypoint_heading)
+            if np.abs(heading_diff) > TURN_STEP_SIZE and np.abs(heading_diff - prev_heading_diff) > 0.001:
+                # turn towards next waypoint first
+                robot_new_heading += np.sign(heading_diff) * TURN_STEP_SIZE
+            else:
+                done_turning = True
+                dx = robot_waypoint_position[0] - robot_position[0]
+                dy = robot_waypoint_position[1] - robot_position[1]
+                if distance(robot_position, robot_waypoint_position) < MOVE_STEP_SIZE:
+                    robot_new_position = robot_waypoint_position
+                else:
+                    if robot_waypoint_index == len(robot_waypoint_position) - 1:
+                        move_sign = robot_move_sign
+                    else:
+                        move_sign = 1
+                    robot_new_heading = np.arctan2(move_sign * dy, move_sign * dx)
+                    robot_new_position[0] += move_sign * MOVE_STEP_SIZE * np.cos(robot_new_heading)
+                    robot_new_position[1] += move_sign * MOVE_STEP_SIZE * np.sin(robot_new_heading)
+            # change robot pose
+            omega, v = self.controller(robot_prev_position, robot_prev_heading)
+            if not done_turning:
+                self.apply_controller(omega, v*0)
+            else:
+                self.apply_controller(omega, v)
+            self.space.step(self.dt / self.steps)
+
+            # get new robot pose
+            robot_position, robot_heading = self.agent.body.position, restrict_heading_range(self.agent.body.angle)
+            robot_position = list(robot_position)
+            prev_heading_diff = heading_diff
+
+            # stop moving if robot collided with obstacle
+            if distance(robot_prev_waypoint_position, robot_position) > MOVE_STEP_SIZE:
+                if self.robot_hit_obstacle:
+                    # self.robot_hit_obstacle = False
+                    robot_is_moving = False
+                    break  # Note: self.robot_distance does not get not updated
+            
+            # stop if robot reached waypoint
+            if (distance(robot_position, robot_waypoint_positions[robot_waypoint_index]) < WAYPOINT_MOVING_THRESHOLD
+                and np.abs(robot_heading - robot_waypoint_headings[robot_waypoint_index]) < WAYPOINT_TURNING_THRESHOLD):
+                
+                # update distance moved
+                robot_distance += distance(robot_prev_waypoint_position, robot_position)
+
+                # increment waypoint index or stop moving if done
+                if robot_waypoint_index == len(robot_waypoint_positions) - 1:
+                    robot_is_moving = False
+                else:
+                    robot_waypoint_index += 1
+                    robot_prev_waypoint_position = robot_waypoint_positions[robot_waypoint_index - 1]
+                    robot_waypoint_position = robot_waypoint_positions[robot_waypoint_index]
+                    robot_waypoint_heading = robot_waypoint_headings[robot_waypoint_index]
+                    done_turning = False
+                    self.dp = None
+                    self.path = self.path[1:]
+
+            sim_steps += 1
+            if sim_steps % 5 == 0 and self.cfg.render.show:
+                # self.observation = self.generate_observation()
+                self.render()
+
+            # break if robot is stuck
+            if sim_steps > STEP_LIMIT:
+                break
+
+            if sim_steps % MAP_UPDATE_STEPS == 0:
+                self.update_global_overhead_map()
+
+    def apply_controller(self, omega, v):
+        self.agent.body.angular_velocity = omega / 2
+        self.agent.body.velocity = (v).tolist()
 
     def generate_observation_low_dim(self, updated_obstacles):
         """
@@ -857,3 +1031,14 @@ class AreaClearingEnv(gym.Env):
     def close(self):
         """Optional: close any resources or cleanup if necessary."""
         pass
+
+# Helper functions
+
+def restrict_heading_range(heading):
+    return np.mod(heading + np.pi, 2 * np.pi) - np.pi
+
+def distance(position1, position2):
+    return np.linalg.norm(np.asarray(position1)[:2] - np.asarray(position2)[:2])
+
+def heading_difference(heading1, heading2):
+    return restrict_heading_range(heading1 - heading2)

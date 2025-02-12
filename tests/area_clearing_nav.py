@@ -36,7 +36,10 @@ for eps_idx in range(total_episodes):
         action = policy.act(observation=(observation).astype(np.float64), agent_pos=info['state'], obstacles=obstacles)
         env.update_path(policy.path)
 
-        scaled_action = [action[0] / env.target_speed, action[1] / env.max_yaw_rate_step]
+        if env.cfg.agent.action_type == 'velocity':
+            scaled_action = [action[0] / env.target_speed, action[1] / env.max_yaw_rate_step]
+        else:
+            print('Invalid action type. Must use velocity control')
 
         observation, reward, terminated, truncated, info = env.step(scaled_action)
 
