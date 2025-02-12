@@ -149,7 +149,7 @@ class OccupancyGrid:
         return occ_map
 
 
-    def eagle_view_obstacle_map(self, raw_ice_binary, ship_state, vertical_shift):
+    def ego_view_obstacle_map(self, raw_ice_binary, ship_state, vertical_shift):
 
         global_obstacle_map = self.compute_con_gridmap(raw_ice_binary=raw_ice_binary)
 
@@ -179,10 +179,10 @@ class OccupancyGrid:
         self.local_obstacle_map = local_obstacle_map  
         return local_obstacle_map
 
-    def eagle_view_map_maze(self, agent_state, agent_vertices, obstacles, maze_walls , global_dist_map):
+    def ego_view_map_maze(self, agent_state, agent_vertices, obstacles, maze_walls , global_dist_map):
         #get local window of movable agent
         #the center of the local window is the agent's position
-        #This method is different from eagle_view_obstacle_map() because it calls compute_occ_img() instead of compute_con_gridmap()
+        #This method is different from ego_view_obstacle_map() because it calls compute_occ_img() instead of compute_con_gridmap()
         global_obstacle_map = self.compute_occ_img(obstacles , ice_binary_w=int(self.map_width * self.meter_to_pixel_scale), 
                         ice_binary_h=int(self.map_height * self.meter_to_pixel_scale))
         
@@ -359,9 +359,9 @@ class OccupancyGrid:
         return global_footprint
 
 
-    def eagle_view_footprint(self, ship_state, ship_vertices, vertical_shift=2): 
+    def ego_view_footprint(self, ship_state, ship_vertices, vertical_shift=2): 
         """
-        This function computes a eagle-centric footprint crop, based on the global footprint from _compute_global_footprint()
+        This function computes a ego-centric footprint crop, based on the global footprint from _compute_global_footprint()
         Values correspondences: free space 0.5, robot 1.0, out-of-bound 0.0
         """
         meter_to_grid_scale_x = self.occ_map_width / self.map_width
@@ -472,9 +472,9 @@ class OccupancyGrid:
 
             
     
-    def eagle_view_goal_dist_transform(self, goal_y, ship_state, vertical_shift=2):
+    def ego_view_goal_dist_transform(self, goal_y, ship_state, vertical_shift=2):
         """
-        Compute an eagle-centric local crop of a global goal-line distance transform from global_goal_dist_transform()
+        Compute an ego-centric local crop of a global goal-line distance transform from global_goal_dist_transform()
         """
         meter_to_grid_scale_x = self.occ_map_width / self.map_width
         meter_to_grid_scale_y = self.occ_map_height / self.map_height
@@ -530,14 +530,16 @@ class OccupancyGrid:
         tail_pix = np.array([tail_pos[0] * meter_to_grid_scale_x, tail_pos[1] * meter_to_grid_scale_y]).astype(np.uint16)       # (x, y)
 
         cv2.line(global_orientation, head_pix, tail_pix, color=0.5, thickness=1)
+
+        head_pix = np.clip(head_pix, a_min=[0, 0], a_max=[global_orientation.shape[1] - 1, global_orientation.shape[0] - 1])
         global_orientation[head_pix[1], head_pix[0]] = 1.0              # mark the head
 
         return global_orientation
 
 
-    def eagle_view_orientation_map(self, ship_state, head, tail, vertical_shift):
+    def ego_view_orientation_map(self, ship_state, head, tail, vertical_shift):
         """
-        Compute an eagle-centric local crop of the global orientation map, computed from global_orientation_map()
+        Compute an ego-centric local crop of the global orientation map, computed from global_orientation_map()
         """
         meter_to_grid_scale_x = self.occ_map_width / self.map_width
         meter_to_grid_scale_y = self.occ_map_height / self.map_height

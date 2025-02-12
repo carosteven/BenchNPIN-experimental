@@ -363,9 +363,7 @@ class ShipIceEnv(gym.Env):
         if self.low_dim_state:
             observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles)
         else:
-            start_time = time.time()
             observation = self.generate_observation()
-            print("time to generate observation ship: ", time.time() - start_time)
         return observation, reward, terminated, False, info
 
 
@@ -411,13 +409,13 @@ class ShipIceEnv(gym.Env):
                         ice_binary_w=int(self.occupancy.map_width * self.cfg.occ.m_to_pix_scale), 
                         ice_binary_h=int(self.occupancy.map_height * self.cfg.occ.m_to_pix_scale), 
                         local_range=[12, 12], ship_state=ship_pose)
-        occupancy = self.occupancy.eagle_view_obstacle_map(raw_ice_binary=raw_ice_binary, ship_state=ship_pose, vertical_shift=self.local_window_v_shift)
+        occupancy = self.occupancy.ego_view_obstacle_map(raw_ice_binary=raw_ice_binary, ship_state=ship_pose, vertical_shift=self.local_window_v_shift)
         
-        local_footprint = self.occupancy.eagle_view_footprint(ship_state=ship_pose, ship_vertices=self.cfg.ship.vertices, vertical_shift=self.local_window_v_shift)
+        local_footprint = self.occupancy.ego_view_footprint(ship_state=ship_pose, ship_vertices=self.cfg.ship.vertices, vertical_shift=self.local_window_v_shift)
 
-        local_edt = self.occupancy.eagle_view_goal_dist_transform(goal_y=self.goal[1], ship_state=ship_pose, vertical_shift=self.local_window_v_shift)
+        local_edt = self.occupancy.ego_view_goal_dist_transform(goal_y=self.goal[1], ship_state=ship_pose, vertical_shift=self.local_window_v_shift)
         
-        local_orientation_map = self.occupancy.eagle_view_orientation_map(ship_state=ship_pose, head=self.cfg.ship.head, tail=self.cfg.ship.tail, vertical_shift=self.local_window_v_shift)
+        local_orientation_map = self.occupancy.ego_view_orientation_map(ship_state=ship_pose, head=self.cfg.ship.head, tail=self.cfg.ship.tail, vertical_shift=self.local_window_v_shift)
         
         observation = np.concatenate((np.array([local_footprint]), np.array([local_edt]), np.array([local_orientation_map]), np.array([occupancy])))          # (2, H, W)
         observation = (observation*255).astype(np.uint8)                                      # NOTE SB3 image format
