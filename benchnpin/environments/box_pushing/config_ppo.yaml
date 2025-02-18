@@ -1,5 +1,5 @@
 #############################################################################
-# config for loading box-pushing simulation : config for velocity control   #
+#  config for loading box-pushing simulation : config for heading control   #
 #############################################################################
 ### GLOBAL PARAMS
 output_dir: "logs/" # 'output/trial0'
@@ -57,6 +57,8 @@ prim:
   step_size: 0.1   # step size for sampling points on the path
   turning_radius: 2.0  # turning radius of the ship in lattice units
 agent:
+  action_type: 'heading' # options are velocity, heading, position
+  step_size: 1.5 # distance travelled per step in heading control
   mass: 1  # mass of the NRC ship in kg
   padding: 0.25  # adds padding to ship footprint
   length: 0.8
@@ -124,40 +126,42 @@ env:
   room_width: 5 # 5 for small, 10 for large
   receptacle_width: 1.5
   shortest_path_channel_scale: 0.25
-  action_type: 'heading' # options are velocity, heading, position
-  step_size: 2 # distance travelled per step in heading control
+  action_type: heading # options are velocity, heading, position
+  step_size: 1.5 # distance travelled per step in heading control
   local_map_pixel_width: 224
   invert_receptacle_map: true
 
 misc:
   ministep_size: 2.5
-  inactivity_cutoff: 100
+  inactivity_cutoff: 200
   # random_seed: 42
   # use_gui: true
   # show_obs: false
 
 rewards:
   partial_rewards_scale: 0.2
-  goal_reward: 1.0
+  goal_reward: 2.0
   collision_penalty: 0.25
   non_movement_penalty: 0.25
 
 train:
-  batch_size: 32
+  job_type: ppo
+  job_name: s15
+  batch_size: 64
   checkpoint_freq: 1000
   exploration_timesteps: 6000
   final_exploration: 0.01
   gamma: 0.99
   grad_norm_clipping: 10
-  job_id_to_resume: null
+  job_id_to_resume: s15_14931184_70000_steps
   learning_rate: 0.01
   learning_starts: 1000
   n_epochs: 10
-  n_steps: 256
+  n_steps: 128
   replay_buffer_size: 10000
-  resume_training: false
+  resume_training: true
   target_update_freq: 1000
   total_timesteps: 60000
-  use_double_dqn: True
+  use_double_dqn: true
   verbose: 2 # 0: no output, 1: progress bar, 2: one line per episode (possibly)
   weight_decay: 0.0001

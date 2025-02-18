@@ -12,7 +12,7 @@ demo_mode: false     # when using demo mode, control both forward and angular sp
 
 # cubes information
 randomize_cubes: true
-num_cubes: 10
+num_cubes: 20
 cube_size: 0.44
 min_cube_dist: 0.62       # minimum cube distance during random initialization
 max_cube_x: 4
@@ -57,6 +57,8 @@ prim:
   step_size: 0.1   # step size for sampling points on the path
   turning_radius: 2.0  # turning radius of the ship in lattice units
 agent:
+  action_type: 'position' # options are velocity, heading, position
+  step_size: 2 # distance travelled per step in heading control
   mass: 1  # mass of the NRC ship in kg
   padding: 0.25  # adds padding to ship footprint
   length: 0.8
@@ -119,9 +121,9 @@ controller:
 
 ### ENVIRONMENT PARAMS
 env:
-  obstacle_config: small_empty # options are small_empty, small_columns, large_columns, large_divider
+  obstacle_config: large_columns # options are small_empty, small_columns, large_columns, large_divider
   room_length: 10
-  room_width: 5 # 5 for small, 10 for large
+  room_width: 10 # 5 for small, 10 for large
   receptacle_width: 1.5
   shortest_path_channel_scale: 0.25
   action_type: 'position' # options are velocity, heading, position
@@ -143,8 +145,10 @@ rewards:
   non_movement_penalty: 0.25
 
 train:
+  job_type: 'sam'
+  job_name: 'lc'
   batch_size: 32
-  checkpoint_freq: 1000
+  checkpoint_freq: 6000
   exploration_timesteps: 6000
   final_exploration: 0.01
   gamma: 0.99
