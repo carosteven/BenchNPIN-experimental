@@ -146,12 +146,12 @@ class ObjectPushing(gym.Env):
         self.scatter = False
 
         # Define action space
-        if self.cfg.env.action_type == 'velocity':
-            self.action_space = spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float64)
-        elif self.cfg.env.action_type == 'heading':
-            self.action_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float64)
-        elif self.cfg.env.action_type == 'position':
-            self.action_space = spaces.Box(low=0, high=LOCAL_MAP_PIXEL_WIDTH * LOCAL_MAP_PIXEL_WIDTH, dtype=np.float64)
+        if self.cfg.agent.action_type == 'velocity':
+            self.action_space = spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float32)
+        elif self.cfg.agent.action_type == 'heading':
+            self.action_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
+        elif self.cfg.agent.action_type == 'position':
+            self.action_space = spaces.Box(low=0, high=LOCAL_MAP_PIXEL_WIDTH * LOCAL_MAP_PIXEL_WIDTH, dtype=np.float32)
 
         # Define observation space
         self.show_observation = False
@@ -159,9 +159,9 @@ class ObjectPushing(gym.Env):
         if self.low_dim_state:
             self.fixed_trial_idx = self.cfg.fixed_trial_idx
             if self.cfg.randomize_cubes:
-                self.observation_space = spaces.Box(low=-10, high=30, shape=(self.cfg.num_cubes * 2,), dtype=np.float64)
+                self.observation_space = spaces.Box(low=-10, high=30, shape=(self.cfg.num_cubes * 2,), dtype=np.float32)
             else:
-                self.observation_space = spaces.Box(low=-10, high=30, shape=(6,), dtype=np.float64)
+                self.observation_space = spaces.Box(low=-10, high=30, shape=(6,), dtype=np.float32)
 
         else:
             self.observation_shape = (LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH, self.num_channels)
@@ -711,7 +711,7 @@ class ObjectPushing(gym.Env):
             # update distance moved
             robot_distance = distance(robot_initial_position, robot_position)
         
-        elif self.cfg.env.action_type == 'velocity':
+        elif self.cfg.agent.action_type == 'velocity':
             ################################ Velocity Control ################################
             linear_speed = action[0]
             angular_speed = action[1]
@@ -744,14 +744,14 @@ class ObjectPushing(gym.Env):
             # update distance moved
             robot_distance = distance(robot_initial_position, robot_position)
 
-        elif self.cfg.env.action_type == 'position' or self.cfg.env.action_type == 'heading':
-            if self.cfg.env.action_type == 'heading':
+        elif self.cfg.agent.action_type == 'position' or self.cfg.agent.action_type == 'heading':
+            if self.cfg.agent.action_type == 'heading':
                 ################################ Heading Control ################################
                 # convert heading action to a pixel index in order to use the position control code
 
                 # rescale heading action to be in range [0, 2*pi]
                 angle = (action + 1) * np.pi + np.pi / 2
-                step_size = self.cfg.env.step_size
+                step_size = self.cfg.agent.step_size
 
                 # calculate target position
                 x_movement = step_size * np.cos(angle)
@@ -926,7 +926,7 @@ class ObjectPushing(gym.Env):
                     break
 
                 if sim_steps % MAP_UPDATE_STEPS == 0:
-                    self.update_global_overhead_map()
+                    self.update_global_overhead_map() # NOTE probably don't need
 
         # step the simulation until everything is still
         self.step_simulation_until_still()
@@ -1115,7 +1115,7 @@ class ObjectPushing(gym.Env):
     def generate_observation(self, done=False):
         self.update_global_overhead_map()
 
-        if done and self.cfg.env.action_type == 'position':
+        if done and self.cfg.agent.action_type == 'position':
             return None
         
         # Overhead map
