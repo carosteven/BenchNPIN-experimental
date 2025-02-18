@@ -610,14 +610,7 @@ class ObjectPushing(gym.Env):
         return cubes_dict
 
     def cube_position_in_receptacle(self, cube_vertices):
-        # (x, y), size = self.get_receptacle_position_and_size()
-        # receptacle_min_x = x - size / 2
-        # receptacle_max_x = x + size / 2
-        # receptacle_min_y = y - size / 2
-        # receptacle_max_y = y + size / 2
-    
         for vertex in cube_vertices:
-            # if not (receptacle_min_x <= vertex[0] <= receptacle_max_x and receptacle_min_y <= vertex[1] <= receptacle_max_y):
             query_info = self.space.point_query(vertex, 0, pymunk.ShapeFilter())
             if not any(query.shape.label == 'receptacle' for query in query_info):
                 return False
