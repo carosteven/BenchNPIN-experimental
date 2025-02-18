@@ -73,7 +73,7 @@ agent:
 ### SIMULATION PARAMS
 render:
   log_obs: false        # whether to log occupancy observation
-  show: false            # if true show animation plots
+  show: true            # if true show animation plots
   show_obs: false       # if true show occupancy observation
   frequency: 20         # frequency of rendering
 sim:
@@ -126,8 +126,6 @@ env:
   room_width: 5 # 5 for small, 10 for large
   receptacle_width: 1.5
   shortest_path_channel_scale: 0.25
-  action_type: heading # options are velocity, heading, position
-  step_size: 1.5 # distance travelled per step in heading control
   local_map_pixel_width: 224
   invert_receptacle_map: true
 

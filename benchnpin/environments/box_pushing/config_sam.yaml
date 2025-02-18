@@ -73,7 +73,7 @@ agent:
 ### SIMULATION PARAMS
 render:
   log_obs: false        # whether to log occupancy observation
-  show: false            # if true show animation plots
+  show: true            # if true show animation plots
   show_obs: false       # if true show occupancy observation
   frequency: 20         # frequency of rendering
 sim:
@@ -126,14 +126,12 @@ env:
   room_width: 10 # 5 for small, 10 for large
   receptacle_width: 1.5
   shortest_path_channel_scale: 0.25
-  action_type: 'position' # options are velocity, heading, position
-  step_size: 2 # distance travelled per step in heading control
   local_map_pixel_width: 96
   invert_receptacle_map: false
 
 misc:
   ministep_size: 2.5
-  inactivity_cutoff: 100
+  inactivity_cutoff: 25
   # random_seed: 42
   # use_gui: true
   # show_obs: false
@@ -155,7 +153,7 @@ train:
   grad_norm_clipping: 10
   job_id_to_resume: null
   learning_rate: 0.01
-  learning_starts: 1000
+  learning_starts: 10
   n_epochs: 10
   n_steps: 256
   replay_buffer_size: 10000

@@ -390,7 +390,10 @@ class BoxPushingSAM(BasePolicy):
 
 
     def evaluate(self, num_eps: int, model_eps: str ='latest'):
-        env = gym.make('object-pushing-v0')
+        if self.cfg is not None:
+            env = gym.make('object-pushing-v0', cfg_file=self.cfg)
+        else:
+            env = gym.make('object-pushing-v0')
         env = env.unwrapped
 
         checkpoint_dir = os.path.join(os.path.dirname(__file__), f'checkpoint/')
