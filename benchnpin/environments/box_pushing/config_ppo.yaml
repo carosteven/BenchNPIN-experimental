@@ -57,6 +57,8 @@ prim:
   step_size: 0.1   # step size for sampling points on the path
   turning_radius: 2.0  # turning radius of the ship in lattice units
 agent:
+  action_type: 'heading' # options are velocity, heading, position
+  step_size: 2 # distance travelled per step in heading control
   mass: 1  # mass of the NRC ship in kg
   padding: 0.25  # adds padding to ship footprint
   length: 0.8
@@ -71,7 +73,7 @@ agent:
 ### SIMULATION PARAMS
 render:
   log_obs: false        # whether to log occupancy observation
-  show: false            # if true show animation plots
+  show: true            # if true show animation plots
   show_obs: false       # if true show occupancy observation
   frequency: 20         # frequency of rendering
 sim:
@@ -124,8 +126,6 @@ env:
   room_width: 5 # 5 for small, 10 for large
   receptacle_width: 1.5
   shortest_path_channel_scale: 0.25
-  action_type: 'heading' # options are velocity, heading, position
-  step_size: 2 # distance travelled per step in heading control
   local_map_pixel_width: 224
   invert_receptacle_map: true
 
@@ -158,6 +158,6 @@ train:
   resume_training: false
   target_update_freq: 1000
   total_timesteps: 60000
-  use_double_dqn: True
+  use_double_dqn: true
   verbose: 2 # 0: no output, 1: progress bar, 2: one line per episode (possibly)
   weight_decay: 0.0001

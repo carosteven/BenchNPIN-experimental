@@ -57,6 +57,8 @@ prim:
   step_size: 0.1   # step size for sampling points on the path
   turning_radius: 2.0  # turning radius of the ship in lattice units
 agent:
+  action_type: 'position' # options are velocity, heading, position
+  step_size: 2 # distance travelled per step in heading control
   mass: 1  # mass of the NRC ship in kg
   padding: 0.25  # adds padding to ship footprint
   length: 0.8
@@ -71,7 +73,7 @@ agent:
 ### SIMULATION PARAMS
 render:
   log_obs: false        # whether to log occupancy observation
-  show: false            # if true show animation plots
+  show: true            # if true show animation plots
   show_obs: false       # if true show occupancy observation
   frequency: 20         # frequency of rendering
 sim:
@@ -119,19 +121,17 @@ controller:
 
 ### ENVIRONMENT PARAMS
 env:
-  obstacle_config: small_empty # options are small_empty, small_columns, large_columns, large_divider
+  obstacle_config: large_divider # options are small_empty, small_columns, large_columns, large_divider
   room_length: 10
-  room_width: 5 # 5 for small, 10 for large
+  room_width: 10 # 5 for small, 10 for large
   receptacle_width: 1.5
   shortest_path_channel_scale: 0.25
-  action_type: 'position' # options are velocity, heading, position
-  step_size: 2 # distance travelled per step in heading control
   local_map_pixel_width: 96
   invert_receptacle_map: false
 
 misc:
   ministep_size: 2.5
-  inactivity_cutoff: 100
+  inactivity_cutoff: 25
   # random_seed: 42
   # use_gui: true
   # show_obs: false
@@ -143,7 +143,7 @@ rewards:
   non_movement_penalty: 0.25
 
 train:
-  batch_size: 32
+  batch_size: 2
   checkpoint_freq: 1000
   exploration_timesteps: 6000
   final_exploration: 0.01
@@ -151,7 +151,7 @@ train:
   grad_norm_clipping: 10
   job_id_to_resume: null
   learning_rate: 0.01
-  learning_starts: 1000
+  learning_starts: 10
   n_epochs: 10
   n_steps: 256
   replay_buffer_size: 10000

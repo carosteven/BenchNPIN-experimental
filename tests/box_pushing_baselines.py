@@ -17,9 +17,10 @@ def main(args):
     # print("sam Eval: ", evaluations)
 
     # ================================ PPO Policy =================================
-    ppo_policy = BoxPushingPPO(model_name=f'ppo_model_{args.job_id}', cfg=args.config_file)
-    ppo_policy.train()
-    # evaluations = ppo_policy.evaluate(num_eps=5)
+    # ppo_policy = BoxPushingPPO(model_name=f'ppo_model_{args.job_id}', cfg=args.config_file)
+    # ppo_policy.train()
+    ppo_policy = BoxPushingPPO(model_name=f'GR2_14875179_80000_steps_80000_steps', cfg=args.config_file)
+    evaluations = ppo_policy.evaluate(num_eps=5)
     # print("ppo Eval: ", evaluations)
 
 if __name__ == '__main__':
