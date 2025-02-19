@@ -297,13 +297,14 @@ class ObjectPushing(gym.Env):
 
         # generate random start point, if specified
         if self.cfg.random_start:
-            length = self.robot_info.length
-            width = self.robot_info.width
-            size = max(length, width)
-            x_start = random.uniform(-self.cfg.env.room_length / 2 + size, self.cfg.env.room_length / 2 - size)
-            y_start = random.uniform(-self.cfg.env.room_width / 2 + size, self.cfg.env.room_width / 2 - size)
-            heading = random.uniform(0, 2 * np.pi)
-            self.start = (x_start, y_start, heading)
+            self.start = self.get_random_robot_start()
+            # length = self.robot_info.length
+            # width = self.robot_info.width
+            # size = max(length, width)
+            # x_start = random.uniform(-self.cfg.env.room_length / 2 + size, self.cfg.env.room_length / 2 - size)
+            # y_start = random.uniform(-self.cfg.env.room_width / 2 + size, self.cfg.env.room_width / 2 - size)
+            # heading = random.uniform(0, 2 * np.pi)
+            # self.start = (x_start, y_start, heading)
         else:
             self.start = (5, 1.5, np.pi*3/2)
         self.robot_info['start_pos'] = self.start
@@ -360,7 +361,16 @@ class ObjectPushing(gym.Env):
         arbiter.shapes[0].body.velocity = new_velocity
 
         return collision
-
+    
+    def get_random_robot_start(self):
+        length = self.robot_info.length
+        width = self.robot_info.width
+        size = max(length, width)
+        x_start = random.uniform(-self.cfg.env.room_length / 2 + size, self.cfg.env.room_length / 2 - size)
+        y_start = random.uniform(-self.cfg.env.room_width / 2 + size, self.cfg.env.room_width / 2 - size)
+        heading = random.uniform(0, 2 * np.pi)
+        return (x_start, y_start, heading)
+    
     def get_receptacle_position_and_size(self):
         size = self.cfg.env.receptacle_width
         return [(self.cfg.env.room_length / 2 - size / 2, self.cfg.env.room_width / 2 - size / 2), size]
@@ -463,25 +473,28 @@ class ObjectPushing(gym.Env):
             buffer_width = 3.5
 
             new_divider = []
-            for _ in range(100): # try 100 times to generate a divider that doesn't overlap with existing obstacles
+            # while len(new_divider) == 0:
+            for _ in range(100): # try 100x100 times to generate a divider that doesn't overlap with existing obstacles
+                for _ in range(100):
+                    overlapped = False
+                    x = self.cfg.env.room_length / 2 - divider_length / 2
+                    y = random.uniform(-self.cfg.env.room_width / 2 + buffer_width + divider_width / 2,
+                                        self.cfg.env.room_width / 2 - buffer_width - divider_width / 2)
+                    
+                    # check if divider overlaps with robot
+                    rob_x, rob_y, _ = self.robot_info['start_pos']
+                    if ((x - rob_x)**2 + (y - rob_y)**2)**(0.5) <= 3 * self.robot_radius:
+                        overlapped = True
+                        # break
+                    
+                    if not overlapped:
+                        new_divider.append([x, y])
+                        break
                 if len(new_divider) == 1:
-                    break
+                        break
+                else:
+                    self.robot_info['start_pos'] = self.get_random_robot_start()
 
-                overlapped = False
-                x = self.cfg.env.room_length / 2 - divider_length / 2
-                y = random.uniform(-self.cfg.env.room_width / 2 + buffer_width + divider_width / 2,
-                                    self.cfg.env.room_width / 2 - buffer_width - divider_width / 2)
-                
-                # check if divider overlaps with robot
-                rob_x, rob_y, _ = self.robot_info['start_pos']
-                if ((x - rob_x)**2 + (y - rob_y)**2)**(0.5) <= 3 * self.robot_radius:
-                    overlapped = True
-                    break
-                
-                if not overlapped:
-                    new_divider.append([x, y])
-                    break
-            
             divider_dicts = []
             for x, y in new_divider:
                 divider_dicts.append({'type': 'divider',
