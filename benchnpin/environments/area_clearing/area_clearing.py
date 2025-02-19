@@ -51,6 +51,7 @@ DISTANCE_SCALE_MAX = 0.5
 
 OBSTACLE_SEG_INDEX = 0
 FLOOR_SEG_INDEX = 1
+COMPLETED_CUBE_SEG_INDEX = 2
 RECEPTACLE_SEG_INDEX = 3
 CUBE_SEG_INDEX = 4
 ROBOT_SEG_INDEX = 5
@@ -353,6 +354,8 @@ class AreaClearingEnv(gym.Env):
         self.box_shapes = generate_sim_obs(self.space, self.dynamic_obs, self.cfg.sim.obstacle_density)
         for p in self.box_shapes:
             p.collision_type = 2
+        
+        self.box_clearance_statuses = [False for i in range(len(self.box_shapes))]
 
         self.agent = generate_sim_agent(self.space, self.agent_info, body_type=pymunk.Body.KINEMATIC)
         self.agent.collision_type = 1
@@ -609,7 +612,7 @@ class AreaClearingEnv(gym.Env):
         
         # get updated obstacles
         updated_obstacles = CostMap.get_obs_from_poly(self.box_shapes)
-        num_completed, all_boxes_completed = self.boxes_completed(updated_obstacles, self.boundary_polygon)
+        num_completed, all_boxes_completed = self.boxes_completed(updated_obstacles, self.boundary_polygon, self.box_clearance_statuses)
         
         diff_reward = obs_to_goal_difference(self.prev_obs, updated_obstacles, self.goal_points, self.boundary_polygon) * BOX_PUSHING_REWARD_MULTIPLIER
         pushing_reward = diff_reward * BOX_PUSHING_REWARD_MULTIPLIER
@@ -863,7 +866,8 @@ class AreaClearingEnv(gym.Env):
         small_overhead_map[small_overhead_map == 1] = FLOOR_SEG_INDEX/MAX_SEG_INDEX
         self.global_overhead_map[self.global_overhead_map == 1] = FLOOR_SEG_INDEX/MAX_SEG_INDEX
 
-        for poly in self.box_shapes:
+        for i in range(len(self.box_shapes)):
+            poly = self.box_shapes[i]
             vertices = [poly.body.local_to_world(v) for v in poly.get_vertices()]
             vertices_np = np.array([[v.x, v.y] for v in vertices])
 
@@ -874,7 +878,10 @@ class AreaClearingEnv(gym.Env):
             vertices_px[:, 1] = small_overhead_map.shape[0] - vertices_px[:, 1]
 
             # draw the boundary on the small_overhead_map
-            fillPoly(small_overhead_map, [vertices_px], color=CUBE_SEG_INDEX/MAX_SEG_INDEX)
+            if(self.box_clearance_statuses[i]):
+                fillPoly(small_overhead_map, [vertices_px], color=COMPLETED_CUBE_SEG_INDEX/MAX_SEG_INDEX)
+            else:
+                fillPoly(small_overhead_map, [vertices_px], color=CUBE_SEG_INDEX/MAX_SEG_INDEX)
         
         vertices = [self.agent.body.local_to_world(v) for v in self.agent.get_vertices()]
         robot_vertices = np.array([[v.x, v.y] for v in vertices])
@@ -982,17 +989,20 @@ class AreaClearingEnv(gym.Env):
         self.closest_cspace_indices = distance_transform_edt(1 - self.configuration_space, return_distances=False, return_indices=True)
         self.small_obstacle_map = 1 - small_obstacle_map
     
-    def boxes_completed(self, updated_obstacles, boundary_polygon):
+    def boxes_completed(self, updated_obstacles, boundary_polygon, box_clearance_statuses):
         """
         Returns a tuple: (int: number of boxes completed, bool: whether pushing task is complete)
         """
         completed_count = 0
         completed = False
 
-        for obs in updated_obstacles:
+        for i in range(len(updated_obstacles)):
+            obs = updated_obstacles[i]
+
             # if center[1] - self.cfg.obstacle_size >= self.cfg.goal_y:
             if not(boundary_polygon.intersects(Polygon(obs))):
                 completed_count += 1
+            box_clearance_statuses[i] = not(boundary_polygon.intersects(Polygon(obs)))
         
         if completed_count == self.num_box:
             completed = True
