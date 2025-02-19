@@ -7,11 +7,15 @@ from benchnpin.baselines.area_clearing.ppo.policy import AreaClearingPPO
 from benchnpin.baselines.area_clearing.sac.policy import AreaClearingSAC
 from benchnpin.baselines.area_clearing.td3.policy import AreaClearingTD3
 
+import os
+
 # ========================= PPO Policy =====================================
 ppo_policy = AreaClearingPPO()
-ppo_policy.train(total_timesteps=int(5e5), checkpoint_freq=10000)
-evaluations = ppo_policy.evaluate(num_eps=5)
-# evaluations = ppo_policy.evaluate(num_eps=5, model_eps='480000')
+# ppo_policy.train(total_timesteps=int(5e5), checkpoint_freq=10000, from_model_eps='150000')
+# evaluations = ppo_policy.evaluate(num_eps=5)
+
+# ppo_policy = AreaClearingPPO(model_path='/Storage2/m5ramesh/git/BenchNPIN/benchnpin/baselines/area_clearing/ppo/final_models/clear_env/V1')
+evaluations = ppo_policy.evaluate(num_eps=5, model_eps='260000') # For small - 280000 Intuitively performing model!
 print("PPO Eval: ", evaluations)
 
 

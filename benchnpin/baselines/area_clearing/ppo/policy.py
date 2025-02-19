@@ -25,22 +25,27 @@ class AreaClearingPPO(BasePolicy):
     def train(self, policy_kwargs=dict(features_extractor_class=ResNet18,
                                         features_extractor_kwargs=dict(features_dim=512),
                                         net_arch=dict(pi=[512, 256], vf=[512, 256])),
-            n_steps=256,
+            n_steps=448,
             batch_size=64,
             n_epochs=10,
             learning_rate=5e-4,
             gamma=0.97,
             verbose=2,
             total_timesteps=int(2e5), 
-            checkpoint_freq=10000) -> None:
+            checkpoint_freq=10000,
+            from_model_eps=None) -> None:
 
         env = gym.make('area-clearing-v0')
         env = env.unwrapped
 
         # Check the environment
         check_env(env)
-
-        self.model = PPO(
+        
+        if from_model_eps is not None:
+            model_checkpoint = self.model_name + '_' + from_model_eps + '_steps'
+            self.model = PPO.load(os.path.join(self.model_path, model_checkpoint), env=env)
+        else:
+            self.model = PPO(
             "CnnPolicy",
             env,
             policy_kwargs=policy_kwargs,
@@ -50,8 +55,7 @@ class AreaClearingPPO(BasePolicy):
             learning_rate=learning_rate,
             gamma=gamma,
             verbose=verbose,
-            tensorboard_log=self.model_path,
-        )
+            tensorboard_log=self.model_path)
 
         # Save a checkpoint every 1000 steps
         checkpoint_callback = CheckpointCallback(

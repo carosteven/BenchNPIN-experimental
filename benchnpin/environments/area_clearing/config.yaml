@@ -7,13 +7,13 @@ output_dir: "logs/" # 'output/trial0'
 plot:
   show: false       # true will show planner plots
 
-env: 'clear_env_small'
-# env: 'clear_env'
+# env: 'clear_env_small'
+env: 'clear_env'
 # env: 'walled_env'
 # env: 'walled_env_with_columns'
 
 # obstacles information
-num_obstacles: 1
+num_obstacles: 3
 obstacle_size: 0.5
 min_obs_dist: 3.5       # minimum obstacle distance during random initialization
 
@@ -58,7 +58,7 @@ agent:
 
 ### SIMULATION PARAMS
 render:
-  log_obs: true       # whether to log occupancy observation
+  log_obs: false       # whether to log occupancy observation
   show: true                # if true show animation plots
 sim:
   t_max: 500  # max number of iterations in simulation loop (originally 5000)
@@ -71,7 +71,7 @@ sim:
   obstacle_density: 0.001
 anim:
   save: true               # if true save to disk animation plots
-  plot_steps: 30            # steps between plot updates
+  plot_steps: 100            # steps between plot updates
   plan_steps: 10            # steps between obstacle and planner updates
   inf_stream: false         # if true then infinite obstacle stream mode is enabled
   move_yaxis_threshold: 10  # distance traveled before y-axis moves

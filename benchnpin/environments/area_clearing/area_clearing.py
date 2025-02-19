@@ -35,7 +35,7 @@ R = lambda theta: np.asarray([
 ])
 
 BOUNDARY_PENALTY = -0.5
-BOX_PUTBACK_PENALTY = -20
+BOX_PUTBACK_PENALTY = -10.5
 TRUNCATION_PENALTY = 0
 TERMINAL_REWARD = 50
 BOX_CLEARED_REWARD = 10
@@ -44,8 +44,8 @@ BOX_PUSHING_REWARD_MULTIPLIER = 0.2
 TIME_PENALTY = 0
 
 LOCAL_MAP_PIXEL_WIDTH = 224
-LOCAL_MAP_WIDTH = 12 #  meters
-# LOCAL_MAP_WIDTH = 20 #  meters
+# LOCAL_MAP_WIDTH = 12 #  meters # TODO: Make this an env parameter - Use for clear_env_small
+LOCAL_MAP_WIDTH = 24 #  meters
 LOCAL_MAP_PIXELS_PER_METER = LOCAL_MAP_PIXEL_WIDTH / LOCAL_MAP_WIDTH
 DISTANCE_SCALE_MAX = 0.5
 
@@ -358,7 +358,8 @@ class AreaClearingEnv(gym.Env):
         self.agent.collision_type = 1
 
         # Initialize configuration space (only need to compute once)
-        self.update_configuration_space()
+        if(self.configuration_space is None):
+            self.update_configuration_space()
 
         for _ in range(1000):
             self.space.step(self.dt / self.steps)
@@ -492,7 +493,8 @@ class AreaClearingEnv(gym.Env):
         self.global_overhead_map = self.create_padded_room_ones()
         self.update_global_overhead_map()
 
-        self.goal_point_global_map = self.create_global_shortest_path_to_goal_points()
+        if(self.goal_point_global_map is None):
+            self.goal_point_global_map = self.create_global_shortest_path_to_goal_points()
 
         self.t = 0
 
@@ -965,10 +967,6 @@ class AreaClearingEnv(gym.Env):
             vertices_px[:, 1] = small_obstacle_map.shape[0] - vertices_px[:, 1]
 
             fillPoly(small_obstacle_map, [vertices_px], color=1)
-
-            # # draw the boundary on the small_obstacle_map
-            # if poly.label in ['wall', 'divider', 'column', 'corner']:
-            #     fillPoly(small_obstacle_map, [vertices_px], color=1)
         
         start_i, start_j = int(obstacle_map.shape[0] / 2 - small_obstacle_map.shape[0] / 2), int(obstacle_map.shape[1] / 2 - small_obstacle_map.shape[1] / 2)
         obstacle_map[start_i:start_i + small_obstacle_map.shape[0], start_j:start_j + small_obstacle_map.shape[1]] = small_obstacle_map
