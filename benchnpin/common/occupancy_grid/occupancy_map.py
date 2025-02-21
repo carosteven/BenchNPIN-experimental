@@ -4,6 +4,7 @@ import math
 from skimage.draw import draw
 from skimage.measure import block_reduce
 from benchnpin.common.geometry.polygon import poly_centroid
+from scipy.ndimage import rotate
 
 class OccupancyGrid:
 
@@ -92,47 +93,6 @@ class OccupancyGrid:
 
         return raw_wall_binary
 
-    # NOTE Old version, keep here for a reference temporarily
-    # def compute_con_gridmap(self, raw_ice_binary, local_range=None, ship_state=None, save_fig_dir=None):
-    #     """
-    #     Compute concentration grid map
-    #     """
-    #     meter_to_pixel_scale_y = self.meter_to_pixel_scale
-    #     meter_to_pixel_scale_x = self.meter_to_pixel_scale
-
-    #     if local_range is not None:
-    #         robot_x, robot_y = ship_state[:2]
-    #         range_x, range_y = local_range
-
-    #     for i in range(self.occ_map_height):
-
-    #         if local_range is not None:
-    #             grid_y = i * self.grid_height
-    #             if abs(grid_y - robot_y) > range_y:
-    #                 continue
-
-    #         y_low = int(i * self.grid_height * meter_to_pixel_scale_y)
-    #         y_high = int((i + 1) * self.grid_height * meter_to_pixel_scale_y)
-    #         if y_high >= raw_ice_binary.shape[0]:
-    #             y_high = raw_ice_binary.shape[0] - 1
-
-    #         for j in range(self.occ_map_width):
-
-    #             if local_range is not None:
-    #                 grid_x = j * self.grid_width
-    #                 if abs(grid_x - robot_x) > range_x:
-    #                     continue
-
-    #             x_low = int(j * self.grid_width * meter_to_pixel_scale_x)
-    #             x_high = int((j + 1) * self.grid_width * meter_to_pixel_scale_x)
-    #             if x_high >= raw_ice_binary.shape[1]:
-    #                 x_high = raw_ice_binary.shape[1] - 1
-    #             cropped_region = raw_ice_binary[y_low:y_high, x_low:x_high]
-
-    #             self.occ_map[i, j] = np.mean(cropped_region)
-    #     return self.occ_map
-
-
 
     def compute_con_gridmap(self, raw_ice_binary, save_fig_dir=None):
         """
@@ -188,24 +148,29 @@ class OccupancyGrid:
         
         global_wall_map = self.compute_occ_img_walls(maze_walls, self.occ_map_width, self.occ_map_height)
 
-        robot_global_footprint = self._compute_global_footprint(agent_state, agent_vertices)
+        robot_global_footprint = self._compute_global_footprint_maze(agent_state, agent_vertices)
         #robot position in meter with respect to the global map
         robot_x, robot_y = agent_state[:2]
         #center the local window on the agent's position 
         window_x, window_y = int(robot_x * self.meter_to_pixel_scale), int(robot_y * self.meter_to_pixel_scale)
-        #initialize the local robot footprint as zeros (out of bound = 0.0)
-        local_footprint = np.zeros((self.local_window_height, self.local_window_width))
-        #initialize the local obstacle map as zeros (out of bound = 0.0)
-        local_obstacle_map = np.zeros((self.local_window_height, self.local_window_width))
-        #initialize the local wall map as zeros (out of bound = 0.0)
-        local_wall_map = np.zeros((self.local_window_height, self.local_window_width))
-        #initialize the local global distance map as ones (out of bound = 1.0) higher cost for out of bound
-        local_dist_map = np.ones((self.local_window_height, self.local_window_width))
 
-        for local_i in range(self.local_window_height):
-            for local_j in range(self.local_window_width):
-                global_i = int(local_i + window_y - (self.local_window_height / 2))
-                global_j = int(local_j + window_x - (self.local_window_width / 2))
+        inflation = max(self.local_window_width, self.local_window_height) // 2
+        inflated_local_height = self.local_window_height + inflation
+        inflated_local_width = self.local_window_width + inflation
+
+        #initialize the local robot footprint as zeros (out of bound = 0.0)
+        local_footprint = np.zeros((inflated_local_height, inflated_local_width))
+        #initialize the local obstacle map as zeros (out of bound = 0.0)
+        local_obstacle_map = np.zeros((inflated_local_height, inflated_local_width))
+        #initialize the local wall map as zeros (out of bound = 0.0)
+        local_wall_map = np.zeros((inflated_local_height, inflated_local_width))
+        #initialize the local global distance map as ones (out of bound = 1.0) higher cost for out of bound
+        local_dist_map = np.ones((inflated_local_height, inflated_local_width))
+
+        for local_i in range(inflated_local_height):
+            for local_j in range(inflated_local_width):
+                global_i = int(local_i + window_y - (inflated_local_height / 2))
+                global_j = int(local_j + window_x - (inflated_local_width / 2))
                 # check out-of-bound
                 if global_i < 0 or global_i >= global_obstacle_map.shape[0] or global_j < 0 or global_j >= global_obstacle_map.shape[1]:
                     continue #zero padding for out of bound
@@ -214,7 +179,20 @@ class OccupancyGrid:
                 local_obstacle_map[local_i, local_j] = global_obstacle_map[global_i, global_j]
                 local_wall_map[local_i, local_j] = global_wall_map[global_i, global_j]
                 local_dist_map[local_i, local_j] = global_dist_map[global_i, global_j]
-        
+
+        corrected_heading = agent_state[2] - np.pi / 2
+        rotate_deg = corrected_heading * (180 / np.pi)       # convert to degree
+        local_footprint = rotate(local_footprint, rotate_deg, reshape=False, cval=0, order=1)
+        local_obstacle_map = rotate(local_obstacle_map, rotate_deg, reshape=False, cval=0, order=1)
+        local_wall_map = rotate(local_wall_map, rotate_deg, reshape=False, cval=0, order=1)
+        local_dist_map = rotate(local_dist_map, rotate_deg, reshape=False, cval=1, order=1)
+
+        half_inflate = inflation // 2
+        local_footprint = local_footprint[half_inflate:half_inflate+self.local_window_height, half_inflate:half_inflate+self.local_window_width]
+        local_obstacle_map = local_obstacle_map[half_inflate:half_inflate+self.local_window_height, half_inflate:half_inflate+self.local_window_width]
+        local_wall_map = local_wall_map[half_inflate:half_inflate+self.local_window_height, half_inflate:half_inflate+self.local_window_width]
+        local_dist_map = local_dist_map[half_inflate:half_inflate+self.local_window_height, half_inflate:half_inflate+self.local_window_width]
+
         self.local_footprint = local_footprint
         self.local_obstacle_map = local_obstacle_map
         self.local_wall_map = local_wall_map
@@ -326,6 +304,45 @@ class OccupancyGrid:
         """
         global_footprint = np.zeros((self.occ_map_height, self.occ_map_width))
         global_footprint = global_footprint + 0.5                   # free space 0.5, robot 1.0, out-of-bound 0.0
+        meter_to_grid_scale_x = self.occ_map_width / self.map_width
+        meter_to_grid_scale_y = self.occ_map_height / self.map_height
+
+        position = ship_state[:2]
+        angle = ship_state[2]
+
+        # ship vertices in meter
+        heading = angle
+        R = np.asarray([
+            [math.cos(heading), -math.sin(heading)], [math.sin(heading), math.cos(heading)]
+        ])
+        vertices = np.asarray(ship_vertices) @ R.T + np.asarray(position)
+
+        r = []
+        c = []
+        for x, y in vertices:
+            grid_x = x * meter_to_grid_scale_x
+            grid_y = y * meter_to_grid_scale_y
+            if grid_y < 0 or grid_y >= self.occ_map_height or grid_x < 0 or grid_x >= self.occ_map_width:
+                continue
+            r.append(grid_y)
+            c.append(grid_x)
+        
+        # it is possible that the ship state is outside of the grid map
+        if len(r) == 0 or len(c) == 0:
+            return None
+        
+        rr, cc = draw.polygon(r=r, c=c)
+        
+        global_footprint[rr, cc] = 1.0
+        return global_footprint
+
+
+    def _compute_global_footprint_maze(self, ship_state, ship_vertices, padding=0.25):
+        """
+        This function computes a global footprint map. 
+        Values correspondences: robot 1.0, elsewhere 0.0
+        """
+        global_footprint = np.zeros((self.occ_map_height, self.occ_map_width))
         meter_to_grid_scale_x = self.occ_map_width / self.map_width
         meter_to_grid_scale_y = self.occ_map_height / self.map_height
 
