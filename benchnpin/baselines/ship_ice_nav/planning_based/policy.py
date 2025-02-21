@@ -74,7 +74,7 @@ class PlanningBasedPolicy(BasePolicy):
         metric = ShipIceMetric(alg_name="planningBased", ship_mass=env.cfg.ship.mass, goal=env.goal)
 
         for eps_idx in range(num_eps):
-            print("Progress: ", eps_idx, " / ", num_eps, " episodes")
+            print("Planning Based Progress: ", eps_idx, " / ", num_eps, " episodes")
             observation, info = env.reset()
             metric.reset(info)
             obstacles = info['obs']

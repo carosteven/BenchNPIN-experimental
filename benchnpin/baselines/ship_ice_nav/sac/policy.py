@@ -79,17 +79,17 @@ class ShipIceSAC(BasePolicy):
     def evaluate(self, num_eps: int, model_eps: str ='latest') -> Tuple[List[float], List[float], List[float], str]:
 
         if model_eps == 'latest':
-            self.model = SAC.load(os.path.join(self.model_path, self.model_name), device='cpu')
+            self.model = SAC.load(os.path.join(self.model_path, self.model_name))
         else:
             model_checkpoint = self.model_name + '_' + model_eps + '_steps'
-            self.model = SAC.load(os.path.join(self.model_path, model_checkpoint), device='cpu')
+            self.model = SAC.load(os.path.join(self.model_path, model_checkpoint))
 
         env = gym.make('ship-ice-v0')
         env = env.unwrapped
         metric = ShipIceMetric(alg_name="SAC", ship_mass=env.cfg.ship.mass, goal=env.goal)
 
         for eps_idx in range(num_eps):
-            print("Progress: ", eps_idx, " / ", num_eps, " episodes")
+            print("SAC Progress: ", eps_idx, " / ", num_eps, " episodes")
             obs, info = env.reset()
             metric.reset(info)
             done = truncated = False

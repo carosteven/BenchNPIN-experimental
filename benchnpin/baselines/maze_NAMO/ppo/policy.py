@@ -29,7 +29,7 @@ class MazeNAMOPPO(BasePolicy):
                                     batch_size=128,
                                     n_epochs=10,
                                     learning_rate=5e-4,
-                                    gamma=0.97,
+                                    gamma=0.995,
                                     verbose=2,
                                     total_timesteps=int(2e5), 
                                     checkpoint_freq=10000) -> None:
@@ -77,7 +77,7 @@ class MazeNAMOPPO(BasePolicy):
         metric = ShipIceMetric(env=env, alg_name="PPO")  #change later to MazeNAMOMetric
 
         for eps_idx in range(num_eps):
-            print("Progress: ", eps_idx, " / ", num_eps, " episodes")
+            print("PPO Progress: ", eps_idx, " / ", num_eps, " episodes")
             obs, info = metric.reset()
             done = truncated = False
             while True:
