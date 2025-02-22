@@ -63,7 +63,7 @@ class MazeNAMO(gym.Env):
 
         self.beta = 1         # amount to scale the collision reward
         self.k = 2        # amount to scale the distance reward
-        self.k_increment = 150
+        self.k_increment = 300
         self.episode_idx = None     # the increment of this index is handled in reset()
 
         self.path = None
@@ -450,7 +450,7 @@ class MazeNAMO(gym.Env):
             # apply velocity controller
             # self.robot_body.angular_velocity = action[1]
 
-            global_velocity = R(self.robot_body.angle) @ [0.2, 0]           # fixed linear forward velocity 0.2 m/s
+            global_velocity = R(self.robot_body.angle) @ [0.1, 0]           # fixed linear forward velocity 0.2 m/s
             action = action * self.max_yaw_rate_step #scaling from [-1, 1] to [-max_yaw_rate_step, max_yaw_rate_step]
             self.robot_body.angular_velocity = action
 

@@ -12,7 +12,7 @@ demo_mode: false     # when using demo mode, control both forward and angular sp
 
 # obstacles information
 randomize_obstacles: true
-num_obstacles: 8
+num_obstacles: 5
 obstacle_size: 0.5
 min_obs_dist: 0.62       # minimum obstacle distance during random initialization
 max_obs_x: 15
@@ -89,7 +89,7 @@ robot:
 ### SIMULATION PARAMS
 render:
   log_obs: false       # whether to log occupancy observation
-  show: true          # if true show simulation plots
+  show: false          # if true show simulation plots
 sim:
   t_max: 2000  # max number of iterations in simulation loop (originally 5000)
   steps: 400    # number of simulation steps per iteration (originally 10)
