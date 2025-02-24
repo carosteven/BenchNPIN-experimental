@@ -17,7 +17,7 @@ from pynput import keyboard
 from os.path import dirname
 
 cfg_file = f'{dirname(dirname(__file__))}/benchnpin/environments/box_pushing/config_ppo.yaml'
-env = gym.make('object-pushing-v0', cfg_file=cfg_file)
+env = gym.make('box-pushing-v0', cfg_file=cfg_file)
 
 observations = []
 actions = []                # this is actually the states (i.e. 3 dof pose)

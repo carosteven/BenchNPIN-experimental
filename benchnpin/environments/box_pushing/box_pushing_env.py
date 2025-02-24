@@ -60,12 +60,12 @@ NONMOVEMENT_DIST_THRESHOLD = 0.05
 NONMOVEMENT_TURN_THRESHOLD = np.radians(0.05)
 STEP_LIMIT = 5000
 
-class ObjectPushing(gym.Env):
+class BoxPushingEnv(gym.Env):
     """Custom Environment that follows gym interface"""
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
 
     def __init__(self, cfg_file = None):
-        super(ObjectPushing, self).__init__()
+        super(BoxPushingEnv, self).__init__()
 
         # get current directory of this script
         self.current_dir = os.path.dirname(__file__)

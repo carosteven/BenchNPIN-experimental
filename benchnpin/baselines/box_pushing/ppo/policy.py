@@ -38,9 +38,9 @@ class BoxPushingPPO(BasePolicy):
             resume_training=False) -> None:
 
         if self.cfg is not None:
-            env = gym.make('object-pushing-v0', cfg_file=self.cfg)
+            env = gym.make('box-pushing-v0', cfg_file=self.cfg)
         else:
-            env = gym.make('object-pushing-v0')
+            env = gym.make('box-pushing-v0')
         env = env.unwrapped
 
         if resume_training:
@@ -84,9 +84,9 @@ class BoxPushingPPO(BasePolicy):
             self.model = PPO.load(os.path.join(self.model_path, model_checkpoint))
 
         if self.cfg is not None:
-            env = gym.make('object-pushing-v0', cfg_file=self.cfg)
+            env = gym.make('box-pushing-v0', cfg_file=self.cfg)
         else:
-            env = gym.make('object-pushing-v0')
+            env = gym.make('box-pushing-v0')
         env = env.unwrapped
 
         rewards_list = []

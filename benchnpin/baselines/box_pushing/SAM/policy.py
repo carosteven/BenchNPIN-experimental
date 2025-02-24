@@ -1,5 +1,6 @@
 from benchnpin.baselines.base_class import BasePolicy
 from benchnpin.baselines.feature_extractors import DenseActionSpaceDQN
+from benchnpin.common.merics.box_pushing_metric import BoxPushingMetric
 import benchnpin.environments
 import gymnasium as gym
 from collections import namedtuple
@@ -249,9 +250,9 @@ class BoxPushingSAM(BasePolicy):
 
         # create environment
         if self.cfg is not None:
-            env = gym.make('object-pushing-v0', cfg_file=self.cfg)
+            env = gym.make('box-pushing-v0', cfg_file=self.cfg)
         else:
-            env = gym.make('object-pushing-v0')
+            env = gym.make('box-pushing-v0')
         env = env.unwrapped
 
         # policy
@@ -391,10 +392,11 @@ class BoxPushingSAM(BasePolicy):
 
     def evaluate(self, num_eps: int, model_eps: str ='latest'):
         if self.cfg is not None:
-            env = gym.make('object-pushing-v0', cfg_file=self.cfg)
+            env = gym.make('box-pushing-v0', cfg_file=self.cfg)
         else:
-            env = gym.make('object-pushing-v0')
+            env = gym.make('box-pushing-v0')
         env = env.unwrapped
+        metric = BoxPushingMetric(alg_name="SAM", robot_mass=env.cfg.robot.mass)
 
         checkpoint_dir = os.path.join(os.path.dirname(__file__), f'checkpoint/')
         model_path = f'{checkpoint_dir}/{self.model_name}.pt'
@@ -410,18 +412,19 @@ class BoxPushingSAM(BasePolicy):
         for eps_idx in range(num_eps):
             print("Progress: ", eps_idx, " / ", num_eps, " episodes")
             obs, info = env.reset()
+            metric.reset(info)
             done = truncated = False
             eps_reward = 0.0
             while True:
                 action, _ = self.model.step(obs)
                 obs, reward, done, truncated, info = env.step(action)
-                eps_reward += reward
+                metric.update(info=info, reward=reward, eps_complete=(done or truncated))
                 if done or truncated:
-                    rewards_list.append(eps_reward)
                     break
         
         env.close()
-        return rewards_list
+        metric.plot_scores(save_fig_dir=env.cfg.output_dir)
+        return metric.efficiency_scores, metric.effort_scores, metric.rewards, "SAM"
 
 
     

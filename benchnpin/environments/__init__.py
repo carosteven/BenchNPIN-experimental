@@ -7,8 +7,8 @@ register(
 )
 
 register(
-     id="object-pushing-v0",
-     entry_point="benchnpin.environments.box_pushing:ObjectPushing",
+     id="box-pushing-v0",
+     entry_point="benchnpin.environments.box_pushing:BoxPushingEnv",
      max_episode_steps=30000,
 )
 

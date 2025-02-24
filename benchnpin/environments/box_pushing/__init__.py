@@ -1,1 +1,1 @@
-from benchnpin.environments.box_pushing.object_pushing import ObjectPushing
+from benchnpin.environments.box_pushing.box_pushing_env import BoxPushingEnv
