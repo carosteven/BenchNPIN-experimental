@@ -66,7 +66,7 @@ class BoxPushingSAC(BasePolicy):
                 gradient_steps=1,
                 verbose=verbose,
                 tensorboard_log=os.path.join(self.model_path, self.model_name),
-            )
+                )
 
         # Save a checkpoint every 1000 steps
         checkpoint_callback = CheckpointCallback(
