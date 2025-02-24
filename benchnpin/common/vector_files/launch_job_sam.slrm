@@ -1,6 +1,6 @@
 #!/bin/sh
 # Node resource configurations
-#SBATCH --job-name=SAM_lc
+#SBATCH --job-name=SAM_ld
 #SBATCH --mem=20G
 #SBATCH --gres=gpu:rtx6000:1
 #SBATCH -c 8

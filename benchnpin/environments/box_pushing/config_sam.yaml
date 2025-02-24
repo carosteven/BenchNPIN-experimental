@@ -17,7 +17,7 @@ fixed_trial_idx: 1
 ### SIMULATION PARAMS
 render:
   log_obs: false        # whether to log occupancy observation
-  show: true            # if true show animation plots
+  show: false            # if true show animation plots
   show_obs: false       # if true show occupancy observation
   frequency: 20         # frequency of rendering
 sim:
@@ -89,6 +89,7 @@ agent:
 ### ENVIRONMENT PARAMS
 env:
   obstacle_config: large_divider # options are small_empty, small_columns, large_columns, large_divider
+  obstacle_config: large_divider # options are small_empty, small_columns, large_columns, large_divider
   room_length: 10
   room_width: 10 # 5 for small, 10 for large
   receptacle_width: 1.5
@@ -111,7 +112,7 @@ rewards:
 
 train:
   job_type: 'sam'
-  job_name: 'lc'
+  job_name: 'ld'
   batch_size: 32
   checkpoint_freq: 6000
   exploration_timesteps: 6000
@@ -120,13 +121,13 @@ train:
   grad_norm_clipping: 10
   job_id_to_resume: null
   learning_rate: 0.01
-  learning_starts: 10
+  learning_starts: 1000
   n_epochs: 10
   n_steps: 256
   replay_buffer_size: 10000
   resume_training: false
   target_update_freq: 1000
   total_timesteps: 60000
-  use_double_dqn: True
+  use_double_dqn: true
   verbose: 2
   weight_decay: 0.0001

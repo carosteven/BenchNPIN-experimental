@@ -1,6 +1,6 @@
 #!/bin/sh
 # Node resource configurations
-#SBATCH --job-name=ppo_15s
+#SBATCH --job-name=s2_g5
 #SBATCH --mem=20G
 #SBATCH --gres=gpu:rtx6000:1
 #SBATCH -c 8

@@ -18,17 +18,16 @@ def main(args):
 
     if cfg.train.job_type == 'sam':
         # ========================= Spatial Action Map Policy =========================
-        sam_policy = BoxPushingSAM(model_name=f'large_divider', cfg=args.config_file)
-        # sam_policy.train(job_id=args.job_id, **cfg.train)
-        evaluations = sam_policy.evaluate(num_eps=5)
+        sam_policy = BoxPushingSAM(model_name=model_name, cfg=args.config_file)
+        sam_policy.train(job_id=args.job_id, **cfg.train)
+        # evaluations = sam_policy.evaluate(num_eps=5)
         # print("sam Eval: ", evaluations)
 
     elif cfg.train.job_type == 'ppo':
-        # ================================ PPO Policy =================================
-        # ppo_policy = BoxPushingPPO(model_name=f'ppo_model_{args.job_id}', cfg=args.config_file)
-        # ppo_policy.train()
-        ppo_policy = BoxPushingPPO(model_name=f's15_g1_14952355_60000_steps_60000_steps', cfg=args.config_file)
-        evaluations = ppo_policy.evaluate(num_eps=5)
+        # ================================ PPO Policy =================================    
+        ppo_policy = BoxPushingPPO(model_name=model_name, cfg=args.config_file)
+        ppo_policy.train(resume_training=cfg.train.resume_training, n_steps=cfg.train.n_steps, batch_size=cfg.train.batch_size)
+        # evaluations = ppo_policy.evaluate(num_eps=5)
         # print("ppo Eval: ", evaluations)
 
     elif cfg.train.job_type == 'sac':
@@ -48,7 +47,7 @@ if __name__ == '__main__':
         '--config_file',
         type=str,
         help='path to the config file',
-        default=f'{dirname(dirname(__file__))}/benchnpin/environments/box_pushing/config_sac.yaml'
+        default=f'{dirname(dirname(__file__))}/benchnpin/environments/box_pushing/config_sam.yaml'
     )
 
     parser.add_argument(

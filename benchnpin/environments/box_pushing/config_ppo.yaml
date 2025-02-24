@@ -62,7 +62,7 @@ controller:
 
 cubes:
   randomize_cubes: true
-  num_cubes: 20
+  num_cubes: 10
   cube_size: 0.44
   min_cube_dist: 0.62       # minimum cube distance during random initialization
   max_cube_x: 4
@@ -105,13 +105,13 @@ misc:
 
 rewards:
   partial_rewards_scale: 0.2
-  goal_reward: 2.0
+  goal_reward: 5.0
   collision_penalty: 0.25
   non_movement_penalty: 0.25
 
 train:
   job_type: ppo
-  job_name: s15
+  job_name: s2_g5
   batch_size: 64
   checkpoint_freq: 1000
   job_id_to_resume: s15_14931184_70000_steps
