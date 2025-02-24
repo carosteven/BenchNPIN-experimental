@@ -11,6 +11,12 @@ from os.path import dirname
 
 def main(args):
     cfg = DotDict.load_from_file(args.config_file)
+    for cfg_key in ['train', 'env', 'agent', 'rewards']:
+        info = getattr(cfg, cfg_key).items()
+        print(f'\n{cfg_key.upper()} CONFIGURATION')
+        for key, value in info:
+            print(f'{key}: {value}')
+
     if cfg.train.resume_training:
         model_name = cfg.train.job_id_to_resume
     else:
@@ -47,7 +53,7 @@ if __name__ == '__main__':
         '--config_file',
         type=str,
         help='path to the config file',
-        default=f'{dirname(dirname(__file__))}/benchnpin/environments/box_pushing/config_sam.yaml'
+        default=f'{dirname(dirname(__file__))}/benchnpin/environments/box_pushing/config_ppo.yaml'
     )
 
     parser.add_argument(
