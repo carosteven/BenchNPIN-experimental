@@ -18,6 +18,7 @@ class Renderer():
         # get parameters
         self.goal_line = kwargs.get('goal_line', None)
         self.goal_point = kwargs.get('goal_point', None)
+        self.goal_region = kwargs.get('goal_region', None)                  # a tuple (goal_center,region_size)
         self.clearance_boundary = kwargs.get('clearance_boundary', None)
         self.centered = kwargs.get('centered', False)
 
@@ -103,7 +104,17 @@ class Renderer():
         """
         Display goal regions for navigation tasks
         """
-        raise NotImplementedError
+        """
+        Display goal point for navigation tasks
+        """
+        pygame.draw.circle(
+            self.window,
+            (144, 238, 144),  # Circle color (green)
+            self.to_pygame(self.goal_region[0]),  # Circle center
+            self.goal_region[1] * self.render_scale,  # Circle radius
+            0   # Circle thickness
+        )
+
 
     def display_goal_point(self):
         """
@@ -156,6 +167,9 @@ class Renderer():
         
         if self.goal_line is not None:
             self.display_goal_line()
+
+        if self.goal_region is not None:
+            self.display_goal_region()
         
         if self.clearance_boundary is not None:
             self.display_clearance_boundary()

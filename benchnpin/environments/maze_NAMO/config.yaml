@@ -33,6 +33,7 @@ concentration: 0.1    # options are 0.2, 0.3, 0.4, 0.5
 planner: 'predictive'    # options are 'skeleton', 'straight', or 'lattice'
 goal_x: 3.75
 goal_y: 3.75
+goal_radius: 1
 threshold_dist: 0.5   # fraction of path length for deciding whether to update planned path
 threshold_cost: 0.95  # fraction of path cost for deciding whether to update planned path
 occ:     # occupancy map grid size
@@ -62,34 +63,64 @@ prim:
 robot:
   mass: 1  # mass of the NRC ship in kg
   padding: 0.25  # adds padding to ship footprint
+  min_r: 0.6      # the smaller size of the robot
 
   vertices: [
+              # [0.51, -0.9],
+              # [-0.51, -0.67],
 
-              # [0.69, -0.89],
-              # [-0.69, -0.89],
+              # [-0.51, 0.67],
+              # [0.51, 0.9], 
 
-              # [-0.69, 0.89],
-              # [0.69, 0.89], 
+              [0.7, -0.5],
+              [0.55, -0.6],
+              [-0.55, -0.6],
+              [-0.7, -0.5],
 
-              # [0.69, -1.2],
-              # [-0.69, -0.89],
-
-              # [-0.69, 0.89],
-              # [0.69, 1.2], 
-
-              [0.51, -0.9],
-              [-0.51, -0.67],
-
-              [-0.51, 0.67],
-              [0.51, 0.9], 
-
-              
+              [-0.7, 0.5],
+              [-0.55, 0.6],
+              [0.55, 0.6], 
+              [0.7, 0.5]
               ]
+  
+  wheel_vertices: [
+    # left front
+    [
+        [0.2, 0.6],
+        [0.2, 0.7],
+        [0.5, 0.7], 
+        [0.55, 0.6]
+    ],
+
+    # right front
+    [
+        [0.2, -0.7],
+        [0.2, -0.6],
+        [0.55, -0.6], 
+        [0.55, -0.7]
+    ],
+
+    # left rear
+    [
+        [-0.2, 0.6],
+        [-0.2, 0.7],
+        [-0.55, 0.7], 
+        [-0.55, 0.6]
+    ],
+
+    # right rear
+    [
+        [-0.2, -0.6],
+        [-0.2, -0.7],
+        [-0.55, -0.7], 
+        [-0.55, -0.6]
+    ],
+  ]
   min_obstacle_dist: 2.5  # minimum distance to between robot location and walls
 ### SIMULATION PARAMS
 render:
   log_obs: false       # whether to log occupancy observation
-  show: false          # if true show simulation plots
+  show: true          # if true show simulation plots
 sim:
   t_max: 2000  # max number of iterations in simulation loop (originally 5000)
   steps: 400    # number of simulation steps per iteration (originally 10)
