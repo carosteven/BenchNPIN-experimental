@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import List, Tuple
 
 
 class BasePolicy(ABC):
@@ -19,12 +20,12 @@ class BasePolicy(ABC):
 
 
     @abstractmethod
-    def evaluate(self, num_eps: int, model_eps: str ='latest') -> list:
+    def evaluate(self, num_eps: int, model_eps: str ='latest') -> Tuple[List[float], List[float], List[float], str]:
         """
         Implement this function to evaluate the policy for `num_epochs`
         :param num_eps: total number of episodes to evaluate
         :param model_eps: the specific model checkpoint. Provide an integer step number as a string
-        :return: a list of epsiode rewards
+        :return: a tuple of four elements, 1. efficiency score list, 2. effort score list, 3. reward list, 4. algorithm name
         """
         raise NotImplementedError
 

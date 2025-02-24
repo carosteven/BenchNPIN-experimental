@@ -1,6 +1,6 @@
 from benchnpin.baselines.base_class import BasePolicy
 from benchnpin.baselines.feature_extractors import ResNet18
-from benchnpin.common.merics.ship_ice_metric import ShipIceMetric
+from benchnpin.common.merics.ship_ice_metric import ShipIceMetric #change later to MazeNAMOMetric
 from typing import List, Tuple
 import benchnpin.environments
 import gymnasium as gym
@@ -10,8 +10,7 @@ from stable_baselines3.common.callbacks import CheckpointCallback
 import os
 
 
-class ShipIcePPO(BasePolicy):
-
+class MazeNAMOPPO(BasePolicy):
     def __init__(self, model_name='ppo_model', model_path=None) -> None:
         super().__init__()
 
@@ -23,20 +22,19 @@ class ShipIcePPO(BasePolicy):
         self.model_name = model_name
         self.model = None
 
-
     def train(self, policy_kwargs=dict(features_extractor_class=ResNet18,
-                                        features_extractor_kwargs=dict(features_dim=512),
-                                        net_arch=dict(pi=[512, 256], vf=[512, 256])),
-            n_steps=256,
-            batch_size=128,
-            n_epochs=10,
-            learning_rate=5e-4,
-            gamma=0.97,
-            verbose=2,
-            total_timesteps=int(2e5), 
-            checkpoint_freq=10000) -> None:
+                                    features_extractor_kwargs=dict(features_dim=512),
+                                    net_arch=dict(pi=[512, 256], vf=[512, 256])),
+                                    n_steps=320,
+                                    batch_size=160,
+                                    n_epochs=10,
+                                    learning_rate=5e-4,
+                                    gamma=0.995,
+                                    verbose=2,
+                                    total_timesteps=int(2e5), 
+                                    checkpoint_freq=10000) -> None:
 
-        env = gym.make('ship-ice-v0')
+        env = gym.make('maze-NAMO-v0')
         env = env.unwrapped
 
         self.model = PPO(
@@ -66,8 +64,6 @@ class ShipIcePPO(BasePolicy):
         self.model.save(os.path.join(self.model_path, self.model_name))
         env.close()
 
-
-
     def evaluate(self, num_eps: int, model_eps: str ='latest') -> Tuple[List[float], List[float], List[float], str]:
 
         if model_eps == 'latest':
@@ -76,28 +72,25 @@ class ShipIcePPO(BasePolicy):
             model_checkpoint = self.model_name + '_' + model_eps + '_steps'
             self.model = PPO.load(os.path.join(self.model_path, model_checkpoint))
 
-        env = gym.make('ship-ice-v0')
+        env = gym.make('maze-NAMO-v0')
         env = env.unwrapped
-        metric = ShipIceMetric(alg_name="PPO", ship_mass=env.cfg.ship.mass, goal=env.goal)
+        metric = ShipIceMetric(env=env, alg_name="PPO")  #change later to MazeNAMOMetric
 
         for eps_idx in range(num_eps):
             print("PPO Progress: ", eps_idx, " / ", num_eps, " episodes")
-            obs, info = env.reset()
-            metric.reset(info)
+            obs, info = metric.reset()
             done = truncated = False
             while True:
-                action, _ = self.model.predict(obs, deterministic=True)
-                obs, reward, done, truncated, info = env.step(action)
-                metric.update(info=info, reward=reward, eps_complete=(done or truncated))
+                action, _ = self.model.predict(obs)
+                obs, reward, done, truncated, info = metric.step(action)
                 if done or truncated:
                     break
         
         env.close()
-        metric.plot_scores(save_fig_dir=env.cfg.output_dir)
+        metric.plot_scores()
         return metric.efficiency_scores, metric.effort_scores, metric.rewards, "PPO"
-
-
     
+
     def act(self, observation, **kwargs):
 
         # parameters for planners
@@ -112,5 +105,5 @@ class ShipIcePPO(BasePolicy):
                 model_checkpoint = self.model_name + '_' + model_eps + '_steps'
                 self.model = PPO.load(os.path.join(self.model_path, model_checkpoint))
 
-        action, _ = self.model.predict(observation, deterministic=True)
+        action, _ = self.model.predict(observation)
         return action
