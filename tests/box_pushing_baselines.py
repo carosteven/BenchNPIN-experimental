@@ -32,8 +32,8 @@ def main(args):
 
     elif cfg.train.job_type == 'sac':
         # ================================ SAC Policy =================================
-        sac_policy = BoxPushingSAC(model_name=f'sac_model_{args.job_id}', cfg=args.config_file)
-        sac_policy.train()
+        sac_policy = BoxPushingSAC(model_name=model_name, cfg=args.config_file)
+        sac_policy.train(resume_training=cfg.train.resume_training, batch_size=cfg.train.batch_size, learning_starts=cfg.train.learning_starts)
         # sac_policy = BoxPushingSAC(model_name=f'GR2_14875179_80000_steps_80000_steps', cfg=args.config_file)
         # evaluations = sac_policy.evaluate(num_eps=5)
         # print("sac Eval: ", evaluations)

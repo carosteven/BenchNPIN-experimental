@@ -97,7 +97,6 @@ class BoxPushingPPO(BasePolicy):
             eps_reward = 0.0
             while True:
                 action, _ = self.model.predict(obs)
-                print("Action: ", action)
                 obs, reward, done, truncated, info = env.step(action)
                 eps_reward += reward
                 if done or truncated:

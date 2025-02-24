@@ -115,6 +115,7 @@ train:
   batch_size: 64
   checkpoint_freq: 1000
   job_id_to_resume: s15_14931184_70000_steps
+  learning_starts: 1000
   n_epochs: 10
   n_steps: 128
   resume_training: false

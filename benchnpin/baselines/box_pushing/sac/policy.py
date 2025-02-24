@@ -26,10 +26,12 @@ class BoxPushingSAC(BasePolicy):
         self.cfg = cfg
 
 
-    def train(self, policy_kwargs=dict(net_arch=[256, 256]),
+    def train(self, policy_kwargs=dict(features_extractor_class=ResNet18,
+                                        features_extractor_kwargs=dict(features_dim=512),
+                                        net_arch=[512, 256]),
             batch_size=64,
             buffer_size=15000,
-            learning_starts=200,
+            learning_starts=1000,
             learning_rate=5e-4,
             gamma=0.97,
             verbose=2,
@@ -63,7 +65,8 @@ class BoxPushingSAC(BasePolicy):
                 train_freq=1,
                 gradient_steps=1,
                 verbose=verbose,
-                tensorboard_log=self.model_path)
+                tensorboard_log=os.path.join(self.model_path, self.model_name),
+            )
 
         # Save a checkpoint every 1000 steps
         checkpoint_callback = CheckpointCallback(
@@ -103,7 +106,6 @@ class BoxPushingSAC(BasePolicy):
             eps_reward = 0.0
             while True:
                 action, _ = self.model.predict(obs)
-                print("Action: ", action)
                 obs, reward, done, truncated, info = env.step(action)
                 eps_reward += reward
                 if done or truncated:
