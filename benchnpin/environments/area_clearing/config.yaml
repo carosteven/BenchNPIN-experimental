@@ -5,56 +5,35 @@
 output_dir: "logs/" # 'output/trial0'
 
 plot:
-  y_axis_limit: 18  # limits the y-axis of the plot
   show: false       # true will show planner plots
 
-# env: 'clear_env'
+env: 'clear_env'
 # env: 'walled_env'
-env: 'walled_env_with_columns'
+# env: 'walled_env_with_columns'
 
-demo_mode: true     # when using demo mode, control both forward and angular speed
+demo_mode: false     # when using demo mode, control both forward and angular speed
 
 # obstacles information
-randomize_obstacles: true
 num_obstacles: 5
 obstacle_size: 0.5
 min_obs_dist: 3.5       # minimum obstacle distance during random initialization
-max_obs_x: 16
-min_obs_x: 2.5
-max_obs_y: 12
-min_obs_y: 4.5
 
 # parameters for low-dim environment
 low_dim_state: false
 fixed_trial_idx: 1
 random_start: true
-start_x_range: 15
 
 ### PLANNER PARAMS
 #max_replan: 1        # max number of replans
 concentration: 0.1    # options are 0.2, 0.3, 0.4, 0.5
 planner: 'predictive'    # options are 'skeleton', 'straight', or 'lattice'
-goal_y: 10
 threshold_dist: 0.5   # fraction of path length for deciding whether to update planned path
 threshold_cost: 0.95  # fraction of path cost for deciding whether to update planned path
 occ:
   grid_size: 0.2       # occupancy map grid size
   m_to_pix_scale: 19.5   # number of pixels per meter when generating the raw occupancy map
-  map_height: 20       # occupancy map height (in meter)
-  map_width: 20        # occupancy map width (in meter)
-a_star:
-  horizon: 30  # receding horizon in metres (needs to be an int for it to be enabled)
-  replan: true
-  smooth_path:
-    add_nodes: 10  # number of nodes to add in node path
-    max_dist: 20   # max distance to consider a pair of nodes
-  weight: 1        # static weighting for weighed A* f(n) = g(n) + w * h(n) where weight > 1
-#  h_baseline: True  # if true, then heuristic is simply euclidean distance to goal
-costmap:
-  m: 20       # height of ice channel in metres, can set to large number for 'infinite' ice channel
-  n: 20       # width of ice channel in metres
-  scale: 5    # this gives a resolution of 1/scale x 1/scale metres
-  alpha: 10   # collision cost multiplier
+  map_height: 32       # occupancy map height (in meter)
+  map_width: 32        # occupancy map width (in meter)
 prim:
   scale: 5 # Note, there is a limit on how small prim scale can be in relation to costmap scale
   num_headings: 8  # number of headings in the discretized heading space
@@ -120,8 +99,10 @@ controller:
   input_lims: [8.6, 0.5, 0.05]
   # look ahead distance
   Lfc: 0.5
+  
   # target speed
   target_speed: 0.3  # m/s
+
   PID_gains:  # gains for 3 PIDs
     - [ 5, 0, 5 ]
     - [ 10, 0, 20 ]
