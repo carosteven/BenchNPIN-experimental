@@ -12,7 +12,7 @@ plot:
 low_dim_state: false
 fixed_trial_idx: 4            # 4 for 25x12 (c01) environment; 
 random_start: true
-start_x_range: 11
+start_x_range: 7
 
 randomize_obstacles: false
 max_obs_x: 5
@@ -22,12 +22,12 @@ max_obs_y: 9
 #max_replan: 1        # max number of replans
 concentration: 0.1    # options are 0.1, 0.2, 0.3, 0.4, 0.5
 planner: 'predictive'    # options are 'skeleton', 'straight', or 'lattice'
-goal_y: 39
+goal_y: 9
 threshold_dist: 0.5   # fraction of path length for deciding whether to update planned path
 threshold_cost: 0.95  # fraction of path cost for deciding whether to update planned path
 occ:
-  grid_size: 0.2       # occupancy map grid size
-  m_to_pix_scale: 19.5   # number of pixels per meter when generating the raw occupancy map
+  grid_size: 0.04       # occupancy map grid size
+  m_to_pix_scale: 50   # number of pixels per meter when generating the raw occupancy map
   map_height: 40       # occupancy map height (in meter)
   map_width: 12        # occupancy map width (in meter)
 a_star:
@@ -70,11 +70,13 @@ ship:
             [0.25, -0.25],
             [0.5, -0.25],
             [0.9, -0.10]]
+  head: [1., 0.]
+  tail: [-1., 0.]
 
 ### SIMULATION PARAMS
 render:
-  log_obs: true       # whether to log occupancy observation
-  show: true                # if true show animation plots
+  log_obs: false       # whether to log occupancy observation
+  show: true             # if true show animation plots
 sim:
   t_max: 500  # max number of iterations in simulation loop (originally 5000)
   steps: 400    # number of simulation steps per iteration (originally 10)

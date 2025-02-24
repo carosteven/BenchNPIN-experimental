@@ -1,18 +1,19 @@
 from benchnpin.baselines.base_class import BasePolicy
 from benchnpin.baselines.feature_extractors import ResNet18
-from benchnpin.common.merics.ship_ice_metric import ShipIceMetric
 from typing import List, Tuple
 import benchnpin.environments
 import gymnasium as gym
-from stable_baselines3 import PPO
+from stable_baselines3 import SAC
+from stable_baselines3.common.noise import NormalActionNoise, OrnsteinUhlenbeckActionNoise
 from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.callbacks import CheckpointCallback
 import os
+import numpy as np
 
 
-class ShipIcePPO(BasePolicy):
+class MazeNAMOSAC(BasePolicy):
 
-    def __init__(self, model_name='ppo_model', model_path=None) -> None:
+    def __init__(self, model_name='sac_model', model_path=None) -> None:
         super().__init__()
 
         if model_path is None:
@@ -26,31 +27,37 @@ class ShipIcePPO(BasePolicy):
 
     def train(self, policy_kwargs=dict(features_extractor_class=ResNet18,
                                         features_extractor_kwargs=dict(features_dim=512),
-                                        net_arch=dict(pi=[512, 256], vf=[512, 256])),
-            n_steps=256,
+                                        net_arch=[512, 256]),
             batch_size=128,
-            n_epochs=10,
+            buffer_size=15000,
+            learning_starts=200,
             learning_rate=5e-4,
-            gamma=0.97,
+            gamma=0.995,
             verbose=2,
             total_timesteps=int(2e5), 
             checkpoint_freq=10000) -> None:
 
-        env = gym.make('ship-ice-v0')
+        env = gym.make('maze-NAMO-v0')
         env = env.unwrapped
 
-        self.model = PPO(
-            "CnnPolicy",
+        # The noise objects for SAC
+        n_actions = env.action_space.shape[-1]
+        action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.05 * np.ones(n_actions))
+
+        self.model = SAC(
+            'CnnPolicy', 
             env,
             policy_kwargs=policy_kwargs,
-            n_steps=n_steps,
-            batch_size=batch_size,
-            n_epochs=n_epochs,
             learning_rate=learning_rate,
+            buffer_size=buffer_size,
+            learning_starts=learning_starts,
+            action_noise=action_noise,
+            batch_size=batch_size,
             gamma=gamma,
+            train_freq=1,
+            gradient_steps=1,
             verbose=verbose,
-            tensorboard_log=self.model_path,
-        )
+            tensorboard_log=self.model_path)
 
         # Save a checkpoint every 1000 steps
         checkpoint_callback = CheckpointCallback(
@@ -71,30 +78,28 @@ class ShipIcePPO(BasePolicy):
     def evaluate(self, num_eps: int, model_eps: str ='latest') -> Tuple[List[float], List[float], List[float], str]:
 
         if model_eps == 'latest':
-            self.model = PPO.load(os.path.join(self.model_path, self.model_name))
+            self.model = SAC.load(os.path.join(self.model_path, self.model_name))
         else:
             model_checkpoint = self.model_name + '_' + model_eps + '_steps'
-            self.model = PPO.load(os.path.join(self.model_path, model_checkpoint))
+            self.model = SAC.load(os.path.join(self.model_path, model_checkpoint))
 
-        env = gym.make('ship-ice-v0')
+        env = gym.make('maze-NAMO-v0')
         env = env.unwrapped
-        metric = ShipIceMetric(alg_name="PPO", ship_mass=env.cfg.ship.mass, goal=env.goal)
 
         for eps_idx in range(num_eps):
-            print("PPO Progress: ", eps_idx, " / ", num_eps, " episodes")
+            print("SAC Progress: ", eps_idx, " / ", num_eps, " episodes")
             obs, info = env.reset()
-            metric.reset(info)
             done = truncated = False
             while True:
                 action, _ = self.model.predict(obs, deterministic=True)
                 obs, reward, done, truncated, info = env.step(action)
-                metric.update(info=info, reward=reward, eps_complete=(done or truncated))
                 if done or truncated:
                     break
         
         env.close()
-        metric.plot_scores(save_fig_dir=env.cfg.output_dir)
-        return metric.efficiency_scores, metric.effort_scores, metric.rewards, "PPO"
+        # metric.plot_scores()
+        # return metric.efficiency_scores, metric.effort_scores, metric.rewards, "SAC"
+        return [], [], [], "SAC"
 
 
     
@@ -107,10 +112,10 @@ class ShipIcePPO(BasePolicy):
         if self.model is None:
 
             if model_eps is None:
-                self.model = PPO.load(os.path.join(self.model_path, self.model_name))
+                self.model = SAC.load(os.path.join(self.model_path, self.model_name))
             else:
                 model_checkpoint = self.model_name + '_' + model_eps + '_steps'
-                self.model = PPO.load(os.path.join(self.model_path, model_checkpoint))
+                self.model = SAC.load(os.path.join(self.model_path, model_checkpoint))
 
         action, _ = self.model.predict(observation, deterministic=True)
         return action
