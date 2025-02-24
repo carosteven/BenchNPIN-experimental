@@ -99,7 +99,7 @@ class DenseActionSpacePolicy:
             if resume_training:
                 model_path = os.path.join(os.path.dirname(__file__), f'checkpoint/{job_id_to_resume}/model-{model_name}.pt')
             elif evaluate:
-                model_path = os.path.join(os.path.dirname(__file__), f'models_to_test/model-{model_name}.pt')
+                model_path = os.path.join(os.path.dirname(__file__), f'models_to_test/{model_name}.pt')
             else:
                 checkpoint_dir = os.path.dirname(checkpoint_path)
                 model_path = f'{checkpoint_dir}/model-{self.model_name}.pt'
@@ -397,11 +397,11 @@ class BoxPushingSAM(BasePolicy):
         env = env.unwrapped
 
         checkpoint_dir = os.path.join(os.path.dirname(__file__), f'checkpoint/')
-        model_path = f'{checkpoint_dir}/model-{self.model_name}.pt'
+        model_path = f'{checkpoint_dir}/{self.model_name}.pt'
 
         if model_eps == 'latest':
             self.model = DenseActionSpacePolicy(env.action_space.high, env.num_channels, 0.0,
-                                                train=False, evaluate=True)
+                                                train=False, evaluate=True, model_name=self.model_name)
         else:
             model_checkpoint = self.model_name + '_' + model_eps + '_steps'
             # self.model = PPO.load(os.path.join(self.model_path, model_checkpoint))

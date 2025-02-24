@@ -95,11 +95,6 @@ def collect_demos():
                 print("command: ", command, "; step: ", t, \
                     "; num completed: ", info['cumulative_cubes'],  end="\r")
                 observation, reward, terminated, truncated, info = env.step(command)
-                # observation, reward, terminated, truncated, info = env.step(-1)
-                # random action
-                # action_space = 96*96
-                # action = random.randrange(action_space)
-                # observation, reward, terminated, truncated, info = env.step(action)
 
                 # command = OTHER
                 if t % 5 == 0:
