@@ -33,9 +33,6 @@ R = lambda theta: np.asarray([
     [np.sin(theta), np.cos(theta)]
 ])
 
-BOUNDARY_PENALTY = -50
-TERMINAL_REWARD = 200
-
 FORWARD = 0
 STOP_TURNING = 1
 LEFT = 2
@@ -44,14 +41,6 @@ STOP = 4
 BACKWARD = 5
 SMALL_LEFT = 6
 SMALL_RIGHT = 7
-
-CUBE_MASS = 0.01
-WALL_THICKNESS = 1.4*10
-
-LOCAL_MAP_PIXEL_WIDTH = None
-LOCAL_MAP_WIDTH = None
-LOCAL_MAP_PIXELS_PER_METER = None
-MAP_UPDATE_STEPS = 250
 
 OBSTACLE_SEG_INDEX = 0
 FLOOR_SEG_INDEX = 1
@@ -88,10 +77,13 @@ class ObjectPushing(gym.Env):
         cfg = DotDict.load_from_file(cfg_file)
         self.cfg = cfg
 
-        global LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_WIDTH, LOCAL_MAP_PIXELS_PER_METER
-        LOCAL_MAP_PIXEL_WIDTH = self.cfg.env.local_map_pixel_width
-        LOCAL_MAP_WIDTH = 10 # 10 meters
-        LOCAL_MAP_PIXELS_PER_METER = LOCAL_MAP_PIXEL_WIDTH / LOCAL_MAP_WIDTH
+        # environment
+        self.room_length = self.cfg.env.room_length
+        self.room_width = self.cfg.env.room_width
+        self.wall_thickness = self.cfg.env.wall_thickness
+        self.local_map_pixel_width = self.cfg.env.local_map_pixel_width
+        self.local_map_width = self.cfg.env.local_map_width
+        self.local_map_pixels_per_meter = self.local_map_pixel_width / self.local_map_width
 
         # state
         self.num_channels = 4
@@ -112,13 +104,13 @@ class ObjectPushing(gym.Env):
         self.robot_info['color'] = get_color('red')
         self.robot_radius = ((self.robot_info.length**2 + self.robot_info.width**2)**0.5 / 2) * 1.2
         self.robot_half_width = max(self.robot_info.length, self.robot_info.width) / 2
-        robot_pixel_width = int(2 * self.robot_radius * LOCAL_MAP_PIXELS_PER_METER)
-        self.robot_state_channel = np.zeros((LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH), dtype=np.float32)
-        start = int(np.floor(LOCAL_MAP_PIXEL_WIDTH / 2 - robot_pixel_width / 2))
+        robot_pixel_width = int(2 * self.robot_radius * self.local_map_pixels_per_meter)
+        self.robot_state_channel = np.zeros((self.local_map_pixel_width, self.local_map_pixel_width), dtype=np.float32)
+        start = int(np.floor(self.local_map_pixel_width / 2 - robot_pixel_width / 2))
         for i in range(start, start + robot_pixel_width):
             for j in range(start, start + robot_pixel_width):
                 # Circular robot mask
-                if (((i + 0.5) - LOCAL_MAP_PIXEL_WIDTH / 2)**2 + ((j + 0.5) - LOCAL_MAP_PIXEL_WIDTH / 2)**2)**0.5 < robot_pixel_width / 2:
+                if (((i + 0.5) - self.local_map_pixel_width / 2)**2 + ((j + 0.5) - self.local_map_pixel_width / 2)**2)**0.5 < robot_pixel_width / 2:
                     self.robot_state_channel[i, j] = 1
         
         # rewards
@@ -151,7 +143,7 @@ class ObjectPushing(gym.Env):
         elif self.cfg.agent.action_type == 'heading':
             self.action_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
         elif self.cfg.agent.action_type == 'position':
-            self.action_space = spaces.Box(low=0, high=LOCAL_MAP_PIXEL_WIDTH * LOCAL_MAP_PIXEL_WIDTH, dtype=np.float32)
+            self.action_space = spaces.Box(low=0, high=self.local_map_pixel_width * self.local_map_pixel_width, dtype=np.float32)
 
         # Define observation space
         self.show_observation = False
@@ -164,13 +156,13 @@ class ObjectPushing(gym.Env):
                 self.observation_space = spaces.Box(low=-10, high=30, shape=(6,), dtype=np.float32)
 
         else:
-            self.observation_shape = (LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH, self.num_channels)
+            self.observation_shape = (self.local_map_pixel_width, self.local_map_pixel_width, self.num_channels)
             self.observation_space = spaces.Box(low=0, high=255, shape=self.observation_shape, dtype=np.uint8)
 
         self.plot = None
         self.renderer = None
 
-        if self.cfg.demo_mode:
+        if self.cfg.teleop_mode:
             self.angular_speed = 0.0
             self.angular_speed_increment = 0.005
             self.linear_speed = 0.0
@@ -186,69 +178,16 @@ class ObjectPushing(gym.Env):
 
     def init_box_pushing_sim(self):
 
-        # initialize ship-ice environment
         self.steps = self.cfg.sim.steps
-        self.t_max = self.cfg.sim.t_max if self.cfg.sim.t_max else np.inf
-        self.horizon = self.cfg.a_star.horizon
-        self.replan = self.cfg.a_star.replan
         self.dp = None
         self.dt = self.cfg.controller.dt
         self.target_speed = self.cfg.controller.target_speed
-        self.normal_cancelled_velocity = Vec2d(0, 0)
 
         # setup pymunk environment
         self.space = pymunk.Space()  # threaded=True causes some issues
         self.space.iterations = self.cfg.sim.iterations
         self.space.gravity = self.cfg.sim.gravity
         self.space.damping = self.cfg.sim.damping
-
-        # keep track of running total of total kinetic energy / total impulse
-        # computed using pymunk api call, source code here
-        # https://github.com/slembcke/Chipmunk2D/blob/edf83e5603c5a0a104996bd816fca6d3facedd6a/src/cpArbiter.c#L158-L172
-        self.system_ke_loss = []   # https://www.pymunk.org/en/latest/pymunk.html#pymunk.Arbiter.total_ke
-                                # source code in Chimpunk2D cpArbiterTotalKE
-        self.total_ke = [0, []]  # keep track of both running total and ke at each collision
-        self.total_impulse = [0, []]
-        # keep track of running total of work
-        self.total_work = [0, []]
-
-        self.total_dis = 0 
-        self.prev_state = None   
-
-        # keep track of all the obstacles that collide with ship
-        self.clln_obs = set()
-
-        # keep track of contact points
-        self.contact_pts = []
-
-        # keep track of cubes pushed into receptacle
-        self.cumulative_cubes = 0 # TODO remove
-
-        # setup pymunk collision callbacks
-        def pre_solve_handler(arbiter, space, data):
-            ice_body = arbiter.shapes[1].body
-            ice_body.pre_collision_KE = ice_body.kinetic_energy  # hacky, adding a field to pymunk body object
-            return True
-
-        def post_solve_handler(arbiter, space, data):
-            # nonlocal self.total_ke, self.system_ke_loss, self.total_impulse, self.clln_obs
-            robot, ice_shape = arbiter.shapes
-
-            self.system_ke_loss.append(arbiter.total_ke)
-
-            self.total_ke[0] += arbiter.total_ke
-            self.total_ke[1].append(arbiter.total_ke)
-
-            self.total_impulse[0] += arbiter.total_impulse.length
-            self.total_impulse[1].append(list(arbiter.total_impulse))
-
-            if arbiter.is_first_contact:
-                self.clln_obs.add(arbiter.shapes[1])
-
-            # max of two sets of points, easy to see with a picture with two overlapping convex shapes
-            # find the impact locations in the local coordinates of the ship
-            for i in arbiter.contact_point_set.points:
-                self.contact_pts.append(list(arbiter.shapes[0].body.world_to_local((i.point_b + i.point_a) / 2)))
 
         def robot_boundary_pre_solve(arbiter, space, data):
             self.robot_hit_obstacle = self.prevent_boundary_intersection(arbiter)
@@ -259,17 +198,7 @@ class ObjectPushing(gym.Env):
             return True
         
         def recept_collision_begin(arbiter, space, data):
-            if arbiter.shapes[0].label == 'cube':
-                # self.cubes_completed(arbiter.shapes[0])
-                pass
             return False
-
-        # handler = space.add_default_collision_handler()
-        self.handler = self.space.add_collision_handler(1, 2)
-        # from pymunk docs
-        # post_solve: two shapes are touching and collision response processed
-        self.handler.pre_solve = pre_solve_handler
-        self.handler.post_solve = post_solve_handler
 
         self.robot_boundary_handler = self.space.add_collision_handler(1, 3)
         self.robot_boundary_handler.pre_solve = robot_boundary_pre_solve
@@ -285,8 +214,8 @@ class ObjectPushing(gym.Env):
 
         if self.cfg.render.show:
             if self.renderer is None:
-                self.renderer = Renderer(self.space, env_width=self.cfg.env.room_length + WALL_THICKNESS / 2,
-                                         env_height=self.cfg.env.room_width + WALL_THICKNESS / 2,
+                self.renderer = Renderer(self.space, env_width=self.room_length + self.wall_thickness / 2,
+                                         env_height=self.room_width + self.wall_thickness / 2,
                                          render_scale=30, background_color=(255, 255, 255), caption='Box Pushing', centered=True)
             else:
                 self.renderer.reset(new_space=self.space)
@@ -296,15 +225,8 @@ class ObjectPushing(gym.Env):
         self.receptacle_position, self.receptacle_size = self.get_receptacle_position_and_size()
 
         # generate random start point, if specified
-        if self.cfg.random_start:
+        if self.cfg.agent.random_start:
             self.start = self.get_random_robot_start()
-            # length = self.robot_info.length
-            # width = self.robot_info.width
-            # size = max(length, width)
-            # x_start = random.uniform(-self.cfg.env.room_length / 2 + size, self.cfg.env.room_length / 2 - size)
-            # y_start = random.uniform(-self.cfg.env.room_width / 2 + size, self.cfg.env.room_width / 2 - size)
-            # heading = random.uniform(0, 2 * np.pi)
-            # self.start = (x_start, y_start, heading)
         else:
             self.start = (5, 1.5, np.pi*3/2)
         self.robot_info['start_pos'] = self.start
@@ -314,7 +236,7 @@ class ObjectPushing(gym.Env):
 
         # initialize ship sim objects
         self.robot = generate_sim_agent(self.space, self.robot_info, label='robot', body_type=pymunk.Body.KINEMATIC)
-        self.cubes = generate_sim_cubes(self.space, self.cubes_dicts, self.cfg.sim.cube_density)
+        self.cubes = generate_sim_cubes(self.space, self.cubes_dicts, self.cfg.cubes.cube_density)
         self.boundaries = generate_sim_bounds(self.space, self.boundary_dicts)
         self.robot.collision_type = 1
         for p in self.cubes:
@@ -366,14 +288,14 @@ class ObjectPushing(gym.Env):
         length = self.robot_info.length
         width = self.robot_info.width
         size = max(length, width)
-        x_start = random.uniform(-self.cfg.env.room_length / 2 + size, self.cfg.env.room_length / 2 - size)
-        y_start = random.uniform(-self.cfg.env.room_width / 2 + size, self.cfg.env.room_width / 2 - size)
+        x_start = random.uniform(-self.room_length / 2 + size, self.room_length / 2 - size)
+        y_start = random.uniform(-self.room_width / 2 + size, self.room_width / 2 - size)
         heading = random.uniform(0, 2 * np.pi)
         return (x_start, y_start, heading)
     
     def get_receptacle_position_and_size(self):
         size = self.cfg.env.receptacle_width
-        return [(self.cfg.env.room_length / 2 - size / 2, self.cfg.env.room_width / 2 - size / 2), size]
+        return [(self.room_length / 2 - size / 2, self.room_width / 2 - size / 2), size]
 
     def generate_boundary(self):
         boundary_dicts = []
@@ -395,10 +317,10 @@ class ObjectPushing(gym.Env):
         
         # generate walls
         for x, y, length, width in [
-            (-self.cfg.env.room_length / 2 - WALL_THICKNESS / 2, 0, WALL_THICKNESS, self.cfg.env.room_width),
-            (self.cfg.env.room_length / 2 + WALL_THICKNESS / 2, 0, WALL_THICKNESS, self.cfg.env.room_width),
-            (0, -self.cfg.env.room_width / 2 - WALL_THICKNESS / 2, self.cfg.env.room_length + 2 * WALL_THICKNESS, WALL_THICKNESS),
-            (0, self.cfg.env.room_width / 2 + WALL_THICKNESS / 2, self.cfg.env.room_length + 2 * WALL_THICKNESS, WALL_THICKNESS),
+            (-self.room_length / 2 - self.wall_thickness / 2, 0, self.wall_thickness, self.room_width),
+            (self.room_length / 2 + self.wall_thickness / 2, 0, self.wall_thickness, self.room_width),
+            (0, -self.room_width / 2 - self.wall_thickness / 2, self.room_length + 2 * self.wall_thickness, self.wall_thickness),
+            (0, self.room_width / 2 + self.wall_thickness / 2, self.room_length + 2 * self.wall_thickness, self.wall_thickness),
             ]:
 
             boundary_dicts.append(
@@ -424,10 +346,10 @@ class ObjectPushing(gym.Env):
             new_cols = []
             for _ in range(num_columns):
                 for _ in range(100): # try 100 times to generate a column that doesn't overlap with existing polygons
-                    x = random.uniform(-self.cfg.env.room_length / 2 + 2 * buffer_width + column_length / 2,
-                                        self.cfg.env.room_length / 2 - 2 * buffer_width - column_length / 2)
-                    y = random.uniform(-self.cfg.env.room_width / 2 + 2 * buffer_width + column_width / 2,
-                                        self.cfg.env.room_width / 2 - 2 * buffer_width - column_width / 2)
+                    x = random.uniform(-self.room_length / 2 + 2 * buffer_width + column_length / 2,
+                                        self.room_length / 2 - 2 * buffer_width - column_length / 2)
+                    y = random.uniform(-self.room_width / 2 + 2 * buffer_width + column_width / 2,
+                                        self.room_width / 2 - 2 * buffer_width - column_width / 2)
                     
                     overlapped = False
                     # check if column overlaps with receptacle
@@ -477,9 +399,9 @@ class ObjectPushing(gym.Env):
             for _ in range(100): # try 100x100 times to generate a divider that doesn't overlap with existing obstacles
                 for _ in range(100):
                     overlapped = False
-                    x = self.cfg.env.room_length / 2 - divider_length / 2
-                    y = random.uniform(-self.cfg.env.room_width / 2 + buffer_width + divider_width / 2,
-                                        self.cfg.env.room_width / 2 - buffer_width - divider_width / 2)
+                    x = self.room_length / 2 - divider_length / 2
+                    y = random.uniform(-self.room_width / 2 + buffer_width + divider_width / 2,
+                                        self.room_width / 2 - buffer_width - divider_width / 2)
                     
                     # check if divider overlaps with robot
                     rob_x, rob_y, _ = self.robot_info['start_pos']
@@ -526,10 +448,10 @@ class ObjectPushing(gym.Env):
         
         # generate corners
         for i, (x, y) in enumerate([
-            (-self.cfg.env.room_length / 2, self.cfg.env.room_width / 2),
-            (self.cfg.env.room_length / 2, self.cfg.env.room_width / 2),
-            (self.cfg.env.room_length / 2, -self.cfg.env.room_width / 2),
-            (-self.cfg.env.room_length / 2, -self.cfg.env.room_width / 2),
+            (-self.room_length / 2, self.room_width / 2),
+            (self.room_length / 2, self.room_width / 2),
+            (self.room_length / 2, -self.room_width / 2),
+            (-self.room_length / 2, -self.room_width / 2),
             ]):
             if i == 1: # Skip the receptacle corner
                 continue
@@ -545,7 +467,7 @@ class ObjectPushing(gym.Env):
         for obstacle in boundary_dicts:
             if obstacle['type'] == 'divider':
                 (x, y), length, width = obstacle['position'], obstacle['length'], obstacle['width']
-                corner_positions = [(self.cfg.env.room_length / 2, y - width / 2), (self.cfg.env.room_length / 2, y + width / 2)]
+                corner_positions = [(self.room_length / 2, y - width / 2), (self.room_length / 2, y + width / 2)]
                 corner_headings = [-90, 180]
                 for position, heading in zip(corner_positions, corner_headings):
                     heading = np.radians(heading)
@@ -559,17 +481,17 @@ class ObjectPushing(gym.Env):
         return boundary_dicts
 
     def generate_cubes(self):
-        cubes_size = self.cfg.cube_size / 2
+        cubes_size = self.cfg.cubes.cube_size / 2
         cubes = []          # a list storing non-overlapping cube centers
 
-        if self.cfg.randomize_cubes:
-            total_cubes_required = self.cfg.num_cubes
-            self.num_box = self.cfg.num_cubes
-            cube_min_dist = self.cfg.min_cube_dist
-            min_x = self.cfg.min_cube_x
-            max_x = self.cfg.max_cube_x
-            min_y = self.cfg.min_cube_y
-            max_y = self.cfg.max_cube_y
+        if self.cfg.cubes.randomize_cubes:
+            total_cubes_required = self.cfg.cubes.num_cubes
+            self.num_box = self.cfg.cubes.num_cubes
+            cube_min_dist = self.cfg.cubes.min_cube_dist
+            min_x = self.cfg.cubes.min_cube_x
+            max_x = self.cfg.cubes.max_cube_x
+            min_y = self.cfg.cubes.min_cube_y
+            max_y = self.cfg.cubes.max_cube_y
 
             cube_count = 0
             while cube_count < total_cubes_required:
@@ -693,7 +615,7 @@ class ObjectPushing(gym.Env):
         # get initial state
 
         # initial pose
-        robot_initial_position, robot_initial_heading = self.robot.body.position, restrict_heading_range(self.robot.body.angle)
+        robot_initial_position, robot_initial_heading = self.robot.body.position, self.restrict_heading_range(self.robot.body.angle)
         robot_initial_position = list(robot_initial_position)  
 
         # store initial cube distances for partial reward calculation
@@ -703,19 +625,20 @@ class ObjectPushing(gym.Env):
             dist = self.shortest_path_distance(cube_position, self.receptacle_position)
             initial_cube_distances[cube.idx] = dist
 
-        if self.cfg.demo_mode:
+        if self.cfg.teleop_mode:
             self.demo_control(action)
 
             # move simulation forward
             for _ in range(self.steps):
                 self.space.step(self.dt / self.steps)
+                self.render()
 
             # get new robot pose
-            robot_position, robot_heading = self.robot.body.position, restrict_heading_range(self.robot.body.angle)
+            robot_position, robot_heading = self.robot.body.position, self.restrict_heading_range(self.robot.body.angle)
             robot_position = list(robot_position)
             
             # update distance moved
-            robot_distance = distance(robot_initial_position, robot_position)
+            robot_distance = self.distance(robot_initial_position, robot_position)
         
         elif self.cfg.agent.action_type == 'velocity':
             ################################ Velocity Control ################################
@@ -744,11 +667,11 @@ class ObjectPushing(gym.Env):
                     break
             
             # get new robot pose
-            robot_position, robot_heading = self.robot.body.position, restrict_heading_range(self.robot.body.angle)
+            robot_position, robot_heading = self.robot.body.position, self.restrict_heading_range(self.robot.body.angle)
             robot_position = list(robot_position)
             
             # update distance moved
-            robot_distance = distance(robot_initial_position, robot_position)
+            robot_distance = self.distance(robot_initial_position, robot_position)
 
         elif self.cfg.agent.action_type == 'position' or self.cfg.agent.action_type == 'heading':
             if self.cfg.agent.action_type == 'heading':
@@ -764,26 +687,26 @@ class ObjectPushing(gym.Env):
                 y_movement = step_size * np.sin(angle)
 
                 # convert target position to pixel coordinates
-                x_pixel = int(LOCAL_MAP_PIXEL_WIDTH / 2 + x_movement * LOCAL_MAP_PIXELS_PER_METER)
-                y_pixel = int(LOCAL_MAP_PIXEL_WIDTH / 2 - y_movement * LOCAL_MAP_PIXELS_PER_METER)
+                x_pixel = int(self.local_map_pixel_width / 2 + x_movement * self.local_map_pixels_per_meter)
+                y_pixel = int(self.local_map_pixel_width / 2 - y_movement * self.local_map_pixels_per_meter)
 
                 # convert pixel coordinates to a single index
-                action = y_pixel * LOCAL_MAP_PIXEL_WIDTH + x_pixel
+                action = y_pixel * self.local_map_pixel_width + x_pixel
 
             ################################ Position Control ################################
-            robot_action = np.unravel_index(action, (LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH))
+            robot_action = np.unravel_index(action, (self.local_map_pixel_width, self.local_map_pixel_width))
             
             # ****************** Make into function ******************
 
             # compute target position for front of robot:
             # computes distance from front of robot (not center), which is used to find the
             # robot position and heading needed in order to place front over specified location
-            x_movement = -LOCAL_MAP_WIDTH / 2 + float(robot_action[1]) / LOCAL_MAP_PIXELS_PER_METER
-            y_movement = LOCAL_MAP_WIDTH / 2 - float(robot_action[0]) / LOCAL_MAP_PIXELS_PER_METER
+            x_movement = -self.local_map_width / 2 + float(robot_action[1]) / self.local_map_pixels_per_meter
+            y_movement = self.local_map_width / 2 - float(robot_action[0]) / self.local_map_pixels_per_meter
 
             straight_line_dist = np.sqrt(x_movement**2 + y_movement**2)
             turn_angle = np.arctan2(-x_movement, y_movement)
-            straight_line_heading = restrict_heading_range(robot_initial_heading + turn_angle)
+            straight_line_heading = self.restrict_heading_range(robot_initial_heading + turn_angle)
 
             robot_target_front_position = [
                 robot_initial_position[0] + straight_line_dist * np.cos(straight_line_heading),
@@ -793,8 +716,8 @@ class ObjectPushing(gym.Env):
             # bound the robot to the room
             diff = np.asarray(robot_target_front_position) - np.asarray(robot_initial_position)
             ratio_x, ratio_y = (1, 1)
-            bound_x = np.sign(robot_target_front_position[0]) * self.cfg.env.room_length / 2
-            bound_y = np.sign(robot_target_front_position[1]) * self.cfg.env.room_width / 2
+            bound_x = np.sign(robot_target_front_position[0]) * self.room_length / 2
+            bound_y = np.sign(robot_target_front_position[1]) * self.room_width / 2
             if abs(robot_target_front_position[0]) > abs(bound_x):
                 ratio_x = (bound_x - robot_initial_position[0]) / (robot_target_front_position[0] - robot_initial_position[0])
             if abs(robot_target_front_position[1]) > abs(bound_y):
@@ -809,11 +732,11 @@ class ObjectPushing(gym.Env):
             for i in range(1, len(robot_waypoint_positions)):
                 x_diff = robot_waypoint_positions[i][0] - robot_waypoint_positions[i - 1][0]
                 y_diff = robot_waypoint_positions[i][1] - robot_waypoint_positions[i - 1][1]
-                waypoint_headings = restrict_heading_range(np.arctan2(y_diff, x_diff))
+                waypoint_headings = self.restrict_heading_range(np.arctan2(y_diff, x_diff))
                 robot_waypoint_headings.append(waypoint_headings)
             
             # compute movement from final waypoint to the target and apply robot radius offset to the final waypoint
-            dist_to_target_end_effector_position = distance(robot_waypoint_positions[-2], robot_waypoint_positions[-1])
+            dist_to_target_end_effector_position = self.distance(robot_waypoint_positions[-2], robot_waypoint_positions[-1])
             signed_dist = dist_to_target_end_effector_position - self.robot_radius
 
             robot_move_sign = np.sign(signed_dist) # might have to move backwards to get to final position
@@ -829,7 +752,7 @@ class ObjectPushing(gym.Env):
                 robot_waypoint_positions[-2] = robot_waypoint_positions[-1]
                 x_diff = robot_waypoint_positions[-2][0] - robot_waypoint_positions[-3][0]
                 y_diff = robot_waypoint_positions[-2][1] - robot_waypoint_positions[-3][1]
-                waypoint_heading = restrict_heading_range(np.arctan2(y_diff, x_diff))
+                waypoint_heading = self.restrict_heading_range(np.arctan2(y_diff, x_diff))
                 robot_waypoint_headings[-2] = waypoint_heading
                 robot_move_sign = 1
             
@@ -866,7 +789,7 @@ class ObjectPushing(gym.Env):
                 # compute robot pose for new constraint
                 robot_new_position = robot_position.copy()
                 robot_new_heading = robot_heading
-                heading_diff = heading_difference(robot_heading, robot_waypoint_heading)
+                heading_diff = self.heading_difference(robot_heading, robot_waypoint_heading)
                 if np.abs(heading_diff) > TURN_STEP_SIZE and np.abs(heading_diff - prev_heading_diff) > 0.001:
                     # turn towards next waypoint first
                     robot_new_heading += np.sign(heading_diff) * TURN_STEP_SIZE
@@ -874,7 +797,7 @@ class ObjectPushing(gym.Env):
                     done_turning = True
                     dx = robot_waypoint_position[0] - robot_position[0]
                     dy = robot_waypoint_position[1] - robot_position[1]
-                    if distance(robot_position, robot_waypoint_position) < MOVE_STEP_SIZE:
+                    if self.distance(robot_position, robot_waypoint_position) < MOVE_STEP_SIZE:
                         robot_new_position = robot_waypoint_position
                     else:
                         if robot_waypoint_index == len(robot_waypoint_position) - 1:
@@ -893,23 +816,23 @@ class ObjectPushing(gym.Env):
                 self.space.step(self.dt / self.steps)
 
                 # get new robot pose
-                robot_position, robot_heading = self.robot.body.position, restrict_heading_range(self.robot.body.angle)
+                robot_position, robot_heading = self.robot.body.position, self.restrict_heading_range(self.robot.body.angle)
                 robot_position = list(robot_position)
                 prev_heading_diff = heading_diff
 
                 # stop moving if robot collided with obstacle
-                if distance(robot_prev_waypoint_position, robot_position) > MOVE_STEP_SIZE:
+                if self.distance(robot_prev_waypoint_position, robot_position) > MOVE_STEP_SIZE:
                     if self.robot_hit_obstacle:
                         # self.robot_hit_obstacle = False
                         robot_is_moving = False
                         break  # Note: self.robot_distance does not get not updated
                 
                 # stop if robot reached waypoint
-                if (distance(robot_position, robot_waypoint_positions[robot_waypoint_index]) < WAYPOINT_MOVING_THRESHOLD
+                if (self.distance(robot_position, robot_waypoint_positions[robot_waypoint_index]) < WAYPOINT_MOVING_THRESHOLD
                     and np.abs(robot_heading - robot_waypoint_headings[robot_waypoint_index]) < WAYPOINT_TURNING_THRESHOLD):
                     
                     # update distance moved
-                    robot_distance += distance(robot_prev_waypoint_position, robot_position)
+                    robot_distance += self.distance(robot_prev_waypoint_position, robot_position)
 
                     # increment waypoint index or stop moving if done
                     if robot_waypoint_index == len(robot_waypoint_positions) - 1:
@@ -930,9 +853,6 @@ class ObjectPushing(gym.Env):
                 # break if robot is stuck
                 if sim_steps > STEP_LIMIT:
                     break
-
-                if sim_steps % MAP_UPDATE_STEPS == 0:
-                    self.update_global_overhead_map() # NOTE probably don't need
 
         # step the simulation until everything is still
         self.step_simulation_until_still()
@@ -969,8 +889,8 @@ class ObjectPushing(gym.Env):
             robot_reward -= self.collision_penalty
         
         # penalty for small movements
-        robot_heading = restrict_heading_range(self.robot.body.angle)
-        robot_turn_angle = heading_difference(robot_initial_heading, robot_heading)
+        robot_heading = self.restrict_heading_range(self.robot.body.angle)
+        robot_turn_angle = self.heading_difference(robot_initial_heading, robot_heading)
         if robot_distance < NONMOVEMENT_DIST_THRESHOLD and abs(robot_turn_angle) < NONMOVEMENT_TURN_THRESHOLD:
             robot_reward -= self.non_movement_penalty
         
@@ -1048,8 +968,8 @@ class ObjectPushing(gym.Env):
         global_velocity = R(self.robot.body.angle) @ [self.linear_speed, 0]
 
         # apply velocity controller
-        self.robot.body.angular_velocity = self.angular_speed * 5
-        self.robot.body.velocity = Vec2d(global_velocity[0], global_velocity[1]) * 5
+        self.robot.body.angular_velocity = self.angular_speed * 100
+        self.robot.body.velocity = Vec2d(global_velocity[0], global_velocity[1]) * 100
     
     def controller(self, curr_position, curr_heading):
         x = curr_position[0]
@@ -1130,38 +1050,37 @@ class ObjectPushing(gym.Env):
         channels.append(self.robot_state_channel)
         channels.append(self.get_local_distance_map(self.create_global_shortest_path_to_receptacle_map(), self.robot.body.position, self.robot.body.angle))
         channels.append(self.get_local_distance_map(self.create_global_shortest_path_map(self.robot.body.position), self.robot.body.position, self.robot.body.angle))
-        # observation = np.stack(channels)
         observation = np.stack(channels, axis=2)
         observation = (observation * 255).astype(np.uint8)
         return observation
     
     def get_local_overhead_map(self):
         rotation_angle = -np.degrees(self.robot.body.angle) + 90
-        pos_y = int(np.floor(self.global_overhead_map.shape[0] / 2 - self.robot.body.position.y * LOCAL_MAP_PIXELS_PER_METER))
-        pos_x = int(np.floor(self.global_overhead_map.shape[1] / 2 + self.robot.body.position.x * LOCAL_MAP_PIXELS_PER_METER))
-        mask = rotate_image(np.zeros((LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH), dtype=np.float32), rotation_angle, order=0)
+        pos_y = int(np.floor(self.global_overhead_map.shape[0] / 2 - self.robot.body.position.y * self.local_map_pixels_per_meter))
+        pos_x = int(np.floor(self.global_overhead_map.shape[1] / 2 + self.robot.body.position.x * self.local_map_pixels_per_meter))
+        mask = rotate_image(np.zeros((self.local_map_pixel_width, self.local_map_pixel_width), dtype=np.float32), rotation_angle, order=0)
         y_start = pos_y - int(mask.shape[0] / 2)
         y_end = y_start + mask.shape[0]
         x_start = pos_x - int(mask.shape[1] / 2)
         x_end = x_start + mask.shape[1]
         crop = self.global_overhead_map[y_start:y_end, x_start:x_end]
         crop = rotate_image(crop, rotation_angle, order=0)
-        y_start = int(crop.shape[0] / 2 - LOCAL_MAP_PIXEL_WIDTH / 2)
-        y_end = y_start + LOCAL_MAP_PIXEL_WIDTH
-        x_start = int(crop.shape[1] / 2 - LOCAL_MAP_PIXEL_WIDTH / 2)
-        x_end = x_start + LOCAL_MAP_PIXEL_WIDTH
+        y_start = int(crop.shape[0] / 2 - self.local_map_pixel_width / 2)
+        y_end = y_start + self.local_map_pixel_width
+        x_start = int(crop.shape[1] / 2 - self.local_map_pixel_width / 2)
+        x_end = x_start + self.local_map_pixel_width
         return crop[y_start:y_end, x_start:x_end]
     
     def get_local_map(self, global_map, robot_position, robot_heading):
-        crop_width = round_up_to_even(LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2))
+        crop_width = self.round_up_to_even(self.local_map_pixel_width * np.sqrt(2))
         rotation_angle = 90 - np.degrees(robot_heading)
-        pixel_i = int(np.floor(-robot_position[1] * LOCAL_MAP_PIXELS_PER_METER + global_map.shape[0] / 2))
-        pixel_j = int(np.floor(robot_position[0] * LOCAL_MAP_PIXELS_PER_METER + global_map.shape[1] / 2))
+        pixel_i = int(np.floor(-robot_position[1] * self.local_map_pixels_per_meter + global_map.shape[0] / 2))
+        pixel_j = int(np.floor(robot_position[0] * self.local_map_pixels_per_meter + global_map.shape[1] / 2))
         crop = global_map[pixel_i - crop_width // 2:pixel_i + crop_width // 2, pixel_j - crop_width // 2:pixel_j + crop_width // 2]
         rotated_crop = rotate_image(crop, rotation_angle, order=0)
         local_map = rotated_crop[
-            rotated_crop.shape[0] // 2 - LOCAL_MAP_PIXEL_WIDTH // 2:rotated_crop.shape[0] // 2 + LOCAL_MAP_PIXEL_WIDTH // 2,
-            rotated_crop.shape[1] // 2 - LOCAL_MAP_PIXEL_WIDTH // 2:rotated_crop.shape[1] // 2 + LOCAL_MAP_PIXEL_WIDTH // 2
+            rotated_crop.shape[0] // 2 - self.local_map_pixel_width // 2:rotated_crop.shape[0] // 2 + self.local_map_pixel_width // 2,
+            rotated_crop.shape[1] // 2 - self.local_map_pixel_width // 2:rotated_crop.shape[1] // 2 + self.local_map_pixel_width // 2
         ]
         return local_map
     
@@ -1172,19 +1091,19 @@ class ObjectPushing(gym.Env):
 
     def create_padded_room_zeros(self):
         return np.zeros((
-            int(2 * np.ceil((self.cfg.env.room_width * LOCAL_MAP_PIXELS_PER_METER + LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)) / 2)),
-            int(2 * np.ceil((self.cfg.env.room_length * LOCAL_MAP_PIXELS_PER_METER + LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)) / 2))
+            int(2 * np.ceil((self.room_width * self.local_map_pixels_per_meter + self.local_map_pixel_width * np.sqrt(2)) / 2)),
+            int(2 * np.ceil((self.room_length * self.local_map_pixels_per_meter + self.local_map_pixel_width * np.sqrt(2)) / 2))
         ), dtype=np.float32)
 
     def create_global_shortest_path_to_receptacle_map(self):
         global_map = self.create_padded_room_zeros() + np.inf
         (rx, ry) = self.receptacle_position
-        pixel_i, pixel_j = position_to_pixel_indices(rx, ry, self.configuration_space.shape)
+        pixel_i, pixel_j = self.position_to_pixel_indices(rx, ry, self.configuration_space.shape)
         pixel_i, pixel_j = self.closest_valid_cspace_indices(pixel_i, pixel_j)
         shortest_path_image, _ = spfa.spfa(self.configuration_space, (pixel_i, pixel_j))
-        shortest_path_image /= LOCAL_MAP_PIXELS_PER_METER
+        shortest_path_image /= self.local_map_pixels_per_meter
         global_map = np.minimum(global_map, shortest_path_image)
-        global_map /= (np.sqrt(2) * LOCAL_MAP_PIXEL_WIDTH) / LOCAL_MAP_PIXELS_PER_METER
+        global_map /= (np.sqrt(2) * self.local_map_pixel_width) / self.local_map_pixels_per_meter
         global_map *= self.cfg.env.shortest_path_channel_scale
         if self.cfg.env.invert_receptacle_map:
             global_map += 1-self.configuration_space
@@ -1192,11 +1111,11 @@ class ObjectPushing(gym.Env):
         return global_map
     
     def create_global_shortest_path_map(self, robot_position):
-        pixel_i, pixel_j = position_to_pixel_indices(robot_position[0], robot_position[1], self.configuration_space.shape)
+        pixel_i, pixel_j = self.position_to_pixel_indices(robot_position[0], robot_position[1], self.configuration_space.shape)
         pixel_i, pixel_j = self.closest_valid_cspace_indices(pixel_i, pixel_j)
         global_map, _ = spfa.spfa(self.configuration_space, (pixel_i, pixel_j))
-        global_map /= LOCAL_MAP_PIXELS_PER_METER
-        global_map /= (np.sqrt(2) * LOCAL_MAP_PIXEL_WIDTH) / LOCAL_MAP_PIXELS_PER_METER
+        global_map /= self.local_map_pixels_per_meter
+        global_map /= (np.sqrt(2) * self.local_map_pixel_width) / self.local_map_pixels_per_meter
         global_map *= self.cfg.env.shortest_path_channel_scale
         return global_map
     
@@ -1206,7 +1125,7 @@ class ObjectPushing(gym.Env):
         """
 
         obstacle_map = self.create_padded_room_zeros()
-        small_obstacle_map = np.zeros((LOCAL_MAP_PIXEL_WIDTH+20, LOCAL_MAP_PIXEL_WIDTH+20), dtype=np.float32)
+        small_obstacle_map = np.zeros((self.local_map_pixel_width+20, self.local_map_pixel_width+20), dtype=np.float32)
 
         for poly in self.boundaries:
             # get world coordinates of vertices
@@ -1214,9 +1133,9 @@ class ObjectPushing(gym.Env):
             vertices_np = np.array([[v.x, v.y] for v in vertices])
 
             # convert world coordinates to pixel coordinates
-            vertices_px = (vertices_np * LOCAL_MAP_PIXELS_PER_METER).astype(np.int32)
-            vertices_px[:, 0] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
-            vertices_px[:, 1] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
+            vertices_px = (vertices_np * self.local_map_pixels_per_meter).astype(np.int32)
+            vertices_px[:, 0] += int(self.local_map_width * self.local_map_pixels_per_meter / 2) + 10
+            vertices_px[:, 1] += int(self.local_map_width * self.local_map_pixels_per_meter / 2) + 10
             vertices_px[:, 1] = small_obstacle_map.shape[0] - vertices_px[:, 1]
 
             # draw the boundary on the small_obstacle_map
@@ -1227,10 +1146,10 @@ class ObjectPushing(gym.Env):
         obstacle_map[start_i:start_i + small_obstacle_map.shape[0], start_j:start_j + small_obstacle_map.shape[1]] = small_obstacle_map
 
         # Dilate obstacles and walls based on robot size
-        selem = disk(np.floor(self.robot_radius * LOCAL_MAP_PIXELS_PER_METER))
+        selem = disk(np.floor(self.robot_radius * self.local_map_pixels_per_meter))
         self.configuration_space = 1 - binary_dilation(obstacle_map, selem).astype(np.float32)
         
-        selem_thin = disk(np.floor(self.robot_half_width * LOCAL_MAP_PIXELS_PER_METER))
+        selem_thin = disk(np.floor(self.robot_half_width * self.local_map_pixels_per_meter))
         self.configuration_space_thin = 1 - binary_dilation(obstacle_map, selem_thin).astype(np.float32)
 
         self.closest_cspace_indices = distance_transform_edt(1 - self.configuration_space, return_distances=False, return_indices=True)
@@ -1248,9 +1167,9 @@ class ObjectPushing(gym.Env):
             vertices_np = np.array([[v.x, v.y] for v in vertices])
 
             # convert world coordinates to pixel coordinates
-            vertices_px = (vertices_np * LOCAL_MAP_PIXELS_PER_METER).astype(np.int32)
-            vertices_px[:, 0] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
-            vertices_px[:, 1] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
+            vertices_px = (vertices_np * self.local_map_pixels_per_meter).astype(np.int32)
+            vertices_px[:, 0] += int(self.local_map_width * self.local_map_pixels_per_meter / 2) + 10
+            vertices_px[:, 1] += int(self.local_map_width * self.local_map_pixels_per_meter / 2) + 10
             vertices_px[:, 1] = small_overhead_map.shape[0] - vertices_px[:, 1]
 
             # draw the boundary on the small_overhead_map
@@ -1265,20 +1184,13 @@ class ObjectPushing(gym.Env):
         start_i, start_j = int(self.global_overhead_map.shape[0] / 2 - small_overhead_map.shape[0] / 2), int(self.global_overhead_map.shape[1] / 2 - small_overhead_map.shape[1] / 2)
         self.global_overhead_map[start_i:start_i + small_overhead_map.shape[0], start_j:start_j + small_overhead_map.shape[1]] = small_overhead_map
     
-    def cubes_completed(self, cube):
-        if self.cube_position_in_receptacle([cube.body.local_to_world(v) for v in cube.get_vertices()]):
-            self.cumulative_cubes += 1
-            self.space.remove(cube, cube.body)
-            self.cubes.remove(cube)
-            # self.plot.update_obstacles(obstacles=CostMap.get_obs_from_poly(self.cubes), obs_idx=cube.idx, update_patch=True)
-
     def shortest_path(self, source_position, target_position, check_straight=False, configuration_space=None):
         if configuration_space is None:
             configuration_space = self.configuration_space
 
         # convert positions to pixel indices
-        source_i, source_j = position_to_pixel_indices(source_position[0], source_position[1], configuration_space.shape)
-        target_i, target_j = position_to_pixel_indices(target_position[0], target_position[1], configuration_space.shape)
+        source_i, source_j = self.position_to_pixel_indices(source_position[0], source_position[1], configuration_space.shape)
+        target_i, target_j = self.position_to_pixel_indices(target_position[0], target_position[1], configuration_space.shape)
 
         # check if there is a straight line path
         if check_straight:
@@ -1318,7 +1230,7 @@ class ObjectPushing(gym.Env):
         # convert pixel indices back to positions
         path = []
         for coord in coords[::-1]:
-            position_x, position_y = pixel_indices_to_position(coord[0], coord[1], configuration_space.shape)
+            position_x, position_y = self.pixel_indices_to_position(coord[0], coord[1], configuration_space.shape)
             path.append([position_x, position_y])
         
         if len(path) < 2:
@@ -1331,7 +1243,7 @@ class ObjectPushing(gym.Env):
 
     def shortest_path_distance(self, source_position, target_position, configuration_space=None):
         path = self.shortest_path(source_position, target_position, configuration_space=configuration_space)
-        return sum(distance(path[i - 1], path[i]) for i in range(1, len(path)))
+        return sum(self.distance(path[i - 1], path[i]) for i in range(1, len(path)))
     
     def closest_valid_cspace_indices(self, i, j):
         return self.closest_cspace_indices[:, i, j]
@@ -1373,35 +1285,34 @@ class ObjectPushing(gym.Env):
                 # self.state_plot.pause(0.001)
                 self.state_plot.pause(0.1)
 
+    # Helper functions
+    def round_up_to_even(self, x):
+        return int(np.ceil(x / 2) * 2)
 
+    def distance(self, position1, position2):
+        return np.linalg.norm(np.asarray(position1)[:2] - np.asarray(position2)[:2])
+
+    def restrict_heading_range(self, heading):
+        return np.mod(heading + np.pi, 2 * np.pi) - np.pi
+
+    def heading_difference(self, heading1, heading2):
+        return self.restrict_heading_range(heading1 - heading2)
+
+    def position_to_pixel_indices(self, x, y, image_shape):
+        pixel_i = np.floor(image_shape[0] / 2 - y * self.local_map_pixels_per_meter).astype(np.int32)
+        pixel_j = np.floor(image_shape[1] / 2 + x * self.local_map_pixels_per_meter).astype(np.int32)
+        pixel_i = np.clip(pixel_i, 0, image_shape[0] - 1)
+        pixel_j = np.clip(pixel_j, 0, image_shape[1] - 1)
+        return pixel_i, pixel_j
+
+    def pixel_indices_to_position(self, pixel_i, pixel_j, image_shape):
+        position_x = (pixel_j - image_shape[1] / 2) / self.local_map_pixels_per_meter
+        position_y = (image_shape[0] / 2 - pixel_i) / self.local_map_pixels_per_meter
+        return position_x, position_y
+    
     def close(self):
         """Optional: close any resources or cleanup if necessary."""
         plt.close('all')
         if self.cfg.render.show:
             self.renderer.close()
 
-
-# Helper functions
-def round_up_to_even(x):
-    return int(np.ceil(x / 2) * 2)
-
-def distance(position1, position2):
-    return np.linalg.norm(np.asarray(position1)[:2] - np.asarray(position2)[:2])
-
-def restrict_heading_range(heading):
-    return np.mod(heading + np.pi, 2 * np.pi) - np.pi
-
-def heading_difference(heading1, heading2):
-    return restrict_heading_range(heading1 - heading2)
-
-def position_to_pixel_indices(x, y, image_shape):
-    pixel_i = np.floor(image_shape[0] / 2 - y * LOCAL_MAP_PIXELS_PER_METER).astype(np.int32)
-    pixel_j = np.floor(image_shape[1] / 2 + x * LOCAL_MAP_PIXELS_PER_METER).astype(np.int32)
-    pixel_i = np.clip(pixel_i, 0, image_shape[0] - 1)
-    pixel_j = np.clip(pixel_j, 0, image_shape[1] - 1)
-    return pixel_i, pixel_j
-
-def pixel_indices_to_position(pixel_i, pixel_j, image_shape):
-    position_x = (pixel_j - image_shape[1] / 2) / LOCAL_MAP_PIXELS_PER_METER
-    position_y = (image_shape[0] / 2 - pixel_i) / LOCAL_MAP_PIXELS_PER_METER
-    return position_x, position_y
