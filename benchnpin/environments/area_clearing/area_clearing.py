@@ -35,11 +35,11 @@ R = lambda theta: np.asarray([
 ])
 
 BOUNDARY_PENALTY = -0.5
-BOX_PUTBACK_PENALTY = -20
+BOX_PUTBACK_PENALTY = -10
 TRUNCATION_PENALTY = 0
 TERMINAL_REWARD = 50
 BOX_CLEARED_REWARD = 10
-BOX_PUSHING_REWARD_MULTIPLIER = 0.2
+BOX_PUSHING_REWARD_MULTIPLIER = 0.3
 # TIME_PENALTY = -0.01
 TIME_PENALTY = 0
 
@@ -613,7 +613,7 @@ class AreaClearingEnv(gym.Env):
         updated_obstacles = CostMap.get_obs_from_poly(self.box_shapes)
         num_completed, all_boxes_completed = self.boxes_completed(updated_obstacles, self.boundary_polygon, self.box_clearance_statuses)
         
-        diff_reward = obs_to_goal_difference(self.prev_obs, updated_obstacles, self.goal_points, self.boundary_polygon) * BOX_PUSHING_REWARD_MULTIPLIER
+        diff_reward = obs_to_goal_difference(self.prev_obs, updated_obstacles, self.goal_points, self.boundary_polygon)
         pushing_reward = diff_reward * BOX_PUSHING_REWARD_MULTIPLIER
         movement_reward = 0 if abs(diff_reward) > 0 else TIME_PENALTY
 

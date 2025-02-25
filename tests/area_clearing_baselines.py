@@ -11,11 +11,11 @@ import os
 
 # ========================= PPO Policy =====================================
 ppo_policy = AreaClearingPPO()
-ppo_policy.train(total_timesteps=int(4e5), checkpoint_freq=10000)
+ppo_policy.train(total_timesteps=int(5e5), checkpoint_freq=10000)
 evaluations = ppo_policy.evaluate(num_eps=5)
 
 # ppo_policy = AreaClearingPPO(model_path='/Storage2/m5ramesh/git/BenchNPIN/benchnpin/baselines/area_clearing/ppo/final_models/clear_env_small/')
-# evaluations = ppo_policy.evaluate(num_eps=5, model_eps='280000') # For small - 280000 Intuitively performing model! For large - V2-260000 is pretty close
+# evaluations = ppo_policy.evaluate(num_eps=5, model_eps='240000') # For small - 280000 Intuitively performing model! For large - V2-260000 is pretty close
 print("PPO Eval: ", evaluations)
 
 
