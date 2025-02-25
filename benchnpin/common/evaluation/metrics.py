@@ -9,6 +9,8 @@ from skimage.draw import draw
 from benchnpin.common.geometry.polygon import poly_area, poly_centroid
 from benchnpin.common.swath import compute_swath_cost
 
+from shapely.geometry import Polygon
+
 __all__ = [
     'min_obs_dist',
     'path_smoothness',
@@ -68,6 +70,28 @@ def min_obs_dist(costmap: np.ndarray, ship_pos: Collection, ship_vertices: np.nd
     # distance of 0 means ship is in collision with an obstacle
     return min(dist[rr, cc])
 
+def obs_to_goal_difference(obs_initial, obs_final, goal_points, boundary_polygon=None):
+    """
+    Computes the difference between the initial and final obstacles and the goal
+    """
+    total_diff = 0
+    
+    for ob_a, ob_b in zip(obs_initial, obs_final):
+        if(boundary_polygon is not None and type(boundary_polygon) == Polygon):
+            ob_a_polygon = Polygon(ob_a)
+            if(not boundary_polygon.contains(ob_a_polygon)):
+                continue
+
+        min_a_dist, min_b_dist = np.inf, np.inf
+        centre_a = poly_centroid(ob_a)
+        centre_b = poly_centroid(ob_b)
+        for point in goal_points:
+            min_a_dist = min(min_a_dist, euclid_dist(centre_a, (point.x, point.y)))
+            min_b_dist = min(min_b_dist, euclid_dist(centre_b, (point.x, point.y)))
+        
+        total_diff += min_a_dist - min_b_dist
+
+    return total_diff
 
 def total_work_done(obs_initial, obs_final, debug=False):
     """

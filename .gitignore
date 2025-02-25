@@ -27,3 +27,9 @@ venv/
 
 *.gtsp
 tour.txt
+
+events.out*
+
+*.pkl
+*.zip
+.DS_Store

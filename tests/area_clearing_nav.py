@@ -17,7 +17,7 @@ env = env.unwrapped
 # initialize RL policy
 policy = PlanningBasedPolicy()
 
-total_dist_reward = 0
+total_diff_reward = 0
 total_col_reward = 0
 total_scaled_col_reward = 0
 
@@ -33,17 +33,23 @@ for eps_idx in range(total_episodes):
     # start a new rollout
     while True:
         # call planning based policy
-        action = policy.act(observation=(observation / 255).astype(np.float64), agent_pos=info['state'], obstacles=obstacles)
+        action = policy.act(observation=(observation).astype(np.float64), agent_pos=info['state'], obstacles=obstacles)
         env.update_path(policy.path)
 
-        observation, reward, terminated, truncated, info = env.step(action)
+        if env.cfg.agent.action_type == 'velocity':
+            scaled_action = [action[0] / env.target_speed, action[1] / env.max_yaw_rate_step]
+        else:
+            print('Invalid action type. Must use velocity control')
+
+        observation, reward, terminated, truncated, info = env.step(scaled_action)
+
         obstacles = info['obs']
         env.render()
 
         # print("reward: ", reward, "; dist reward: ", info['dist reward'], "; col reward: ", info['collision reward'], "; col reward scaled: ", info['scaled collision reward'])
-        total_dist_reward += info['dist reward']
+        total_diff_reward += info['diff reward']
         total_col_reward += info['collision reward']
-        total_scaled_col_reward += info['scaled collision reward']
+        # total_scaled_col_reward += info['scaled collision reward']
 
         if terminated or truncated:
             print('Terminated:', terminated)
@@ -51,4 +57,4 @@ for eps_idx in range(total_episodes):
             policy.reset()
             break
 
-print(total_dist_reward, total_col_reward, total_scaled_col_reward)
+print(total_diff_reward, total_col_reward, total_scaled_col_reward)
