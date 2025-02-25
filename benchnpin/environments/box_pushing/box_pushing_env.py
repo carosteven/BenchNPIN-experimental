@@ -869,6 +869,8 @@ class BoxPushingEnv(gym.Env):
         for cube in self.cubes:
             dist_moved = initial_cube_distances[cube.idx] - final_cube_distances[cube.idx]
             cubes_distance += dist_moved
+            if self.cfg.train.use_correct_direction_reward and dist_moved > 0:
+                dist_moved *= self.cfg.rewards.correct_direction_reward_scale
             robot_reward += self.partial_rewards_scale * dist_moved
 
         # reward for cubes in receptacle

@@ -14,7 +14,7 @@
 # We also recommend users to create a symlink of the checkpoint dir so your
 # training code stays the same with regards to different job IDs and it would
 # be easier to navigate the checkpoint directory
-ln -sfn /checkpoint/${USER}/${SLURM_JOB_ID} $PWD/benchnpin/baselines/box_pushing/sam/checkpoint/${SLURM_JOB_ID}
+ln -sfn /checkpoint/${USER}/${SLURM_JOB_ID} $PWD/benchnpin/baselines/box_pushing/sac/checkpoint/${SLURM_JOB_ID}
 
 
 # In the future, the checkpoint directory will be removed immediately after the
