@@ -1,4 +1,4 @@
-from benchnpin.common.merics.base_metric import BaseMetric
+from benchnpin.common.metrics.base_metric import BaseMetric
 import numpy as np
 
 

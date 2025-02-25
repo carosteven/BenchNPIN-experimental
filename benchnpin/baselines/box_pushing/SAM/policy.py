@@ -1,6 +1,6 @@
 from benchnpin.baselines.base_class import BasePolicy
 from benchnpin.baselines.feature_extractors import DenseActionSpaceDQN
-from benchnpin.common.merics.box_pushing_metric import BoxPushingMetric
+from benchnpin.common.metrics.box_pushing_metric import BoxPushingMetric
 import benchnpin.environments
 import gymnasium as gym
 from collections import namedtuple
@@ -390,13 +390,18 @@ class BoxPushingSAM(BasePolicy):
 
 
 
-    def evaluate(self, num_eps: int, model_eps: str ='latest'):
+    def evaluate(self, obstacle_config: str, num_eps: int, model_eps: str ='latest'):
         if self.cfg is not None:
             env = gym.make('box-pushing-v0', cfg_file=self.cfg)
         else:
             env = gym.make('box-pushing-v0')
         env = env.unwrapped
-        metric = BoxPushingMetric(alg_name="SAM", robot_mass=env.cfg.robot.mass)
+
+        env.cfg.env.obstacle_config = obstacle_config
+        env.cfg.env.room_width = 5 if obstacle_config.split('_')[0] == 'small' else 10
+        env.cfg.cubes.num_cubes = 10 if obstacle_config.split('_')[0] == 'small' else 20
+
+        metric = BoxPushingMetric(alg_name="SAM", robot_mass=env.cfg.agent.mass)
 
         checkpoint_dir = os.path.join(os.path.dirname(__file__), f'checkpoint/')
         model_path = f'{checkpoint_dir}/{self.model_name}.pt'
@@ -418,7 +423,7 @@ class BoxPushingSAM(BasePolicy):
             while True:
                 action, _ = self.model.step(obs)
                 obs, reward, done, truncated, info = env.step(action)
-                metric.update(info=info, reward=reward, eps_complete=(done or truncated))
+                metric.update(info=info, eps_complete=(done or truncated))
                 if done or truncated:
                     break
         

@@ -3,7 +3,7 @@ import gymnasium as gym
 from benchnpin.baselines.ship_ice_nav.planning_based.planners.lattice import LatticePlanner
 from benchnpin.baselines.ship_ice_nav.planning_based.planners.predictive import PredictivePlanner
 from benchnpin.baselines.base_class import BasePolicy
-from benchnpin.common.merics.ship_ice_metric import ShipIceMetric
+from benchnpin.common.metrics.ship_ice_metric import ShipIceMetric
 from benchnpin.common.controller.dp import DP
 from typing import List, Tuple
 import numpy as np
