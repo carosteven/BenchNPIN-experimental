@@ -43,7 +43,7 @@ agent:
   padding: 0.25  # adds padding to ship footprint
   length: 1.38  # length of the NRC ship in meters
   width: 2.4
-  action_type: 'heading'
+  action_type: 'position' # options are 'velocity', 'heading', 'position'
   # action_type: 'velocity'
   movement_step_size: 1.5 # If action type is heading, this is the distance to move in that heading
   vertices: [
@@ -59,7 +59,7 @@ agent:
 ### SIMULATION PARAMS
 render:
   log_obs: false       # whether to log occupancy observation
-  show: true                # if true show animation plots
+  show: false                # if true show animation plots
 sim:
   t_max: 512  # max number of iterations in simulation loop (originally 5000)
   steps: 100    # number of simulation steps per iteration (originally 10)

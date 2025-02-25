@@ -139,7 +139,7 @@ class DenseActionSpacePolicy:
             info['output'] = output.squeeze(0)
         return action, info
 
-class BoxPushingSAM(BasePolicy):
+class AreaClearingSAM(BasePolicy):
 
     def __init__(self, model_name='sam_model', model_path=None, cfg=None) -> None:
         super().__init__()
