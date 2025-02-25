@@ -78,9 +78,6 @@ class BoxPushingEnv(gym.Env):
         self.cfg = cfg
 
         # environment
-        self.room_length = self.cfg.env.room_length
-        self.room_width = self.cfg.env.room_width
-        self.wall_thickness = self.cfg.env.wall_thickness
         self.local_map_pixel_width = self.cfg.env.local_map_pixel_width
         self.local_map_width = self.cfg.env.local_map_width
         self.local_map_pixels_per_meter = self.local_map_pixel_width / self.local_map_width
@@ -94,12 +91,15 @@ class BoxPushingEnv(gym.Env):
         self.configuration_space_thin = None
         self.closest_cspace_indices = None
 
-        # robot
+        # stats
+        self.inactivity_counter = None
+        self.cubes_cumulative_distance = None
         self.robot_cumulative_distance = None
         self.robot_cumulative_cubes = None
         self.robot_cumulative_reward = None
+        
+        # robot
         self.robot_hit_obstacle = False
-
         self.robot_info = self.cfg.agent
         self.robot_info['color'] = get_color('red')
         self.robot_radius = ((self.robot_info.length**2 + self.robot_info.width**2)**0.5 / 2) * 1.2
@@ -123,14 +123,6 @@ class BoxPushingEnv(gym.Env):
         self.ministep_size = self.cfg.misc.ministep_size
         self.inactivity_cutoff = self.cfg.misc.inactivity_cutoff
         # self.random_seed = self.cfg.misc.random_seed
-        # self.use_gui = self.cfg.misc.use_gui
-        # self.show_obs = self.cfg.misc.show_obs
-
-        self.inactivity_counter = None
-
-        self.env_max_trial = 4000
-
-        self.beta = 500         # amount to scale the collision reward
 
         self.episode_idx = None
 
@@ -189,6 +181,10 @@ class BoxPushingEnv(gym.Env):
         self.space.gravity = self.cfg.sim.gravity
         self.space.damping = self.cfg.sim.damping
 
+        self.room_length = self.cfg.env.room_length
+        self.room_width = self.cfg.env.room_width
+        self.wall_thickness = self.cfg.env.wall_thickness
+
         def robot_boundary_pre_solve(arbiter, space, data):
             self.robot_hit_obstacle = self.prevent_boundary_intersection(arbiter)
             return True
@@ -234,7 +230,7 @@ class BoxPushingEnv(gym.Env):
         self.boundary_dicts = self.generate_boundary()
         self.cubes_dicts = self.generate_cubes()
 
-        # initialize ship sim objects
+        # initialize sim objects
         self.robot = generate_sim_agent(self.space, self.robot_info, label='robot', body_type=pymunk.Body.KINEMATIC)
         self.cubes = generate_sim_cubes(self.space, self.cubes_dicts, self.cfg.cubes.cube_density)
         self.boundaries = generate_sim_bounds(self.space, self.boundary_dicts)
@@ -573,6 +569,7 @@ class BoxPushingEnv(gym.Env):
 
         # reset stats
         self.inactivity_counter = 0
+        self.cubes_cumulative_distance = 0
         self.robot_cumulative_distance = 0
         self.robot_cumulative_cubes = 0
         self.robot_cumulative_reward = 0
@@ -591,6 +588,7 @@ class BoxPushingEnv(gym.Env):
         info = {
             'ministeps': 0,
             'inactivity': self.inactivity_counter,
+            'cumulative_cube_distance': self.cubes_cumulative_distance,
             'cumulative_distance': self.robot_cumulative_distance,
             'cumulative_cubes': self.robot_cumulative_cubes,
             'cumulative_reward': self.robot_cumulative_reward,
@@ -867,8 +865,10 @@ class BoxPushingEnv(gym.Env):
         # Rewards
 
         # partial reward for moving cubes towards receptacle
+        cubes_distance = 0
         for cube in self.cubes:
             dist_moved = initial_cube_distances[cube.idx] - final_cube_distances[cube.idx]
+            cubes_distance += dist_moved
             robot_reward += self.partial_rewards_scale * dist_moved
 
         # reward for cubes in receptacle
@@ -896,6 +896,7 @@ class BoxPushingEnv(gym.Env):
         
         ############################################################################################################
         # Compute stats
+        self.cubes_cumulative_distance += cubes_distance
         self.robot_cumulative_distance += robot_distance
         self.robot_cumulative_cubes += robot_cubes
         self.robot_cumulative_reward += robot_reward
@@ -921,6 +922,7 @@ class BoxPushingEnv(gym.Env):
         info = {
             'ministeps': ministeps,
             'inactivity': self.inactivity_counter,
+            'cumulative_cube_distance': self.cubes_cumulative_distance,
             'cumulative_distance': self.robot_cumulative_distance,
             'cumulative_cubes': self.robot_cumulative_cubes,
             'cumulative_reward': self.robot_cumulative_reward,

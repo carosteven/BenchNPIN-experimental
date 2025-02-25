@@ -89,7 +89,6 @@ agent:
 ### ENVIRONMENT PARAMS
 env:
   obstacle_config: large_divider # options are small_empty, small_columns, large_columns, large_divider
-  obstacle_config: large_divider # options are small_empty, small_columns, large_columns, large_divider
   room_length: 10
   room_width: 10 # 5 for small, 10 for large
   receptacle_width: 1.5
@@ -111,6 +110,7 @@ rewards:
   non_movement_penalty: 0.25
 
 train:
+  train_mode: false
   job_type: 'sam'
   job_name: 'ld'
   batch_size: 32
@@ -131,3 +131,19 @@ train:
   use_double_dqn: true
   verbose: 2
   weight_decay: 0.0001
+
+evaluate:
+  eval_mode: true
+  num_eps: 20
+  models: [
+            small_empty,
+            small_columns,
+            large_columns,
+            large_divider
+          ]
+  obs_configs: [
+                small_empty,
+                small_columns,
+                large_columns,
+                large_divider
+              ]
