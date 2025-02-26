@@ -34,12 +34,13 @@ R = lambda theta: np.asarray([
     [np.sin(theta), np.cos(theta)]
 ])
 
-BOUNDARY_PENALTY = -0.5
-BOX_PUTBACK_PENALTY = -20
+BOUNDARY_PENALTY = -0.25
+BOX_PUTBACK_PENALTY = -1
 TRUNCATION_PENALTY = 0
-TERMINAL_REWARD = 50
-BOX_CLEARED_REWARD = 10
+TERMINAL_REWARD = 0
+BOX_CLEARED_REWARD = 1
 BOX_PUSHING_REWARD_MULTIPLIER = 0.2
+NONMOVEMENT_PENALTY = -0.25
 # TIME_PENALTY = -0.01
 TIME_PENALTY = 0
 
@@ -70,6 +71,8 @@ MOVE_STEP_SIZE = 0.05
 TURN_STEP_SIZE = np.radians(15)
 WAYPOINT_MOVING_THRESHOLD = 0.6
 WAYPOINT_TURNING_THRESHOLD = np.radians(10)
+NONMOVEMENT_DIST_THRESHOLD = 0.05
+NONMOVEMENT_TURN_THRESHOLD = np.radians(0.05)
 # STEP_LIMIT = 500
 STEP_LIMIT = 5000
 MAP_UPDATE_STEPS = 250
@@ -643,7 +646,7 @@ class AreaClearingEnv(gym.Env):
             if self.cfg.render.show:
                 self.renderer.update_path(self.path)
 
-            self.execute_robot_path(robot_initial_position, robot_initial_heading, robot_move_sign)
+            robot_distance, robot_turn_angle = self.execute_robot_path(robot_initial_position, robot_initial_heading, robot_move_sign)
 
         # move simulation forward
         for _ in range(self.steps):
@@ -655,17 +658,23 @@ class AreaClearingEnv(gym.Env):
         updated_obstacles = CostMap.get_obs_from_poly(self.box_shapes)
         num_completed, all_boxes_completed = self.boxes_completed(updated_obstacles, self.boundary_polygon, self.box_clearance_statuses)
         
-        diff_reward = obs_to_goal_difference(self.prev_obs, updated_obstacles, self.goal_points, self.boundary_polygon) * BOX_PUSHING_REWARD_MULTIPLIER
+        diff_reward = obs_to_goal_difference(self.prev_obs, updated_obstacles, self.goal_points, self.boundary_polygon)
         pushing_reward = diff_reward * BOX_PUSHING_REWARD_MULTIPLIER
         movement_reward = 0 if abs(diff_reward) > 0 else TIME_PENALTY
 
         if(num_completed >= self.cleared_box_count):
             box_completion_reward = abs(num_completed - self.cleared_box_count) * BOX_CLEARED_REWARD
+            self.t = 0 # reset time if box is cleared
         else:
             box_completion_reward = abs(num_completed - self.cleared_box_count) * BOX_PUTBACK_PENALTY
         if(self.cleared_box_count != num_completed):
             print("Boxes completed: ", num_completed)            
             self.cleared_box_count = num_completed
+        
+        # nonmovement penalty
+        nonmovement_penalty = 0
+        if robot_distance < NONMOVEMENT_DIST_THRESHOLD and abs(robot_turn_angle) < NONMOVEMENT_TURN_THRESHOLD:
+            nonmovement_penalty = NONMOVEMENT_PENALTY
 
         ### compute work done
         work = total_work_done(self.prev_obs, updated_obstacles)
@@ -682,7 +691,7 @@ class AreaClearingEnv(gym.Env):
         else:
             terminated = False
 
-        reward = box_completion_reward + collision_penalty + pushing_reward
+        reward = box_completion_reward + collision_penalty + pushing_reward + nonmovement_penalty
         truncated = self.t >= self.t_max
 
         # apply constraint penalty
@@ -693,6 +702,8 @@ class AreaClearingEnv(gym.Env):
             reward += TERMINAL_REWARD
         
         done = terminated or truncated
+        ministep_size = 2.5
+        ministeps = robot_distance / ministep_size
 
         # Optionally, we can add additional info
         info = {'state': (round(self.agent.body.position.x, 2),
@@ -703,7 +714,8 @@ class AreaClearingEnv(gym.Env):
                 'diff reward': diff_reward,
                 'box completed reward': box_completion_reward, 
                 'obs': updated_obstacles,
-                'box_count': num_completed}
+                'box_count': num_completed,
+                'ministeps': ministeps,}
         
         # generate observation
         if self.low_dim_state:
@@ -838,6 +850,10 @@ class AreaClearingEnv(gym.Env):
 
             if sim_steps % MAP_UPDATE_STEPS == 0:
                 self.update_global_overhead_map()
+        
+        robot_heading = restrict_heading_range(self.agent.body.angle)
+        robot_turn_angle = heading_difference(robot_initial_heading, robot_heading)
+        return robot_distance, robot_turn_angle
 
     def apply_controller(self, omega, v):
         self.agent.body.angular_velocity = omega / 2

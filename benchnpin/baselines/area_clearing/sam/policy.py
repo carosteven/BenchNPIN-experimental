@@ -250,7 +250,8 @@ class AreaClearingSAM(BasePolicy):
 
         # create environment
         if self.cfg is not None:
-            env = gym.make('area-clearing-v0', cfg_file=self.cfg)
+            # env = gym.make('area-clearing-v0', cfg_file=self.cfg)
+            env = gym.make('area-clearing-v0')
         else:
             env = gym.make('area-clearing-v0')
         env = env.unwrapped
@@ -337,22 +338,22 @@ class AreaClearingSAM(BasePolicy):
             ################################################################################
             # Logging
             # meters
-            meters.update('step_time', step_time)
-            if timestep >= learning_starts:
-                for name, val in train_info.items():
-                    meters.update(name, val)
+            # meters.update('step_time', step_time)
+            # if timestep >= learning_starts:
+            #     for name, val in train_info.items():
+            #         meters.update(name, val)
             
-            if done:
-                for name in meters.get_names():
-                    train_summary_writer.add_scalar(name, meters.avg(name), timestep + 1)
-                eta_seconds = meters.avg('step_time') * (total_timesteps_with_warmup - timestep)
-                meters.reset()
+            # if done:
+            #     for name in meters.get_names():
+            #         train_summary_writer.add_scalar(name, meters.avg(name), timestep + 1)
+            #     eta_seconds = meters.avg('step_time') * (total_timesteps_with_warmup - timestep)
+            #     meters.reset()
 
-                train_summary_writer.add_scalar('episodes', episode, timestep + 1)
-                train_summary_writer.add_scalar('eta_hours', eta_seconds / 3600, timestep + 1)
+            #     train_summary_writer.add_scalar('episodes', episode, timestep + 1)
+            #     train_summary_writer.add_scalar('eta_hours', eta_seconds / 3600, timestep + 1)
 
-                for name in ['cumulative_cubes', 'cumulative_distance', 'cumulative_reward']:
-                    train_summary_writer.add_scalar(name, info[name], timestep + 1)
+            #     for name in ['cumulative_cubes', 'cumulative_distance', 'cumulative_reward']:
+            #         train_summary_writer.add_scalar(name, info[name], timestep + 1)
 
             ################################################################################
             # Checkpoint

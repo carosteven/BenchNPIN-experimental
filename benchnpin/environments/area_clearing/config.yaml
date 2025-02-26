@@ -61,7 +61,8 @@ render:
   log_obs: false       # whether to log occupancy observation
   show: false                # if true show animation plots
 sim:
-  t_max: 512  # max number of iterations in simulation loop (originally 5000)
+  # t_max: 512  # max number of iterations in simulation loop (originally 5000)
+  t_max: 100
   steps: 100    # number of simulation steps per iteration (originally 10)
   gravity: !!python/tuple
     - 0
@@ -103,3 +104,27 @@ controller:
     - [ 5, 0, 5 ]
     - [ 10, 0, 20 ]
     - [ 10, 0, 20 ]
+
+train:
+  train_mode: true
+  job_type: 'sam'
+  job_name: 'ac'
+  batch_size: 32
+  checkpoint_freq: 6000
+  exploration_timesteps: 6000
+  final_exploration: 0.01
+  gamma: 0.99
+  grad_norm_clipping: 10
+  job_id_to_resume: null
+  learning_rate: 0.01
+  learning_starts: 1000
+  n_epochs: 10
+  n_steps: 256
+  replay_buffer_size: 10000
+  resume_training: false
+  target_update_freq: 1000
+  total_timesteps: 60000
+  use_correct_direction_reward: false
+  use_double_dqn: true
+  verbose: 2
+  weight_decay: 0.0001
