@@ -100,7 +100,7 @@ class DenseActionSpacePolicy:
             if resume_training:
                 model_path = os.path.join(os.path.dirname(__file__), f'checkpoint/{job_id_to_resume}/model-{model_name}.pt')
             elif evaluate:
-                model_path = os.path.join(os.path.dirname(__file__), f'models_to_test/{model_name}.pt')
+                model_path = os.path.join(os.path.dirname(__file__), f'models/{model_name}.pt')
             else:
                 checkpoint_dir = os.path.dirname(checkpoint_path)
                 model_path = f'{checkpoint_dir}/model-{self.model_name}.pt'
@@ -391,18 +391,14 @@ class AreaClearingSAM(BasePolicy):
 
 
 
-    def evaluate(self, obstacle_config: str, num_eps: int, model_eps: str ='latest'):
+    def evaluate(self, num_eps: int, model_eps: str ='latest'):
         if self.cfg is not None:
-            env = gym.make('area-clearing-v0', cfg_file=self.cfg)
+            env = gym.make('area-clearing-v0')
         else:
             env = gym.make('area-clearing-v0')
         env = env.unwrapped
 
-        env.cfg.env.obstacle_config = obstacle_config
-        env.cfg.env.room_width = 5 if obstacle_config.split('_')[0] == 'small' else 10
-        env.cfg.cubes.num_cubes = 10 if obstacle_config.split('_')[0] == 'small' else 20
-
-        metric = BoxPushingMetric(alg_name="SAM", robot_mass=env.cfg.agent.mass)
+        # metric = BoxPushingMetric(alg_name="SAM", robot_mass=env.cfg.agent.mass)
 
         checkpoint_dir = os.path.join(os.path.dirname(__file__), f'checkpoint/')
         model_path = f'{checkpoint_dir}/{self.model_name}.pt'
@@ -418,19 +414,19 @@ class AreaClearingSAM(BasePolicy):
         for eps_idx in range(num_eps):
             print("Progress: ", eps_idx, " / ", num_eps, " episodes")
             obs, info = env.reset()
-            metric.reset(info)
+            # metric.reset(info)
             done = truncated = False
             eps_reward = 0.0
             while True:
                 action, _ = self.model.step(obs)
                 obs, reward, done, truncated, info = env.step(action)
-                metric.update(info=info, eps_complete=(done or truncated))
+                # metric.update(info=info, eps_complete=(done or truncated))
                 if done or truncated:
                     break
         
         env.close()
-        metric.plot_scores(save_fig_dir=env.cfg.output_dir)
-        return metric.efficiency_scores, metric.effort_scores, metric.rewards, "SAM"
+        # metric.plot_scores(save_fig_dir=env.cfg.output_dir)
+        # return metric.efficiency_scores, metric.effort_scores, metric.rewards, "SAM"
 
 
     

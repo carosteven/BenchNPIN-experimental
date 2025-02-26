@@ -3,10 +3,13 @@ An example script for training and evaluating baselines for ship ice navigation
 Uncomment the code blocks to train/evaluate each baseline algorithms
 """
 import argparse
+import argparse
 from benchnpin.baselines.area_clearing.ppo.policy import AreaClearingPPO
 from benchnpin.baselines.area_clearing.sac.policy import AreaClearingSAC
 from benchnpin.baselines.area_clearing.td3.policy import AreaClearingTD3
 from benchnpin.baselines.area_clearing.sam.policy import AreaClearingSAM
+from benchnpin.common.utils.utils import DotDict
+from os.path import dirname
 from benchnpin.common.utils.utils import DotDict
 from os.path import dirname
 
@@ -25,6 +28,8 @@ def main(args):
             model_name = cfg.train.job_id_to_resume
         else:
             model_name = f'{cfg.train.job_name}_{args.job_id}'
+    elif cfg.evaluate.eval_mode:
+        model_name = cfg.evaluate.model
     # ========================= PPO Policy =====================================
     # ppo_policy = AreaClearingPPO()
     # ppo_policy.train(total_timesteps=int(4e5), checkpoint_freq=10000)
@@ -50,7 +55,8 @@ def main(args):
 
     # ========================= SAM Policy =====================================
     sam_policy = AreaClearingSAM(model_name=model_name, cfg=args.config_file)
-    sam_policy.train(job_id=args.job_id, **cfg.train)
+    # sam_policy.train(job_id=args.job_id, **cfg.train)
+    evaluations = sam_policy.evaluate(num_eps=5)
     # evaluations = td3_policy.evaluate(num_eps=5, model_eps='latest')
     # print("PPO Eval: ", evaluations)
 

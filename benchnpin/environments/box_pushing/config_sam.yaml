@@ -17,8 +17,8 @@ fixed_trial_idx: 1
 ### SIMULATION PARAMS
 render:
   log_obs: false        # whether to log occupancy observation
-  show: false            # if true show animation plots
-  show_obs: false       # if true show occupancy observation
+  show: true            # if true show animation plots
+  show_obs: true       # if true show occupancy observation
   frequency: 20         # frequency of rendering
 sim:
   t_max: 2000  # max number of iterations in simulation loop (originally 5000)
@@ -62,7 +62,7 @@ controller:
 
 cubes:
   randomize_cubes: true
-  num_cubes: 20
+  num_cubes: 10
   cube_size: 0.44
   min_cube_dist: 0.62       # minimum cube distance during random initialization
   max_cube_x: 4
@@ -88,9 +88,9 @@ agent:
 
 ### ENVIRONMENT PARAMS
 env:
-  obstacle_config: large_divider # options are small_empty, small_columns, large_columns, large_divider
+  obstacle_config: small_empty # options are small_empty, small_columns, large_columns, large_divider
   room_length: 10
-  room_width: 10 # 5 for small, 10 for large
+  room_width: 5 # 5 for small, 10 for large
   receptacle_width: 1.5
   shortest_path_channel_scale: 0.25
   local_map_pixel_width: 96
