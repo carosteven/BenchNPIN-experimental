@@ -16,37 +16,37 @@ from os.path import dirname
 import os
 
 def main(args):
-    # cfg = DotDict.load_from_file(args.config_file)
-    # if cfg.train.train_mode:
-    # #     for cfg_key in ['train', 'env', 'agent', 'rewards']:
-    # #         info = getattr(cfg, cfg_key).items()
-    # #         print(f'\n{cfg_key.upper()} CONFIGURATION')
-    # #         for key, value in info:
-    # #             print(f'{key}: {value}')
+    cfg = DotDict.load_from_file(args.config_file)
+    if cfg.train.train_mode:
+    #     for cfg_key in ['train', 'env', 'agent', 'rewards']:
+    #         info = getattr(cfg, cfg_key).items()
+    #         print(f'\n{cfg_key.upper()} CONFIGURATION')
+    #         for key, value in info:
+    #             print(f'{key}: {value}')
 
-    #     if cfg.train.resume_training:
-    #         model_name = cfg.train.job_id_to_resume
-    #     else:
-    #         model_name = f'{cfg.train.job_name}_{args.job_id}'
-    # elif cfg.evaluate.eval_mode:
-    #     model_name = cfg.evaluate.model
+        if cfg.train.resume_training:
+            model_name = cfg.train.job_id_to_resume
+        else:
+            model_name = f'{cfg.train.job_name}_{args.job_id}'
+    elif cfg.evaluate.eval_mode:
+        model_name = cfg.evaluate.model
 
 
     # ========================= PPO Policy =====================================
-    ppo_policy = AreaClearingPPO()
-    ppo_policy.train(total_timesteps=int(5e5), checkpoint_freq=10000, from_model_eps='260000')
-    evaluations = ppo_policy.evaluate(num_eps=5)
+    # ppo_policy = AreaClearingPPO()
+    # ppo_policy.train(total_timesteps=int(5e5), checkpoint_freq=10000, from_model_eps='260000')
+    # evaluations = ppo_policy.evaluate(num_eps=5)
 
-    # ppo_policy = AreaClearingPPO(model_path='/Storage2/m5ramesh/git/BenchNPIN/benchnpin/baselines/area_clearing/ppo/final_models/clear_env/V2/')
-    # evaluations = ppo_policy.evaluate(num_eps=5, model_eps='260000') # For small - 280000 Intuitively performing model! For large - V2-260000 is pretty close
-    print("PPO Eval: ", evaluations)
+    # # ppo_policy = AreaClearingPPO(model_path='/Storage2/m5ramesh/git/BenchNPIN/benchnpin/baselines/area_clearing/ppo/final_models/clear_env/V2/')
+    # # evaluations = ppo_policy.evaluate(num_eps=5, model_eps='260000') # For small - 280000 Intuitively performing model! For large - V2-260000 is pretty close
+    # print("PPO Eval: ", evaluations)
 
 
     # ========================= SAC Policy =====================================
-    # sac_policy = AreaClearingSAC()
-    # sac_policy.train(total_timesteps=int(2e5), checkpoint_freq=10000)
-    # evaluations = sac_policy.evaluate(num_eps=5)
-    # print("SAC Eval: ", evaluations)
+    sac_policy = AreaClearingSAC()
+    sac_policy.train(total_timesteps=int(1e6), checkpoint_freq=20000)
+    evaluations = sac_policy.evaluate(num_eps=5)
+    print("SAC Eval: ", evaluations)
 
 
     # ========================= TD3 Policy =====================================
@@ -56,11 +56,11 @@ def main(args):
     # print("PPO Eval: ", evaluations)
 
     # ========================= SAM Policy =====================================
-    sam_policy = AreaClearingSAM(model_name=model_name, cfg=args.config_file)
-    # sam_policy.train(job_id=args.job_id, **cfg.train)
-    evaluations = sam_policy.evaluate(num_eps=5)
-    # evaluations = td3_policy.evaluate(num_eps=5, model_eps='latest')
-    # print("PPO Eval: ", evaluations)
+    # sam_policy = AreaClearingSAM(model_name=model_name, cfg=args.config_file)
+    # # sam_policy.train(job_id=args.job_id, **cfg.train)
+    # evaluations = sam_policy.evaluate(num_eps=5)
+    # # evaluations = td3_policy.evaluate(num_eps=5, model_eps='latest')
+    # # print("PPO Eval: ", evaluations)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
