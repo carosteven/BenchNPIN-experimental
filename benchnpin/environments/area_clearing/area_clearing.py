@@ -86,7 +86,6 @@ class AreaClearingEnv(gym.Env):
         cfg_file = os.path.join(self.current_dir, 'config.yaml')
 
         cfg = DotDict.load_from_file(cfg_file)
-        self.occupancy = OccupancyGrid(grid_width=cfg.occ.grid_size, grid_height=cfg.occ.grid_size, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, ship_body=None, meter_to_pixel_scale=cfg.occ.m_to_pix_scale)
         self.cfg = cfg
 
         env_cfg_file_path = os.path.join(self.current_dir, 'envs/' + cfg.env + '.yaml')
@@ -513,7 +512,8 @@ class AreaClearingEnv(gym.Env):
                 'box_count': 0,
                 'boundary': self.boundary_vertices,
                 'walls': self.walls,
-                'static_obstacles': self.static_obstacles}
+                'static_obstacles': self.static_obstacles,
+                'goal_positions': self.goal_points}
 
         if self.low_dim_state:
             observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles)
@@ -659,9 +659,10 @@ class AreaClearingEnv(gym.Env):
                                 round(self.agent.body.angle, 2)), 
                 'total_work': self.total_work[0], 
                 'collision reward': collision_reward, 
-                'diff reward': diff_reward,
-                'box completed reward': box_completion_reward, 
+                'diff_reward': diff_reward,
+                'box_completed_reward': box_completion_reward, 
                 'obs': updated_obstacles,
+                'box_completed_statuses': self.box_clearance_statuses,
                 'box_count': num_completed}
         
         # generate observation

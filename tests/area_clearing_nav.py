@@ -47,7 +47,7 @@ for eps_idx in range(total_episodes):
         env.render()
 
         # print("reward: ", reward, "; dist reward: ", info['dist reward'], "; col reward: ", info['collision reward'], "; col reward scaled: ", info['scaled collision reward'])
-        total_diff_reward += info['diff reward']
+        total_diff_reward += info['diff_reward']
         total_col_reward += info['collision reward']
         # total_scaled_col_reward += info['scaled collision reward']
 
