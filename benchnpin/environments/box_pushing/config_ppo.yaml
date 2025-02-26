@@ -73,7 +73,7 @@ cubes:
 
 agent:
   action_type: 'heading' # options are velocity, heading, position
-  step_size: 1.5 # distance travelled per step in heading control
+  step_size: 1.25 # distance travelled per step in heading control
   random_start: true
   mass: 1  # mass of the NRC ship in kg
   padding: 0.25  # adds padding to ship footprint
@@ -112,12 +112,12 @@ rewards:
 
 train:
   job_type: ppo
-  job_name: s15_g5_cdr2
+  job_name: last_chance
   batch_size: 64
   checkpoint_freq: 1000
   job_id_to_resume: s15_g5_cdr2_15028231_90000_steps
   n_epochs: 10
   n_steps: 128
-  resume_training: true
+  resume_training: false
   use_correct_direction_reward: true
   verbose: 2 

@@ -72,7 +72,7 @@ class BoxPushingEnv(gym.Env):
 
         # construct absolute path to the env_config folder
         if cfg_file is None:
-            cfg_file = os.path.join(self.current_dir, 'config.yaml')
+            cfg_file = os.path.join(self.current_dir, 'config_ppo.yaml')
 
         cfg = DotDict.load_from_file(cfg_file)
         self.cfg = cfg
@@ -866,16 +866,17 @@ class BoxPushingEnv(gym.Env):
 
         # partial reward for moving cubes towards receptacle
         cubes_distance = 0
+        to_remove = []
         for cube in self.cubes:
             dist_moved = initial_cube_distances[cube.idx] - final_cube_distances[cube.idx]
-            cubes_distance += dist_moved
+            cubes_distance += abs(dist_moved)
             if self.cfg.train.use_correct_direction_reward and dist_moved > 0:
                 dist_moved *= self.cfg.rewards.correct_direction_reward_scale
             robot_reward += self.partial_rewards_scale * dist_moved
 
-        # reward for cubes in receptacle
-        to_remove = []
-        for cube in self.cubes:
+            # reward for cubes in receptacle
+            # to_remove = []
+            # for cube in self.cubes:
             cube_vertices = [cube.body.local_to_world(v) for v in cube.get_vertices()]
             if self.cube_position_in_receptacle(cube_vertices):
                 to_remove.append(cube)
@@ -937,7 +938,7 @@ class BoxPushingEnv(gym.Env):
         if self.cfg.render.show:
             self.show_observation = True
             self.render()
-        
+
         return self.observation, reward, terminated, truncated, info
 
     def demo_control(self, action):

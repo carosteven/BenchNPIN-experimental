@@ -10,8 +10,6 @@ from benchnpin.baselines.area_clearing.td3.policy import AreaClearingTD3
 from benchnpin.baselines.area_clearing.sam.policy import AreaClearingSAM
 from benchnpin.common.utils.utils import DotDict
 from os.path import dirname
-from benchnpin.common.utils.utils import DotDict
-from os.path import dirname
 
 import os
 
