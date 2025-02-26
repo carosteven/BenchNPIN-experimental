@@ -7,7 +7,7 @@ from benchnpin.baselines.ship_ice_nav.ppo.policy import ShipIcePPO
 from benchnpin.baselines.ship_ice_nav.sac.policy import ShipIceSAC
 from benchnpin.baselines.ship_ice_nav.td3.policy import ShipIceTD3
 from benchnpin.baselines.ship_ice_nav.planning_based.policy import PlanningBasedPolicy
-from benchnpin.common.merics.base_metric import BaseMetric
+from benchnpin.common.metrics.base_metric import BaseMetric
 
 
 """ ============================== Policy Training ========================================"""

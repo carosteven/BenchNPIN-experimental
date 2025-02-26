@@ -1,6 +1,6 @@
 from benchnpin.baselines.base_class import BasePolicy
 from benchnpin.baselines.feature_extractors import ResNet18
-from benchnpin.common.merics.ship_ice_metric import ShipIceMetric #change later to MazeNAMOMetric
+from benchnpin.common.metrics.ship_ice_metric import ShipIceMetric #change later to MazeNAMOMetric
 from typing import List, Tuple
 import benchnpin.environments
 import gymnasium as gym
