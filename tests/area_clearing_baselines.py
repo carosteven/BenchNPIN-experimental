@@ -45,6 +45,7 @@ def main(args):
     # ========================= SAC Policy =====================================
     sac_policy = AreaClearingSAC()
     sac_policy.train(total_timesteps=int(1e6), checkpoint_freq=20000)
+    # sac_policy.train(total_timesteps=int(5e5), checkpoint_freq=20000, from_model_eps='260000')
     evaluations = sac_policy.evaluate(num_eps=5)
     print("SAC Eval: ", evaluations)
 

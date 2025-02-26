@@ -34,7 +34,8 @@ class AreaClearingSAC(BasePolicy):
             gamma=0.97,
             verbose=2,
             total_timesteps=int(2e5), 
-            checkpoint_freq=10000) -> None:
+            checkpoint_freq=10000,
+            from_model_eps=None) -> None:
 
         env = gym.make('area-clearing-v0')
         env = env.unwrapped
@@ -45,20 +46,24 @@ class AreaClearingSAC(BasePolicy):
         n_actions = env.action_space.shape[-1]
         action_noise = NormalActionNoise(mean=np.zeros(n_actions), sigma=0.05 * np.ones(n_actions))
 
-        self.model = SAC(
-            'CnnPolicy', 
-            env,
-            policy_kwargs=policy_kwargs,
-            learning_rate=learning_rate,
-            buffer_size=buffer_size,
-            learning_starts=learning_starts,
-            action_noise=action_noise,
-            batch_size=batch_size,
-            gamma=gamma,
-            train_freq=1,
-            gradient_steps=1,
-            verbose=verbose,
-            tensorboard_log=self.model_path)
+        if from_model_eps is not None:
+            model_checkpoint = self.model_name + '_' + from_model_eps + '_steps'
+            self.model = SAC.load(os.path.join(self.model_path, model_checkpoint), env=env)
+        else:
+            self.model = SAC(
+                'CnnPolicy', 
+                env,
+                policy_kwargs=policy_kwargs,
+                learning_rate=learning_rate,
+                buffer_size=buffer_size,
+                learning_starts=learning_starts,
+                action_noise=action_noise,
+                batch_size=batch_size,
+                gamma=gamma,
+                train_freq=1,
+                gradient_steps=1,
+                verbose=verbose,
+                tensorboard_log=self.model_path)
 
         # Save a checkpoint every 1000 steps
         checkpoint_callback = CheckpointCallback(
