@@ -17,7 +17,7 @@ from pynput import keyboard
 from os.path import dirname
 
 cfg_file = f'{dirname(dirname(__file__))}/benchnpin/environments/box_pushing/config_ppo.yaml'
-env = gym.make('object-pushing-v0', cfg_file=cfg_file)
+env = gym.make('box-pushing-v0', cfg_file=cfg_file)
 
 observations = []
 actions = []                # this is actually the states (i.e. 3 dof pose)
@@ -95,11 +95,6 @@ def collect_demos():
                 print("command: ", command, "; step: ", t, \
                     "; num completed: ", info['cumulative_cubes'],  end="\r")
                 observation, reward, terminated, truncated, info = env.step(command)
-                # observation, reward, terminated, truncated, info = env.step(-1)
-                # random action
-                # action_space = 96*96
-                # action = random.randrange(action_space)
-                # observation, reward, terminated, truncated, info = env.step(action)
 
                 # command = OTHER
                 if t % 5 == 0:

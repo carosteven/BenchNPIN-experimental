@@ -34,26 +34,30 @@ class BoxPushingPPO(BasePolicy):
             gamma=0.99,
             verbose=2,
             total_timesteps=int(2e5), 
-            checkpoint_freq=10000) -> None:
+            checkpoint_freq=10000,
+            resume_training=False) -> None:
 
         if self.cfg is not None:
-            env = gym.make('object-pushing-v0', cfg_file=self.cfg)
+            env = gym.make('box-pushing-v0', cfg_file=self.cfg)
         else:
-            env = gym.make('object-pushing-v0')
+            env = gym.make('box-pushing-v0')
         env = env.unwrapped
 
-        self.model = PPO(
-            "CnnPolicy",
-            env,
-            policy_kwargs=policy_kwargs,
-            n_steps=n_steps,
-            batch_size=batch_size,
-            n_epochs=n_epochs,
-            learning_rate=learning_rate,
-            gamma=gamma,
-            verbose=verbose,
-            tensorboard_log=self.model_path,
-        )
+        if resume_training:
+            self.model = PPO.load(os.path.join(self.model_path, self.model_name), env=env)
+        else:
+            self.model = PPO(
+                "CnnPolicy",
+                env,
+                policy_kwargs=policy_kwargs,
+                n_steps=n_steps,
+                batch_size=batch_size,
+                n_epochs=n_epochs,
+                learning_rate=learning_rate,
+                gamma=gamma,
+                verbose=verbose,
+                tensorboard_log=os.path.join(self.model_path, self.model_name),
+            )
 
         # Save a checkpoint every 1000 steps
         checkpoint_callback = CheckpointCallback(
@@ -80,9 +84,9 @@ class BoxPushingPPO(BasePolicy):
             self.model = PPO.load(os.path.join(self.model_path, model_checkpoint))
 
         if self.cfg is not None:
-            env = gym.make('object-pushing-v0', cfg_file=self.cfg)
+            env = gym.make('box-pushing-v0', cfg_file=self.cfg)
         else:
-            env = gym.make('object-pushing-v0')
+            env = gym.make('box-pushing-v0')
         env = env.unwrapped
 
         rewards_list = []
@@ -93,7 +97,6 @@ class BoxPushingPPO(BasePolicy):
             eps_reward = 0.0
             while True:
                 action, _ = self.model.predict(obs)
-                print("Action: ", action)
                 obs, reward, done, truncated, info = env.step(action)
                 eps_reward += reward
                 if done or truncated:

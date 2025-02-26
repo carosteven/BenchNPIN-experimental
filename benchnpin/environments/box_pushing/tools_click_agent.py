@@ -74,8 +74,8 @@ class ClickAgent:
         plt.close()
 
 def main():
-    cfg_file = f'{dirname(__file__)}/config_ppo.yaml'
-    env = gym.make('object-pushing-v0', cfg_file=cfg_file)
+    cfg_file = f'{dirname(__file__)}/config_sam.yaml'
+    env = gym.make('box-pushing-v0', cfg_file=cfg_file)
     agent = ClickAgent(env)
     agent.run()
     env.close()

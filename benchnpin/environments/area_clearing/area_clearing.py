@@ -34,23 +34,25 @@ R = lambda theta: np.asarray([
     [np.sin(theta), np.cos(theta)]
 ])
 
-BOUNDARY_PENALTY = -0.5
-BOX_PUTBACK_PENALTY = -10
+BOUNDARY_PENALTY = -0.25
+BOX_PUTBACK_PENALTY = -1
 TRUNCATION_PENALTY = 0
-TERMINAL_REWARD = 50
-BOX_CLEARED_REWARD = 10
-BOX_PUSHING_REWARD_MULTIPLIER = 0.3
+TERMINAL_REWARD = 0
+BOX_CLEARED_REWARD = 1
+BOX_PUSHING_REWARD_MULTIPLIER = 0.2
+NONMOVEMENT_PENALTY = -0.25
 # TIME_PENALTY = -0.01
 TIME_PENALTY = 0
 
-LOCAL_MAP_PIXEL_WIDTH = 224
+# LOCAL_MAP_PIXEL_WIDTH = 224
 # LOCAL_MAP_WIDTH = 12 #  meters # TODO: Make this an env parameter - Use for clear_env_small
-LOCAL_MAP_WIDTH = 24 #  meters
-LOCAL_MAP_PIXELS_PER_METER = LOCAL_MAP_PIXEL_WIDTH / LOCAL_MAP_WIDTH
+# LOCAL_MAP_WIDTH = 24 #  meters
+# LOCAL_MAP_PIXELS_PER_METER = LOCAL_MAP_PIXEL_WIDTH / LOCAL_MAP_WIDTH
 DISTANCE_SCALE_MAX = 0.5
 
 OBSTACLE_SEG_INDEX = 0
 FLOOR_SEG_INDEX = 1
+GOAL_AREA_SEG_INDEX = 3
 COMPLETED_CUBE_SEG_INDEX = 7
 CUBE_SEG_INDEX = 4
 ROBOT_SEG_INDEX = 5
@@ -69,7 +71,10 @@ MOVE_STEP_SIZE = 0.05
 TURN_STEP_SIZE = np.radians(15)
 WAYPOINT_MOVING_THRESHOLD = 0.6
 WAYPOINT_TURNING_THRESHOLD = np.radians(10)
-STEP_LIMIT = 500
+NONMOVEMENT_DIST_THRESHOLD = 0.05
+NONMOVEMENT_TURN_THRESHOLD = np.radians(0.05)
+# STEP_LIMIT = 500
+STEP_LIMIT = 5000
 MAP_UPDATE_STEPS = 250
 
 class AreaClearingEnv(gym.Env):
@@ -101,6 +106,11 @@ class AreaClearingEnv(gym.Env):
         self.path = None
         self.scatter = False
 
+        # environment
+        self.local_map_pixel_width = self.env_cfg.local_map_pixel_width
+        self.local_map_width = self.env_cfg.local_map_width
+        self.local_map_pixels_per_meter = self.local_map_pixel_width / self.local_map_width
+
         # observation
         self.num_channels = 4
         self.observation = None
@@ -114,13 +124,13 @@ class AreaClearingEnv(gym.Env):
         # robot state channel
         self.agent_info = self.cfg.agent
         self.robot_radius = ((self.agent_info.length**2 + self.agent_info.width**2)**0.5 / 2) * 1.2
-        robot_pixel_width = int(2 * self.robot_radius * LOCAL_MAP_PIXELS_PER_METER)
-        self.robot_state_channel = np.zeros((LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH), dtype=np.float32)
-        start = int(np.floor(LOCAL_MAP_PIXEL_WIDTH / 2 - robot_pixel_width / 2))
+        robot_pixel_width = int(2 * self.robot_radius * self.local_map_pixels_per_meter)
+        self.robot_state_channel = np.zeros((self.local_map_pixel_width, self.local_map_pixel_width), dtype=np.float32)
+        start = int(np.floor(self.local_map_pixel_width / 2 - robot_pixel_width / 2))
         for i in range(start, start + robot_pixel_width):
             for j in range(start, start + robot_pixel_width):
                 # Circular robot mask
-                if (((i + 0.5) - LOCAL_MAP_PIXEL_WIDTH / 2)**2 + ((j + 0.5) - LOCAL_MAP_PIXEL_WIDTH / 2)**2)**0.5 < robot_pixel_width / 2:
+                if (((i + 0.5) - self.local_map_pixel_width / 2)**2 + ((j + 0.5) - self.local_map_pixel_width / 2)**2)**0.5 < robot_pixel_width / 2:
                     self.robot_state_channel[i, j] = 1
 
         self.target_speed = self.cfg.controller.target_speed
@@ -132,7 +142,7 @@ class AreaClearingEnv(gym.Env):
         if self.cfg.agent.action_type == 'velocity':
             self.action_space = spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float32)
         elif self.cfg.agent.action_type == 'position':
-            self.action_space = spaces.Box(low=0, high=LOCAL_MAP_PIXEL_WIDTH * LOCAL_MAP_PIXEL_WIDTH, shape=(1,), dtype=np.int32)
+            self.action_space = spaces.Box(low=0, high=self.local_map_pixel_width * self.local_map_pixel_width, shape=(1,), dtype=np.int32)
         elif self.cfg.agent.action_type == 'heading':
             self.action_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
 
@@ -144,12 +154,13 @@ class AreaClearingEnv(gym.Env):
             self.fixed_trial_idx = self.cfg.fixed_trial_idx
             self.observation_space = spaces.Box(low=-10, high=30, shape=(self.cfg.num_obstacles * 2,), dtype=np.float32)
         else:
-            self.observation_shape = (self.num_channels, LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_PIXEL_WIDTH)
+            # self.observation_shape = (self.num_channels, self.local_map_pixel_width, self.local_map_pixel_width)
+            self.observation_shape = (self.local_map_pixel_width, self.local_map_pixel_width, self.num_channels)
             self.observation_space = spaces.Box(low=0, high=255, shape=self.observation_shape, dtype=np.uint8)
 
         self.yaw_lim = (0, np.pi)       # lower and upper limit of ship yaw  
 
-        self.con_fig, self.con_ax = plt.subplots(figsize=(10, 10))
+        # self.con_fig, self.con_ax = plt.subplots(figsize=(10, 10))
 
         self.demo_mode = False
 
@@ -179,7 +190,7 @@ class AreaClearingEnv(gym.Env):
 
         self.cleared_box_count = 0
 
-        self.state_fig, self.state_ax = plt.subplots(1, self.num_channels, figsize=(4 * self.num_channels, 6))
+        # self.state_fig, self.state_ax = plt.subplots(1, self.num_channels, figsize=(4 * self.num_channels, 6))
         self.colorbars = [None] * self.num_channels
 
         self.boundary_goals, self.goal_points = self._compute_boundary_goals()
@@ -369,7 +380,7 @@ class AreaClearingEnv(gym.Env):
 
         self.position_controller = PositionController(self.cfg, self.robot_radius, self.map_width, self.map_height, 
                                                       self.configuration_space, self.configuration_space_thin, self.closest_cspace_indices,
-                                                      LOCAL_MAP_PIXEL_WIDTH, LOCAL_MAP_WIDTH, LOCAL_MAP_PIXELS_PER_METER, 
+                                                      self.local_map_pixel_width, self.local_map_width, self.local_map_pixels_per_meter, 
                                                       TURN_STEP_SIZE, MOVE_STEP_SIZE, WAYPOINT_MOVING_THRESHOLD, WAYPOINT_TURNING_THRESHOLD)
         
         self.dp = None
@@ -417,9 +428,42 @@ class AreaClearingEnv(gym.Env):
         outer_boundary_walls = []
         for i in range(len(self.outer_boundary_vertices)):
             outer_boundary_walls.append([self.outer_boundary_vertices[i], self.outer_boundary_vertices[(i + 1) % len(self.outer_boundary_vertices)]])
-        for wall_vertices in self.walls + outer_boundary_walls:
+        for wall_vertices in self.walls:# + outer_boundary_walls:
             # convert line to polygon
             wall_poly = create_polygon_from_line(wall_vertices)
+
+            obs_info = {}
+            obs_info['type'] = ObstacleType.BOUNDARY
+            obs_info['vertices'] = wall_poly
+
+            # convert np array to list
+            wall_poly = [(x, y) for x, y in wall_poly]
+
+            shape = pymunk.Poly(self.space.static_body, wall_poly, radius=0.1)
+            shape.collision_type = 2
+            shape.friction = 0.99
+
+            self.space.add(shape)
+            obs_dict.append(obs_info)
+            wall_shapes.append(shape)
+        
+        # generate outer walls
+        room_length = abs(self.outer_boundary_vertices[0][0])*2
+        room_width = abs(self.outer_boundary_vertices[0][1])*2
+        wall_thickness = 24
+        
+        for x, y, length, width in [
+            (-room_length / 2 - wall_thickness / 2, 0, wall_thickness, room_width),
+            (room_length / 2 + wall_thickness / 2, 0, wall_thickness, room_width),
+            (0, -room_width / 2 - wall_thickness / 2, room_length + 2 * wall_thickness, wall_thickness),
+            (0, room_width / 2 + wall_thickness / 2, room_length + 2 * wall_thickness, wall_thickness),
+            ]:
+            wall_poly = np.array([
+                [x - length / 2, y - width / 2],  # bottom-left
+                [x + length / 2, y - width / 2],  # bottom-right
+                [x + length / 2, y + width / 2],  # top-right
+                [x - length / 2, y + width / 2],  # top-left
+            ])
 
             obs_info = {}
             obs_info['type'] = ObstacleType.BOUNDARY
@@ -492,7 +536,8 @@ class AreaClearingEnv(gym.Env):
         self.init_area_clearing_env()
 
         # reset map
-        self.global_overhead_map = self.create_padded_room_ones()
+        # self.global_overhead_map = self.create_padded_room_ones()
+        self.global_overhead_map = self.create_padded_room_zeros()
         self.update_global_overhead_map()
 
         if(self.goal_point_global_map is None):
@@ -592,17 +637,17 @@ class AreaClearingEnv(gym.Env):
                 y_movement = step_size * np.sin(angle)
 
                 # convert target position to pixel coordinates
-                x_pixel = int(LOCAL_MAP_PIXEL_WIDTH / 2 + x_movement * LOCAL_MAP_PIXELS_PER_METER)
-                y_pixel = int(LOCAL_MAP_PIXEL_WIDTH / 2 - y_movement * LOCAL_MAP_PIXELS_PER_METER)
+                x_pixel = int(self.local_map_pixel_width / 2 + x_movement * self.local_map_pixels_per_meter)
+                y_pixel = int(self.local_map_pixel_width / 2 - y_movement * self.local_map_pixels_per_meter)
 
                 # convert pixel coordinates to a single index
-                action = y_pixel * LOCAL_MAP_PIXEL_WIDTH + x_pixel
+                action = y_pixel * self.local_map_pixel_width + x_pixel
 
             self.path, robot_move_sign = self.position_controller.get_waypoints_to_spatial_action(robot_initial_position, robot_initial_heading, action)
             if self.cfg.render.show:
                 self.renderer.update_path(self.path)
 
-            self.execute_robot_path(robot_initial_position, robot_initial_heading, robot_move_sign)
+            robot_distance, robot_turn_angle = self.execute_robot_path(robot_initial_position, robot_initial_heading, robot_move_sign)
 
         # move simulation forward
         for _ in range(self.steps):
@@ -620,11 +665,17 @@ class AreaClearingEnv(gym.Env):
 
         if(num_completed >= self.cleared_box_count):
             box_completion_reward = abs(num_completed - self.cleared_box_count) * BOX_CLEARED_REWARD
+            self.t = 0 # reset time if box is cleared
         else:
             box_completion_reward = abs(num_completed - self.cleared_box_count) * BOX_PUTBACK_PENALTY
         if(self.cleared_box_count != num_completed):
             print("Boxes completed: ", num_completed)            
             self.cleared_box_count = num_completed
+        
+        # nonmovement penalty
+        nonmovement_penalty = 0
+        if robot_distance < NONMOVEMENT_DIST_THRESHOLD and abs(robot_turn_angle) < NONMOVEMENT_TURN_THRESHOLD:
+            nonmovement_penalty = NONMOVEMENT_PENALTY
 
         ### compute work done
         work = total_work_done(self.prev_obs, updated_obstacles)
@@ -641,7 +692,7 @@ class AreaClearingEnv(gym.Env):
         else:
             terminated = False
 
-        reward = box_completion_reward + collision_penalty + pushing_reward
+        reward = box_completion_reward + collision_penalty + pushing_reward + nonmovement_penalty
         truncated = self.t >= self.t_max
 
         # apply constraint penalty
@@ -652,6 +703,8 @@ class AreaClearingEnv(gym.Env):
             reward += TERMINAL_REWARD
         
         done = terminated or truncated
+        ministep_size = 2.5
+        ministeps = robot_distance / ministep_size
 
         # Optionally, we can add additional info
         info = {'state': (round(self.agent.body.position.x, 2),
@@ -663,7 +716,8 @@ class AreaClearingEnv(gym.Env):
                 'box_completed_reward': box_completion_reward, 
                 'obs': updated_obstacles,
                 'box_completed_statuses': self.box_clearance_statuses,
-                'box_count': num_completed}
+                'box_count': num_completed,
+                'ministeps': ministeps,}
         
         # generate observation
         if self.low_dim_state:
@@ -798,10 +852,15 @@ class AreaClearingEnv(gym.Env):
 
             if sim_steps % MAP_UPDATE_STEPS == 0:
                 self.update_global_overhead_map()
+        
+        robot_heading = restrict_heading_range(self.agent.body.angle)
+        robot_turn_angle = heading_difference(robot_initial_heading, robot_heading)
+        return robot_distance, robot_turn_angle
 
     def apply_controller(self, omega, v):
         self.agent.body.angular_velocity = omega / 2
-        self.agent.body.velocity = (v).tolist()
+        # self.agent.body.velocity = (v).tolist()
+        self.agent.body.velocity = (v*5).tolist()
 
     def generate_observation_low_dim(self, updated_obstacles):
         """
@@ -840,7 +899,8 @@ class AreaClearingEnv(gym.Env):
         channels.append(self.scale_obs_to_image_space(obs_array_4))
 
         try:
-            observation = np.stack(channels).astype(np.uint8)
+            # observation = np.stack(channels).astype(np.uint8)
+            observation = np.stack(channels, axis=2).astype(np.uint8)
         except Exception as e:
             print(channels[0].shape, channels[1].shape)
             raise e
@@ -852,20 +912,46 @@ class AreaClearingEnv(gym.Env):
     
     def create_padded_room_zeros(self):
         return np.zeros((
-            int(2 * np.ceil((self.map_width * LOCAL_MAP_PIXELS_PER_METER + LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)) / 2)),
-            int(2 * np.ceil((self.map_height * LOCAL_MAP_PIXELS_PER_METER + LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)) / 2))
+            int(2 * np.ceil((self.map_width * self.local_map_pixels_per_meter + self.local_map_pixel_width * np.sqrt(2)) / 2)),
+            int(2 * np.ceil((self.map_height * self.local_map_pixels_per_meter + self.local_map_pixel_width * np.sqrt(2)) / 2))
         ), dtype=np.float32)
     
     def create_padded_room_ones(self):
         return np.ones((
-            int(2 * np.ceil((self.map_width * LOCAL_MAP_PIXELS_PER_METER + LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)) / 2)),
-            int(2 * np.ceil((self.map_height * LOCAL_MAP_PIXELS_PER_METER + LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2)) / 2))
+            int(2 * np.ceil((self.map_width * self.local_map_pixels_per_meter + self.local_map_pixel_width * np.sqrt(2)) / 2)),
+            int(2 * np.ceil((self.map_height * self.local_map_pixels_per_meter + self.local_map_pixel_width * np.sqrt(2)) / 2))
         ), dtype=np.float32)
     
     def update_global_overhead_map(self):
         small_overhead_map = self.small_obstacle_map.copy()
         small_overhead_map[small_overhead_map == 1] = FLOOR_SEG_INDEX/MAX_SEG_INDEX
-        self.global_overhead_map[self.global_overhead_map == 1] = FLOOR_SEG_INDEX/MAX_SEG_INDEX
+        # self.global_overhead_map[self.global_overhead_map == 1] = FLOOR_SEG_INDEX/MAX_SEG_INDEX
+
+
+        # generate receptacle boundaries
+        inner_area_length = abs(self.boundary_vertices[0][0])*2
+        inner_area_width = abs(self.boundary_vertices[0][1])*2
+        receptacle_thickness = abs(self.outer_boundary_vertices[0][0]) - abs(self.boundary_vertices[0][0])
+        
+        for x, y, length, width in [
+            (-inner_area_length / 2 - receptacle_thickness / 2, 0, receptacle_thickness, inner_area_width),
+            (inner_area_length / 2 + receptacle_thickness / 2, 0, receptacle_thickness, inner_area_width),
+            (0, -inner_area_width / 2 - receptacle_thickness / 2, inner_area_length + 2 * receptacle_thickness, receptacle_thickness),
+            (0, inner_area_width / 2 + receptacle_thickness / 2, inner_area_length + 2 * receptacle_thickness, receptacle_thickness),
+            ]:
+            receptacle_poly = np.array([
+                [x - length / 2, y - width / 2],  # bottom-left
+                [x + length / 2, y - width / 2],  # bottom-right
+                [x + length / 2, y + width / 2],  # top-right
+                [x - length / 2, y + width / 2],  # top-left
+            ])
+            # convert world coordinates to pixel coordinates
+            receptacle_poly_px = (receptacle_poly * self.local_map_pixels_per_meter).astype(np.int32)
+            receptacle_poly_px[:, 0] += int(self.local_map_width * self.local_map_pixels_per_meter / 2) + 10
+            receptacle_poly_px[:, 1] += int(self.local_map_width * self.local_map_pixels_per_meter / 2) + 10
+            receptacle_poly_px[:, 1] = small_overhead_map.shape[0] - receptacle_poly_px[:, 1]
+            # draw the boundary on the small_overhead_map
+            fillPoly(small_overhead_map, [receptacle_poly_px], color=GOAL_AREA_SEG_INDEX/MAX_SEG_INDEX)
 
         for i in range(len(self.box_shapes)):
             poly = self.box_shapes[i]
@@ -873,22 +959,22 @@ class AreaClearingEnv(gym.Env):
             vertices_np = np.array([[v.x, v.y] for v in vertices])
 
             # convert world coordinates to pixel coordinates
-            vertices_px = (vertices_np * LOCAL_MAP_PIXELS_PER_METER).astype(np.int32)
-            vertices_px[:, 0] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
-            vertices_px[:, 1] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
+            vertices_px = (vertices_np * self.local_map_pixels_per_meter).astype(np.int32)
+            vertices_px[:, 0] += int(self.local_map_width * self.local_map_pixels_per_meter / 2) + 10
+            vertices_px[:, 1] += int(self.local_map_width * self.local_map_pixels_per_meter / 2) + 10
             vertices_px[:, 1] = small_overhead_map.shape[0] - vertices_px[:, 1]
 
             # draw the boundary on the small_overhead_map
-            if(self.box_clearance_statuses[i]):
+            if self.box_clearance_statuses[i]:
                 fillPoly(small_overhead_map, [vertices_px], color=COMPLETED_CUBE_SEG_INDEX/MAX_SEG_INDEX)
             else:
                 fillPoly(small_overhead_map, [vertices_px], color=CUBE_SEG_INDEX/MAX_SEG_INDEX)
         
         vertices = [self.agent.body.local_to_world(v) for v in self.agent.get_vertices()]
         robot_vertices = np.array([[v.x, v.y] for v in vertices])
-        robot_vertices_px = (robot_vertices * LOCAL_MAP_PIXELS_PER_METER).astype(np.int32)
-        robot_vertices_px[:, 0] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
-        robot_vertices_px[:, 1] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
+        robot_vertices_px = (robot_vertices * self.local_map_pixels_per_meter).astype(np.int32)
+        robot_vertices_px[:, 0] += int(self.local_map_width * self.local_map_pixels_per_meter / 2) + 10
+        robot_vertices_px[:, 1] += int(self.local_map_width * self.local_map_pixels_per_meter / 2) + 10
         robot_vertices_px[:, 1] = small_overhead_map.shape[0] - robot_vertices_px[:, 1]
         
         fillPoly(small_overhead_map, [robot_vertices_px], color=ROBOT_SEG_INDEX/MAX_SEG_INDEX)
@@ -902,24 +988,24 @@ class AreaClearingEnv(gym.Env):
         return local_map
     
     def get_local_map(self, global_map, robot_position, robot_heading):
-        crop_width = round_up_to_even(LOCAL_MAP_PIXEL_WIDTH * np.sqrt(2))
+        crop_width = round_up_to_even(self.local_map_pixel_width * np.sqrt(2))
         rotation_angle = 90 - np.degrees(robot_heading)
-        pixel_i = int(np.floor(-robot_position[1] * LOCAL_MAP_PIXELS_PER_METER + global_map.shape[0] / 2))
-        pixel_j = int(np.floor(robot_position[0] * LOCAL_MAP_PIXELS_PER_METER + global_map.shape[1] / 2))
+        pixel_i = int(np.floor(-robot_position[1] * self.local_map_pixels_per_meter + global_map.shape[0] / 2))
+        pixel_j = int(np.floor(robot_position[0] * self.local_map_pixels_per_meter + global_map.shape[1] / 2))
         crop = global_map[pixel_i - crop_width // 2:pixel_i + crop_width // 2, pixel_j - crop_width // 2:pixel_j + crop_width // 2]
         rotated_crop = rotate_image(crop, rotation_angle, order=0)
         local_map = rotated_crop[
-            rotated_crop.shape[0] // 2 - LOCAL_MAP_PIXEL_WIDTH // 2:rotated_crop.shape[0] // 2 + LOCAL_MAP_PIXEL_WIDTH // 2,
-            rotated_crop.shape[1] // 2 - LOCAL_MAP_PIXEL_WIDTH // 2:rotated_crop.shape[1] // 2 + LOCAL_MAP_PIXEL_WIDTH // 2
+            rotated_crop.shape[0] // 2 - self.local_map_pixel_width // 2:rotated_crop.shape[0] // 2 + self.local_map_pixel_width // 2,
+            rotated_crop.shape[1] // 2 - self.local_map_pixel_width // 2:rotated_crop.shape[1] // 2 + self.local_map_pixel_width // 2
         ]
         return local_map
     
     def create_global_shortest_path_map(self, robot_position):
-        pixel_i, pixel_j = position_to_pixel_indices(robot_position[0], robot_position[1], self.configuration_space.shape, LOCAL_MAP_PIXELS_PER_METER)
+        pixel_i, pixel_j = position_to_pixel_indices(robot_position[0], robot_position[1], self.configuration_space.shape, self.local_map_pixels_per_meter)
         pixel_i, pixel_j = self.closest_valid_cspace_indices(pixel_i, pixel_j)
         global_map, _ = spfa.spfa(self.configuration_space, (pixel_i, pixel_j))
-        global_map /= LOCAL_MAP_PIXELS_PER_METER
-        global_map /= (np.sqrt(2) * LOCAL_MAP_PIXEL_WIDTH) / LOCAL_MAP_PIXELS_PER_METER
+        global_map /= self.local_map_pixels_per_meter
+        global_map /= (np.sqrt(2) * self.local_map_pixel_width) / self.local_map_pixels_per_meter
         
         return global_map
     
@@ -927,12 +1013,12 @@ class AreaClearingEnv(gym.Env):
         global_map = self.create_padded_room_zeros() + np.inf
         for point in self.goal_points:
             rx, ry = point.x, point.y
-            pixel_i, pixel_j = position_to_pixel_indices(rx, ry, self.configuration_space.shape, LOCAL_MAP_PIXELS_PER_METER)
+            pixel_i, pixel_j = position_to_pixel_indices(rx, ry, self.configuration_space.shape, self.local_map_pixels_per_meter)
             pixel_i, pixel_j = self.closest_valid_cspace_indices(pixel_i, pixel_j)
             shortest_path_image, _ = spfa.spfa(self.configuration_space, (pixel_i, pixel_j))
-            shortest_path_image /= LOCAL_MAP_PIXELS_PER_METER
+            shortest_path_image /= self.local_map_pixels_per_meter
             global_map = np.minimum(global_map, shortest_path_image)
-        global_map /= (np.sqrt(2) * LOCAL_MAP_PIXEL_WIDTH) / LOCAL_MAP_PIXELS_PER_METER
+        global_map /= (np.sqrt(2) * self.local_map_pixel_width) / self.local_map_pixels_per_meter
 
         max_value = np.max(global_map)
         min_value = np.min(global_map)
@@ -941,7 +1027,7 @@ class AreaClearingEnv(gym.Env):
         # fill points outside boundary polygon with 0
         for i in range(global_map.shape[0]):
             for j in range(global_map.shape[1]):
-                x, y = pixel_indices_to_position(i, j, self.configuration_space.shape, LOCAL_MAP_PIXELS_PER_METER)
+                x, y = pixel_indices_to_position(i, j, self.configuration_space.shape, self.local_map_pixels_per_meter)
                 if not self.boundary_polygon.contains(Point(x, y)):
                     global_map[i, j] = 0
                 if not self.outer_boundary_polygon.contains(Point(x, y)):
@@ -961,7 +1047,7 @@ class AreaClearingEnv(gym.Env):
         """
 
         obstacle_map = self.create_padded_room_zeros()
-        small_obstacle_map = np.zeros((LOCAL_MAP_PIXEL_WIDTH+20, LOCAL_MAP_PIXEL_WIDTH+20), dtype=np.float32)
+        small_obstacle_map = np.zeros((self.local_map_pixel_width+20, self.local_map_pixel_width+20), dtype=np.float32)
 
         for poly in self.wall_shapes + self.static_obs_shapes:
             # get world coordinates of vertices
@@ -969,9 +1055,9 @@ class AreaClearingEnv(gym.Env):
             vertices_np = np.array([[v.x, v.y] for v in vertices])
 
             # convert world coordinates to pixel coordinates
-            vertices_px = (vertices_np * LOCAL_MAP_PIXELS_PER_METER).astype(np.int32)
-            vertices_px[:, 0] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
-            vertices_px[:, 1] += int(LOCAL_MAP_WIDTH * LOCAL_MAP_PIXELS_PER_METER / 2) + 10
+            vertices_px = (vertices_np * self.local_map_pixels_per_meter).astype(np.int32)
+            vertices_px[:, 0] += int(self.local_map_width * self.local_map_pixels_per_meter / 2) + 10
+            vertices_px[:, 1] += int(self.local_map_width * self.local_map_pixels_per_meter / 2) + 10
             vertices_px[:, 1] = small_obstacle_map.shape[0] - vertices_px[:, 1]
 
             fillPoly(small_obstacle_map, [vertices_px], color=1)
@@ -980,7 +1066,7 @@ class AreaClearingEnv(gym.Env):
         obstacle_map[start_i:start_i + small_obstacle_map.shape[0], start_j:start_j + small_obstacle_map.shape[1]] = small_obstacle_map
 
         # Dilate obstacles and walls based on robot size
-        robot_pixel_width = int(2 * self.robot_radius * LOCAL_MAP_PIXELS_PER_METER)
+        robot_pixel_width = int(2 * self.robot_radius * self.local_map_pixels_per_meter)
         selem = disk(np.floor(robot_pixel_width / 4))
         self.configuration_space = 1 - binary_dilation(obstacle_map, selem).astype(np.float32)
         
@@ -1024,7 +1110,8 @@ class AreaClearingEnv(gym.Env):
                 for ax, i in zip(self.state_ax, range(self.num_channels)):
                     ax.clear()
                     ax.set_title(f'Channel {i}')
-                    im = ax.imshow(self.observation[i,:,:], cmap='hot', interpolation='nearest')
+                    # im = ax.imshow(self.observation[i,:,:], cmap='hot', interpolation='nearest')
+                    im = ax.imshow(self.observation[:,:,i], cmap='hot', interpolation='nearest')
                     if self.colorbars[i] is not None:
                         self.colorbars[i].update_normal(im)
                     else:

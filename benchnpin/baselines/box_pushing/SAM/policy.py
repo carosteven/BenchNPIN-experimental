@@ -1,5 +1,6 @@
 from benchnpin.baselines.base_class import BasePolicy
 from benchnpin.baselines.feature_extractors import DenseActionSpaceDQN
+from benchnpin.common.metrics.box_pushing_metric import BoxPushingMetric
 import benchnpin.environments
 import gymnasium as gym
 from collections import namedtuple
@@ -99,7 +100,7 @@ class DenseActionSpacePolicy:
             if resume_training:
                 model_path = os.path.join(os.path.dirname(__file__), f'checkpoint/{job_id_to_resume}/model-{model_name}.pt')
             elif evaluate:
-                model_path = os.path.join(os.path.dirname(__file__), f'models_to_test/model-{model_name}.pt')
+                model_path = os.path.join(os.path.dirname(__file__), f'models_to_test/{model_name}.pt')
             else:
                 checkpoint_dir = os.path.dirname(checkpoint_path)
                 model_path = f'{checkpoint_dir}/model-{self.model_name}.pt'
@@ -195,38 +196,50 @@ class BoxPushingSAM(BasePolicy):
         return train_info
 
 
-    def train(self,
-              batch_size=64,
-              checkpoint_freq=10000,
-              exploration_timesteps=6000,
-              final_exploration=0.01,
-              gamma=0.99,
-              grad_norm_clipping=10,
-              job_id=None,
-              job_id_to_resume=None,
-              learning_rate=0.01,
-              learning_starts=1000,
-              n_epochs=10,
-              n_steps=256,
-              replay_buffer_size=10000,
-              resume_training=False,
-              target_update_freq=1000,
-              total_timesteps=60000, 
-              use_double_dqn=True,
-              verbose=2,
-              weight_decay=0.0001,
-              ) -> None:
+    def train(self, **kwargs) -> None:
+        default_params = {
+            'batch_size': 32,
+            'checkpoint_freq': 10000,
+            'exploration_timesteps': 6000,
+            'final_exploration': 0.01,
+            'gamma': 0.99,
+            'grad_norm_clipping': 10,
+            'job_id': None,
+            'job_id_to_resume': None,
+            'learning_rate': 0.01,
+            'learning_starts': 1000,
+            'n_epochs': 10,
+            'n_steps': 256,
+            'replay_buffer_size': 10000,
+            'resume_training': False,
+            'target_update_freq': 1000,
+            'total_timesteps': 60000,
+            'use_double_dqn': True,
+            'verbose': 2,
+            'weight_decay': 0.0001,
+        }
 
-        self.batch_size = batch_size
-        self.checkpoint_freq = checkpoint_freq
-        self.final_exploration = final_exploration
-        self.gamma = gamma
-        self.grad_norm_clipping = grad_norm_clipping
-        self.learning_rate = learning_rate
-        self.replay_buffer_size = replay_buffer_size
-        self.use_double_dqn = use_double_dqn
-        self.weight_decay = weight_decay
-        checkpoint_path = os.path.join(os.path.dirname(__file__), f'checkpoint/{job_id}/checkpoint-{self.model_name}.pt')
+        params = {**default_params, **kwargs}
+        self.batch_size = params['batch_size']
+        self.checkpoint_freq = params['checkpoint_freq']
+        self.final_exploration = params['final_exploration']
+        self.gamma = params['gamma']
+        self.grad_norm_clipping = params['grad_norm_clipping']
+        self.learning_rate = params['learning_rate']
+        self.replay_buffer_size = params['replay_buffer_size']
+        self.use_double_dqn = params['use_double_dqn']
+        self.weight_decay = params['weight_decay']
+
+        checkpoint_freq = params['checkpoint_freq']
+        exploration_timesteps = params['exploration_timesteps']
+        job_id = params['job_id']
+        job_id_to_resume = params['job_id_to_resume']
+        learning_starts = params['learning_starts']
+        resume_training = params['resume_training']
+        target_update_freq = params['target_update_freq']
+        total_timesteps = params['total_timesteps']
+
+        checkpoint_path = os.path.join(os.path.dirname(__file__), f'checkpoint/{params["job_id"]}/checkpoint-{self.model_name}.pt')
 
         log_dir = os.path.join(os.path.dirname(__file__), 'output_logs/')
         if not os.path.exists(log_dir):
@@ -237,9 +250,9 @@ class BoxPushingSAM(BasePolicy):
 
         # create environment
         if self.cfg is not None:
-            env = gym.make('object-pushing-v0', cfg_file=self.cfg)
+            env = gym.make('box-pushing-v0', cfg_file=self.cfg)
         else:
-            env = gym.make('object-pushing-v0')
+            env = gym.make('box-pushing-v0')
         env = env.unwrapped
 
         # policy
@@ -276,7 +289,7 @@ class BoxPushingSAM(BasePolicy):
         target_net.eval()
 
         # logging
-        train_summary_writer = SummaryWriter(log_dir=os.path.join(log_dir, 'train'))
+        train_summary_writer = SummaryWriter(log_dir=os.path.join(log_dir, f'{job_id}'))
         meters = Meters()
 
         state, _ = env.reset()
@@ -288,9 +301,9 @@ class BoxPushingSAM(BasePolicy):
 
             # select action
             if exploration_timesteps > 0:
-                exploration_eps = 1 - min(max(timestep - learning_starts, 0) / exploration_timesteps, 1) * (1 - final_exploration)
+                exploration_eps = 1 - min(max(timestep - learning_starts, 0) / exploration_timesteps, 1) * (1 - self.final_exploration)
             else:
-                exploration_eps = final_exploration
+                exploration_eps = self.final_exploration
             action, _ = policy.step(state, exploration_eps=exploration_eps)
 
             # step the simulation
@@ -377,16 +390,25 @@ class BoxPushingSAM(BasePolicy):
 
 
 
-    def evaluate(self, num_eps: int, model_eps: str ='latest'):
-        env = gym.make('object-pushing-v0')
+    def evaluate(self, obstacle_config: str, num_eps: int, model_eps: str ='latest'):
+        if self.cfg is not None:
+            env = gym.make('box-pushing-v0', cfg_file=self.cfg)
+        else:
+            env = gym.make('box-pushing-v0')
         env = env.unwrapped
 
+        env.cfg.env.obstacle_config = obstacle_config
+        env.cfg.env.room_width = 5 if obstacle_config.split('_')[0] == 'small' else 10
+        env.cfg.cubes.num_cubes = 10 if obstacle_config.split('_')[0] == 'small' else 20
+
+        metric = BoxPushingMetric(alg_name="SAM", robot_mass=env.cfg.agent.mass)
+
         checkpoint_dir = os.path.join(os.path.dirname(__file__), f'checkpoint/')
-        model_path = f'{checkpoint_dir}/model-{self.model_name}.pt'
+        model_path = f'{checkpoint_dir}/{self.model_name}.pt'
 
         if model_eps == 'latest':
             self.model = DenseActionSpacePolicy(env.action_space.high, env.num_channels, 0.0,
-                                                train=False, evaluate=True)
+                                                train=False, evaluate=True, model_name=self.model_name)
         else:
             model_checkpoint = self.model_name + '_' + model_eps + '_steps'
             # self.model = PPO.load(os.path.join(self.model_path, model_checkpoint))
@@ -395,18 +417,19 @@ class BoxPushingSAM(BasePolicy):
         for eps_idx in range(num_eps):
             print("Progress: ", eps_idx, " / ", num_eps, " episodes")
             obs, info = env.reset()
+            metric.reset(info)
             done = truncated = False
             eps_reward = 0.0
             while True:
                 action, _ = self.model.step(obs)
                 obs, reward, done, truncated, info = env.step(action)
-                eps_reward += reward
+                metric.update(info=info, eps_complete=(done or truncated))
                 if done or truncated:
-                    rewards_list.append(eps_reward)
                     break
         
         env.close()
-        return rewards_list
+        metric.plot_scores(save_fig_dir=env.cfg.output_dir)
+        return metric.efficiency_scores, metric.effort_scores, metric.rewards, "SAM"
 
 
     
