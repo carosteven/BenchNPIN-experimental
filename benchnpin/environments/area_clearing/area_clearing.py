@@ -663,7 +663,8 @@ class AreaClearingEnv(gym.Env):
         pushing_reward = diff_reward * BOX_PUSHING_REWARD_MULTIPLIER
         movement_reward = 0 if abs(diff_reward) > 0 else TIME_PENALTY
 
-        if(num_completed >= self.cleared_box_count):
+        box_completion_reward = 0
+        if(num_completed > self.cleared_box_count):
             box_completion_reward = abs(num_completed - self.cleared_box_count) * BOX_CLEARED_REWARD
             self.t = 0 # reset time if box is cleared
         else:
