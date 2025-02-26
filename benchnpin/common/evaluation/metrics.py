@@ -79,7 +79,7 @@ def obs_to_goal_difference(obs_initial, obs_final, goal_points, boundary_polygon
     for ob_a, ob_b in zip(obs_initial, obs_final):
         if(boundary_polygon is not None and type(boundary_polygon) == Polygon):
             ob_a_polygon = Polygon(ob_a)
-            if(not boundary_polygon.contains(ob_a_polygon)):
+            if(not boundary_polygon.intersects(ob_a_polygon)):
                 continue
 
         min_a_dist, min_b_dist = np.inf, np.inf
