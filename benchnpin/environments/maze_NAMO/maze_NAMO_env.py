@@ -61,7 +61,7 @@ class MazeNAMO(gym.Env):
                                        ship_body=None, meter_to_pixel_scale=cfg.occ.m_to_pix_scale)
         self.cfg = cfg
 
-        self.beta = 1         # amount to scale the collision reward
+        self.beta = 1.5         # amount to scale the collision reward
         self.k = 2        # amount to scale the distance reward
         self.k_increment = 150
         self.episode_idx = None     # the increment of this index is handled in reset()
@@ -245,6 +245,8 @@ class MazeNAMO(gym.Env):
             # self.start = (2, 2,np.pi*3/2)
             self.start = (11.25, 3.75, np.pi / 2)         # for 15x15, v1
 
+            # self.start = (15, 15, 3 * np.pi / 2)         # for 15x15, v1
+
         # if self.cfg.randomize_obstacles:
         #     self.randomize_obstacles()
 
@@ -266,7 +268,7 @@ class MazeNAMO(gym.Env):
         self.space.add(self.robot_body, self.robot_shape, self.wheels[0], self.wheels[1], self.wheels[2], self.wheels[3])
 
         #compute the global distance map
-        self.global_distance_map = self.occupancy.global_goal_point_dist_transform(self.goal, self.maze_walls)
+        self.global_distance_map, self.unnormalized_dist_map = self.occupancy.global_goal_point_dist_transform(self.goal, self.maze_walls)
         # run initial simulation steps to let environment settle
         for _ in range(1000):
             self.space.step(self.dt / self.steps)
@@ -305,9 +307,12 @@ class MazeNAMO(gym.Env):
                     obs_count += 1
         
         else:
-            obstacles.apself.startpend([8, 5.5])
-            obstacles.append([3, 7])
-            obstacles.append([13, 8])
+            obstacles.append([8.5, 11])
+            obstacles.append([10, 9])
+            obstacles.append([11.25, 11.5])
+            
+            obstacles.append([6, 10])
+            obstacles.append([3.5, 8.5])
             self.num_box = 3
         
         # convert to obs dict
@@ -347,7 +352,9 @@ class MazeNAMO(gym.Env):
                                 round(self.robot_body.angle, 2)), 
                 'total_work': self.total_work[0], 
                 'obs': updated_obstacles, 
-                'box_count': 0}
+                'box_count': 0, 
+                'goal_dt': self.unnormalized_dist_map, 
+                'm_to_pix_scale': self.cfg.occ.m_to_pix_scale}
 
         if self.low_dim_state:
             observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles)
@@ -461,18 +468,12 @@ class MazeNAMO(gym.Env):
 
         # move simulation forward
         boundary_constraint_violated = False
-        boundary_violation_terminal = False      # if out of boundary for too much, terminate and truncate the episode
         for _ in range(self.steps):
             self.space.step(self.dt / self.steps)
 
             # apply boundary constraints
             if self.robot_body.position.x < 0 or self.robot_body.position.x > self.cfg.occ.map_width:
                 boundary_constraint_violated = True
-        if self.robot_body.position.x < 0 and abs(self.robot_body.position.x - 0) >= self.boundary_violation_limit:
-            boundary_violation_terminal = True
-        if self.robot_body.position.x > self.cfg.occ.map_width and abs(self.robot_body.position.x - self.cfg.occ.map_width) >= self.boundary_violation_limit:
-            boundary_violation_terminal = True
-
         
         # get updated obstacles
         updated_obstacles = CostMap.get_obs_from_poly(self.polygons)
@@ -520,9 +521,10 @@ class MazeNAMO(gym.Env):
             reward += BOUNDARY_PENALTY
 
         # apply terminal reward
+        trial_success = False
         if terminated and not self.wall_collision:
             reward += TERMINAL_REWARD
-        #print("reward: ", reward)
+            trial_success = True
         
         # Optionally, we can add additional info
         info = {'state': (round(self.robot_body.position.x, 2),
@@ -532,6 +534,7 @@ class MazeNAMO(gym.Env):
                 'collision reward': collision_reward, 
                 'scaled collision reward': collision_reward * self.beta, 
                 'dist increment reward': dist_increment_reward, 
+                'trial_success': trial_success,
                 'obs': updated_obstacles, 
                }    
         
