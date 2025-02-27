@@ -7,7 +7,7 @@ from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.callbacks import CheckpointCallback
 import os
 
-from benchnpin.common.metrics.task_planning_metric import TaskPlanningMetric
+from benchnpin.common.metrics.task_driven_metric import TaskDrivenMetric
 
 class AreaClearingPPO(BasePolicy):
 
@@ -84,7 +84,7 @@ class AreaClearingPPO(BasePolicy):
 
         env = gym.make('area-clearing-v0')
         env = env.unwrapped
-        metric = TaskPlanningMetric(alg_name="PPO", robot_mass=env.cfg.agent.mass)
+        metric = TaskDrivenMetric(alg_name="PPO", robot_mass=env.cfg.agent.mass)
 
         rewards_list = []
         for eps_idx in range(num_eps):

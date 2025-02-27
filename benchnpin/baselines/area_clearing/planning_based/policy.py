@@ -9,7 +9,7 @@ from shapely import shortest_line
 from benchnpin.common.controller.dp import DP
 from benchnpin.common.utils.utils import DotDict
 from benchnpin.common.evaluation.metrics import euclid_dist
-from benchnpin.common.metrics.task_planning_metric import TaskPlanningMetric
+from benchnpin.common.metrics.task_driven_metric import TaskDrivenMetric
 
 from benchnpin.baselines.base_class import BasePolicy
 
@@ -203,7 +203,7 @@ class PlanningBasedPolicy(BasePolicy):
         env.cfg.agent.action_type = 'velocity'
         env.cfg.sim.t_max = 1000
 
-        metric = TaskPlanningMetric(alg_name="GTSP", robot_mass=env.cfg.agent.mass)
+        metric = TaskDrivenMetric(alg_name="GTSP", robot_mass=env.cfg.agent.mass)
 
         rewards_list = []
         for eps_idx in range(num_eps):
