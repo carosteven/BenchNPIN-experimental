@@ -108,6 +108,7 @@ def collect_demos():
                     break
 
                 t += 1
+                env.render()
 
 
         except KeyboardInterrupt:
@@ -144,10 +145,10 @@ def collect_demos():
 
     try:
         # load previous demos
-        with open('pushing_demo.pkl', 'rb') as file:
+        with open('maze_NAMO_demo.pkl', 'rb') as file:
             pickle_dict = pickle.load(file)
 
-        with open('pushing_demo_info.pkl', 'rb') as f:
+        with open('maze_NAMO_demo_info.pkl', 'rb') as f:
             pickle_dict_info = pickle.load(f)
         
         # append current demonstration data
@@ -188,13 +189,13 @@ def collect_demos():
 
     
     # save demo data
-    with open('pushing_demo.pkl', 'wb') as f:
+    with open('maze_NAMO_demo.pkl', 'wb') as f:
         pickle.dump(pickle_dict, f)
 
     # save demo info data
-    with open('pushing_demo_info.pkl', 'wb') as f:
+    with open('maze_NAMO_demow_info.pkl', 'wb') as f:
         pickle.dump(pickle_dict_info, f)
 
-
+    
 if __name__ == "__main__":
     collect_demos()

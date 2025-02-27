@@ -1,16 +1,14 @@
 import numpy as np
 import cv2
 import math
-import os
-import matplotlib.pyplot as plt
 from skimage.draw import draw
-
-# from benchnamo.common.image_process.watershed import get_ice_edges_simulated, get_ice_binary_occgrid_simulated
+from skimage.measure import block_reduce
 from benchnpin.common.geometry.polygon import poly_centroid
+from scipy.ndimage import rotate
 
 class OccupancyGrid:
 
-    def __init__(self, grid_width, grid_height, map_width, map_height, ship_body=None) -> None:
+    def __init__(self, grid_width, grid_height, map_width, map_height, local_width=6, local_height=6, ship_body=None, meter_to_pixel_scale=50) -> None:
         """
         grid_width, grid_height, map_width, map_height are in meter units
         ship body info at starting position
@@ -21,55 +19,35 @@ class OccupancyGrid:
         self.map_height = map_height
         self.occ_map_width = int(self.map_width / self.grid_width)         # number of grids in x-axis
         self.occ_map_height = int(self.map_height / self.grid_height)      # number of grids in y-axis
+        self.meter_to_pixel_scale = meter_to_pixel_scale
 
-        print("Occupancy map resolution: ", grid_width, "; occupancy map dimension: ", (self.occ_map_width, self.occ_map_height))
+        self.local_width = local_width
+        self.local_height = local_height
+        self.local_window_height = int(self.local_height / self.grid_height)            # local window height (unit: cell)
+        self.local_window_width = int(self.local_width / self.grid_width)            # local window width (unit: cell)
+
+        # print("Occupancy map resolution: ", grid_width, "; occupancy map dimension: ", (self.occ_map_width, self.occ_map_height))
 
         self.occ_map = np.zeros((self.occ_map_height, self.occ_map_width))
         self.footprint = np.zeros((self.occ_map_height, self.occ_map_width))
-        self.target_encoding = np.zeros((self.occ_map_height, self.occ_map_width))
         self.obstacle_centroids = np.zeros((self.occ_map_height, self.occ_map_width))
         self.swath = np.zeros((self.occ_map_height, self.occ_map_width))
 
-        self.con_fig, self.con_ax = plt.subplots(figsize=(10, 10))
-        self.con_ax.set_xlabel('')
-        self.con_ax.set_xticks([])
-        self.con_ax.set_ylabel('')
-        self.con_ax.set_yticks([])
 
-        self.local_window_width = 16
-        self.local_window_height = 6
-
-        if ship_body is None:
-            self.cur_grid_x, self.cur_grid_y = 0, 0
-        else:
-            self.cur_grid_x, self.cur_grid_y = self.get_current_grid(ship_body=ship_body)
-
-        self.con_target_grid_x = None
-        self.con_target_grid_y = None
-        self.con_grid_entry = None
-        self.con_grid_exit = None
-        self.t = 0
-
-        self.con_labels = np.zeros((self.occ_map_height, 6))   # 10 step x (prev_obs, label, target_x, target_y, entry, exit)
-        self.flow_field = np.zeros((self.occ_map_height, self.occ_map_height, self.occ_map_width, 2))  # flow field labels (t_dim, y_dim, x_dim, 2)
-
-        self.occ_observations = []
-        self.swath_observations = []
-        self.footprint_observations = []
-        self.target_observations = []
-        self.centroids_observations = []
-        self.cur_grids = []                 # keeps track of cur_grid_x, cur_grid_y in each timestep
-
-        # data collection status
-        self.con_collection = True
-
-
-    def compute_occ_img(self, obstacles, ice_binary_w=235, ice_binary_h=774):
-        meter_to_pixel_scale = ice_binary_h / self.map_height
+    def compute_occ_img(self, obstacles, ice_binary_w=235, ice_binary_h=774, local_range=None, ship_state=None):
+        meter_to_pixel_scale = self.meter_to_pixel_scale
 
         raw_ice_binary = np.zeros((ice_binary_h, ice_binary_w))
 
         for obstacle in obstacles:
+
+            if local_range is not None:
+                robot_x, robot_y = ship_state[:2]
+                range_x, range_y = local_range
+                center_x, center_y = np.abs(poly_centroid(obstacle))
+                if abs(robot_x - center_x) > range_x or abs(robot_y - center_y) > range_y:
+                    continue
+
             obstacle = np.asarray(obstacle) * meter_to_pixel_scale
 
             # get pixel coordinates on costmap that are contained inside obstacle/polygon
@@ -86,68 +64,144 @@ class OccupancyGrid:
         
         return raw_ice_binary
     
+    def compute_occ_img_walls(self, walls, width , height, wall_radius=0.5):
+        meter_to_pixel_scale = height / self.map_height
+        raw_wall_binary = np.zeros((height, width))
+        for wall in walls:
+            vertices = []
+            
+            direction_vector = np.array(wall[1]) - np.array(wall[0])
+            line_length = np.linalg.norm(direction_vector)
+            unit_direction_vector = direction_vector / line_length
+            perpendicular_unit_vector = np.array([-unit_direction_vector[1], unit_direction_vector[0]])
+            
+            #Create the four vertices of the wall 
+            vertices.append(wall[0] + wall_radius * perpendicular_unit_vector - wall_radius * unit_direction_vector)
+            vertices.append(wall[0] - wall_radius * perpendicular_unit_vector - wall_radius * unit_direction_vector)
+            vertices.append(wall[1] - wall_radius * perpendicular_unit_vector + wall_radius * unit_direction_vector)
+            vertices.append(wall[1] + wall_radius * perpendicular_unit_vector + wall_radius * unit_direction_vector)
+            vertices = np.array(vertices) * meter_to_pixel_scale
 
-    def compute_con_gridmap(self, raw_ice_binary, save_fig_dir=None, visualize=False):
+            # get pixel coordinates on costmap that are contained inside obstacle/polygon
+            rr, cc = draw.polygon(vertices[:, 1], vertices[:, 0], shape=raw_wall_binary.shape)
+
+            # skip if 0 area
+            if len(rr) == 0 or len(cc) == 0:
+                continue
+
+            raw_wall_binary[rr, cc] = 1.0
+
+        return raw_wall_binary
+
+
+    def compute_con_gridmap(self, raw_ice_binary, save_fig_dir=None):
         """
         Compute concentration grid map
         """
-        meter_to_pixel_scale_y = raw_ice_binary.shape[0] / self.map_height
-        meter_to_pixel_scale_x = raw_ice_binary.shape[1] / self.map_width
+        meter_to_pixel_scale_y = self.meter_to_pixel_scale
+        meter_to_pixel_scale_x = self.meter_to_pixel_scale
 
-        for i in range(self.occ_map_height):
-            y_low = int(i * self.grid_height * meter_to_pixel_scale_y)
-            y_high = int((i + 1) * self.grid_height * meter_to_pixel_scale_y)
-            if y_high >= raw_ice_binary.shape[0]:
-                y_high = raw_ice_binary.shape[0] - 1
+        
+        block_size = (int(self.grid_height * meter_to_pixel_scale_y), int(self.grid_width * meter_to_pixel_scale_x))
+        occ_map = block_reduce(raw_ice_binary, block_size, np.mean)
 
-            for j in range(self.occ_map_width):
-                x_low = int(j * self.grid_width * meter_to_pixel_scale_x)
-                x_high = int((j + 1) * self.grid_width * meter_to_pixel_scale_x)
-                if x_high >= raw_ice_binary.shape[1]:
-                    x_high = raw_ice_binary.shape[1] - 1
-                cropped_region = raw_ice_binary[y_low:y_high, x_low:x_high]
-
-                self.occ_map[i, j] = np.mean(cropped_region)
-
-        # self.con_ax.clear()
-
-        if (save_fig_dir is not None) and visualize:
-            occ_map_render = np.copy(self.occ_map)
-            occ_map_render = np.flip(occ_map_render, axis=0)
-            self.con_ax.imshow(occ_map_render, cmap='gray')
-            self.con_ax.axis('off')
-            fp = os.path.join(save_fig_dir, str(self.t) + '_con.png')
-            self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
+        self.occ_map = occ_map
+        return occ_map
 
 
-    def compute_swath(self, body, ship_vertices, padding=0.25):
+    def ego_view_obstacle_map(self, raw_ice_binary, ship_state, vertical_shift):
+
+        global_obstacle_map = self.compute_con_gridmap(raw_ice_binary=raw_ice_binary)
+
         meter_to_grid_scale_x = self.occ_map_width / self.map_width
         meter_to_grid_scale_y = self.occ_map_height / self.map_height
 
-        # # apply padding as in a* search
-        # ship_vertices = np.asarray(
-        #     [[np.sign(a) * (abs(a) + padding), np.sign(b) * (abs(b) + padding)] for a, b in ship_vertices]
-        # )
+        local_obstacle_map = np.zeros((self.local_window_height, self.local_window_width))
 
-        # ship vertices in meter
-        heading = body.angle
-        R = np.asarray([
-            [math.cos(heading), -math.sin(heading)], [math.sin(heading), math.cos(heading)]
-        ])
-        vertices = np.asarray(ship_vertices) @ R.T + np.asarray(body.position)
+        robot_x, robot_y = ship_state[:2]
+        window_x, window_y = robot_x, robot_y + vertical_shift      # shifting the local window upward
 
-        r = []
-        c = []
-        for x, y in vertices:
-            grid_x = x * meter_to_grid_scale_x
-            grid_y = y * meter_to_grid_scale_y
-            if grid_y < 0 or grid_y >= self.occ_map_height or grid_x < 0 or grid_x >= self.occ_map_width:
-                continue
-            r.append(grid_y)
-            c.append(grid_x)
+        window_x = int(window_x * meter_to_grid_scale_x)                              # center of local window on global window (unit: cell)
+        window_y = int(window_y * meter_to_grid_scale_y)
 
-        rr, cc = draw.polygon(r=r, c=c)
-        self.swath[rr, cc] = 1.0
+        for local_i in range(self.local_window_height):
+            for local_j in range(self.local_window_width):
+
+                global_i = int(local_i + window_y - (self.local_window_height / 2))
+                global_j = int(local_j + window_x - (self.local_window_width / 2))
+
+                # check out-of-bound
+                if global_i < 0 or global_i >= global_obstacle_map.shape[0] or global_j < 0 or global_j >= global_obstacle_map.shape[1]:
+                    continue
+
+                local_obstacle_map[local_i, local_j] = global_obstacle_map[global_i, global_j]
+        
+        self.local_obstacle_map = local_obstacle_map  
+        return local_obstacle_map
+
+    def ego_view_map_maze(self, agent_state, agent_vertices, obstacles, maze_walls , global_dist_map):
+        #get local window of movable agent
+        #the center of the local window is the agent's position
+        #This method is different from ego_view_obstacle_map() because it calls compute_occ_img() instead of compute_con_gridmap()
+        global_obstacle_map = self.compute_occ_img(obstacles , ice_binary_w=int(self.map_width * self.meter_to_pixel_scale), 
+                        ice_binary_h=int(self.map_height * self.meter_to_pixel_scale))
+        
+        global_wall_map = self.compute_occ_img_walls(maze_walls, self.occ_map_width, self.occ_map_height)
+
+        robot_global_footprint = self._compute_global_footprint_maze(agent_state, agent_vertices)
+        #robot position in meter with respect to the global map
+        robot_x, robot_y = agent_state[:2]
+        #center the local window on the agent's position 
+        window_x, window_y = int(robot_x * self.meter_to_pixel_scale), int(robot_y * self.meter_to_pixel_scale)
+
+        inflation = max(self.local_window_width, self.local_window_height) // 2
+        inflated_local_height = self.local_window_height + inflation
+        inflated_local_width = self.local_window_width + inflation
+
+        #initialize the local robot footprint as zeros (out of bound = 0.0)
+        local_footprint = np.zeros((inflated_local_height, inflated_local_width))
+        #initialize the local obstacle map as zeros (out of bound = 0.0)
+        local_obstacle_map = np.zeros((inflated_local_height, inflated_local_width))
+        #initialize the local wall map as zeros (out of bound = 0.0)
+        local_wall_map = np.zeros((inflated_local_height, inflated_local_width))
+        #initialize the local global distance map as ones (out of bound = 1.0) higher cost for out of bound
+        local_dist_map = np.ones((inflated_local_height, inflated_local_width))
+
+        for local_i in range(inflated_local_height):
+            for local_j in range(inflated_local_width):
+                global_i = int(local_i + window_y - (inflated_local_height / 2))
+                global_j = int(local_j + window_x - (inflated_local_width / 2))
+                # check out-of-bound
+                if global_i < 0 or global_i >= global_obstacle_map.shape[0] or global_j < 0 or global_j >= global_obstacle_map.shape[1]:
+                    continue #zero padding for out of bound
+                
+                local_footprint[local_i, local_j] = robot_global_footprint[global_i, global_j]   
+                local_obstacle_map[local_i, local_j] = global_obstacle_map[global_i, global_j]
+                local_wall_map[local_i, local_j] = global_wall_map[global_i, global_j]
+                local_dist_map[local_i, local_j] = global_dist_map[global_i, global_j]
+
+        corrected_heading = agent_state[2] - np.pi / 2
+        rotate_deg = corrected_heading * (180 / np.pi)       # convert to degree
+        local_footprint = rotate(local_footprint, rotate_deg, reshape=False, cval=0, order=1)
+        local_obstacle_map = rotate(local_obstacle_map, rotate_deg, reshape=False, cval=0, order=1)
+        local_wall_map = rotate(local_wall_map, rotate_deg, reshape=False, cval=0, order=1)
+        local_dist_map = rotate(local_dist_map, rotate_deg, reshape=False, cval=1, order=1)
+
+        half_inflate = inflation // 2
+        local_footprint = local_footprint[half_inflate:half_inflate+self.local_window_height, half_inflate:half_inflate+self.local_window_width]
+        local_obstacle_map = local_obstacle_map[half_inflate:half_inflate+self.local_window_height, half_inflate:half_inflate+self.local_window_width]
+        local_wall_map = local_wall_map[half_inflate:half_inflate+self.local_window_height, half_inflate:half_inflate+self.local_window_width]
+        local_dist_map = local_dist_map[half_inflate:half_inflate+self.local_window_height, half_inflate:half_inflate+self.local_window_width]
+
+        self.local_footprint = local_footprint
+        self.local_obstacle_map = local_obstacle_map
+        self.local_wall_map = local_wall_map
+        self.local_dist_map = local_dist_map
+
+
+        return local_footprint, local_obstacle_map, local_wall_map, local_dist_map
+
+
 
 
     def compute_ship_footprint(self, body, ship_vertices, padding=0.25):
@@ -187,6 +241,14 @@ class OccupancyGrid:
         goal_y_idx = int(goal_y * meter_to_grid_scale_y)
         self.goal_img[goal_y_idx] = 1.0
 
+    def compute_goal_point_image(self, goal):
+        goal_x, goal_y = goal
+        self.goal_img = np.zeros((self.occ_map_height, self.occ_map_width))
+        meter_to_grid_scale_x = self.occ_map_width / self.map_width
+        meter_to_grid_scale_y = self.occ_map_height / self.map_height
+        goal_x_idx = int(goal_x * meter_to_grid_scale_x)
+        goal_y_idx = int(goal_y * meter_to_grid_scale_y)
+        self.goal_img[goal_y_idx, goal_x_idx] = 1.0
     
     def compute_ship_footprint_planner(self, ship_state, ship_vertices, padding=0.25):
         """
@@ -234,213 +296,292 @@ class OccupancyGrid:
         self.footprint[rr, cc] = 1.0
 
 
-    def encode_target_grid(self, save_fig_dir):
-        self.target_encoding = np.zeros((self.occ_map_height, self.occ_map_width))
-        # self.target_encoding[self.con_target_grid_y, self.con_target_grid_x] = 1.0
 
-        if self.cur_grid_y >= self.occ_map_height or self.cur_grid_x >= self.occ_map_width:
-            return
-        
-        self.target_encoding[self.cur_grid_y, self.cur_grid_x] = 1.0
-
-
-    def encode_centroids(self, obstacles):
-        self.obstacle_centroids = np.zeros((self.occ_map_height, self.occ_map_width))
+    def _compute_global_footprint(self, ship_state, ship_vertices, padding=0.25):
+        """
+        This function computes a global footprint map. 
+        Values correspondences: free space 0.5, robot 1.0, out-of-bound 0.0
+        """
+        global_footprint = np.zeros((self.occ_map_height, self.occ_map_width))
+        global_footprint = global_footprint + 0.5                   # free space 0.5, robot 1.0, out-of-bound 0.0
         meter_to_grid_scale_x = self.occ_map_width / self.map_width
         meter_to_grid_scale_y = self.occ_map_height / self.map_height
-        
-        for obs in obstacles:
-            center_x, center_y = np.abs(poly_centroid(obs))
-            x = int(center_x * meter_to_grid_scale_x)
-            y = int(center_y * meter_to_grid_scale_y)
 
-            # skip out of window obstacles
-            if x < 0 or x > self.occ_map_width - 1:
+        position = ship_state[:2]
+        angle = ship_state[2]
+
+        # ship vertices in meter
+        heading = angle
+        R = np.asarray([
+            [math.cos(heading), -math.sin(heading)], [math.sin(heading), math.cos(heading)]
+        ])
+        vertices = np.asarray(ship_vertices) @ R.T + np.asarray(position)
+
+        r = []
+        c = []
+        for x, y in vertices:
+            grid_x = x * meter_to_grid_scale_x
+            grid_y = y * meter_to_grid_scale_y
+            if grid_y < 0 or grid_y >= self.occ_map_height or grid_x < 0 or grid_x >= self.occ_map_width:
                 continue
-            if y < 0 or y > self.occ_map_height - 1:
+            r.append(grid_y)
+            c.append(grid_x)
+        
+        # it is possible that the ship state is outside of the grid map
+        if len(r) == 0 or len(c) == 0:
+            return None
+        
+        rr, cc = draw.polygon(r=r, c=c)
+        
+        global_footprint[rr, cc] = 1.0
+        return global_footprint
+
+
+    def _compute_global_footprint_maze(self, ship_state, ship_vertices, padding=0.25):
+        """
+        This function computes a global footprint map. 
+        Values correspondences: robot 1.0, elsewhere 0.0
+        """
+        global_footprint = np.zeros((self.occ_map_height, self.occ_map_width))
+        meter_to_grid_scale_x = self.occ_map_width / self.map_width
+        meter_to_grid_scale_y = self.occ_map_height / self.map_height
+
+        position = ship_state[:2]
+        angle = ship_state[2]
+
+        # ship vertices in meter
+        heading = angle
+        R = np.asarray([
+            [math.cos(heading), -math.sin(heading)], [math.sin(heading), math.cos(heading)]
+        ])
+        vertices = np.asarray(ship_vertices) @ R.T + np.asarray(position)
+
+        r = []
+        c = []
+        for x, y in vertices:
+            grid_x = x * meter_to_grid_scale_x
+            grid_y = y * meter_to_grid_scale_y
+            if grid_y < 0 or grid_y >= self.occ_map_height or grid_x < 0 or grid_x >= self.occ_map_width:
                 continue
-            
-            self.obstacle_centroids[y, x] = 1.0
+            r.append(grid_y)
+            c.append(grid_x)
+        
+        # it is possible that the ship state is outside of the grid map
+        if len(r) == 0 or len(c) == 0:
+            return None
+        
+        rr, cc = draw.polygon(r=r, c=c)
+        
+        global_footprint[rr, cc] = 1.0
+        return global_footprint
+
+
+    def ego_view_footprint(self, ship_state, ship_vertices, vertical_shift=2): 
+        """
+        This function computes a ego-centric footprint crop, based on the global footprint from _compute_global_footprint()
+        Values correspondences: free space 0.5, robot 1.0, out-of-bound 0.0
+        """
+        meter_to_grid_scale_x = self.occ_map_width / self.map_width
+        meter_to_grid_scale_y = self.occ_map_height / self.map_height
+
+        local_footprint = np.zeros((self.local_window_height, self.local_window_width))
+
+        robot_x, robot_y = ship_state[:2]
+        window_x, window_y = robot_x, robot_y + vertical_shift      # shifting the local window upward
+
+        window_x = int(window_x * meter_to_grid_scale_x)                              # center of local window on global window (unit: cell)
+        window_y = int(window_y * meter_to_grid_scale_y)
+
+        global_footprint = self._compute_global_footprint(ship_state, ship_vertices)
+
+        for local_i in range(self.local_window_height):
+            for local_j in range(self.local_window_width):
+
+                global_i = int(local_i + window_y - (self.local_window_height / 2))
+                global_j = int(local_j + window_x - (self.local_window_width / 2))
+
+                # check out-of-bound
+                if global_i < 0 or global_i >= global_footprint.shape[0] or global_j < 0 or global_j >= global_footprint.shape[1]:
+                    continue
+
+                local_footprint[local_i, local_j] = global_footprint[global_i, global_j]
+        
+        self.local_footprint = local_footprint  
+        return local_footprint
 
     
-    def new_step(self, ship_body):
+    def global_goal_dist_transform(self, goal_y):
         """
-        Determine if this is a new step. If so, the main loop will save obstacle map and invole step()
+        Compute a global normalized goal-line distance transform image
         """
-        grid_x, grid_y = self.get_current_grid(ship_body=ship_body)
+        global_edt = np.zeros((self.occ_map_height, self.occ_map_width))
+        grid_to_meter_scale_y = self.map_height / self.occ_map_height
 
-        # check local window terminal condition
-        if grid_y + self.local_window_height > self.occ_map_height:
-            self.con_collection = False
+        for i in range(self.occ_map_height):
+            for j in range(self.occ_map_width):
+                
+                # compute distance to goal in meters
+                dist_to_goal = goal_y - i * grid_to_meter_scale_y
+                if dist_to_goal < 0: 
+                    dist_to_goal = 0
 
-        if grid_y > self.cur_grid_y:
-            self.cur_grid_x = grid_x
-            self.cur_grid_y = grid_y
-            return True
-        else:
-            return False
+                # normalize to prevent covariance shift
+                nomalized_dist_to_goal = dist_to_goal / goal_y
 
+                global_edt[i, j] = nomalized_dist_to_goal
 
-    def step(self, save_fig_dir, suffix, ship_body, ship_vertices, path, work, visualize, cur_obstacles):
+        return global_edt
 
-        # generate observation for current step
-        img_vis = self.get_observation(save_fig_dir=save_fig_dir, suffix=suffix, visualize=visualize)
+    def global_goal_point_dist_transform(self, goal, walls,wall_radius = 0.5,connectivity= "8-connectivity"):
+        """
+        Compute a global normalized goal-point distance transform image using wavefront algorithm
+        """
+        grid_to_meter_scale = self.map_width / self.occ_map_width
+        goal_x, goal_y = goal
+        goal_x_idx = int(goal_x / grid_to_meter_scale)
+        goal_y_idx = int(goal_y / grid_to_meter_scale)
 
-        raw_ice_binary = self.compute_occ_img(obstacles=cur_obstacles, ice_binary_w=235, ice_binary_h=774)
-        self.compute_con_gridmap(raw_ice_binary=raw_ice_binary, save_fig_dir=save_fig_dir, visualize=visualize)
-        self.occ_observations.append(np.copy(self.occ_map))
+        global_edt = np.zeros((self.occ_map_height, self.occ_map_width))
+        global_edt[goal_y_idx, goal_x_idx] = 1.0
 
-        # if concentration collection is already finished, return
-        # if not self.con_collection:
-        #     return
+        # compute occupancy of the walls
+        global_wall_binary = self.compute_occ_img_walls(walls, self.occ_map_width, self.occ_map_height, wall_radius = wall_radius)
+        
+        # neighbors 
+        if connectivity == "4-connectivity":
+            neighbors = [(0, 1), (0, -1), (1, 0), (-1, 0)]
+        elif connectivity == "8-connectivity":
+            neighbors = [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (1, -1), (-1, 1), (-1, -1)]
 
-        # compute swath
-        self.compute_swath(body=ship_body, ship_vertices=ship_vertices)
-        self.swath_observations.append(np.copy(self.swath))
+        # wavefront algorithm
+        queue = [(goal_y_idx, goal_x_idx)]
+        visited = set()
+        visited.add((goal_y_idx, goal_x_idx))
 
-        # compute ship footprint
-        self.compute_ship_footprint(body=ship_body, ship_vertices=ship_vertices)
-        self.footprint_observations.append(np.copy(self.footprint))
+        while queue:
+            y, x = queue.pop(0)
+            for dy, dx in neighbors:
+                new_y, new_x = y + dy, x + dx
+                # check if neighbor is out-of-bound
+                if new_y < 0 or new_y >= self.occ_map_height or new_x < 0 or new_x >= self.occ_map_width:
+                    continue
+                # check if neighbor is already visited
+                if (new_y, new_x) in visited:
+                    continue
+                # check if neighbor is inside the wall
+                if global_wall_binary[new_y, new_x] == 1.0:
+                    continue
+                # otherwise, update the distance, add to visited and queue
+                visited.add((new_y, new_x))
+                global_edt[new_y, new_x] = global_edt[y, x] + 1
+                queue.append((new_y, new_x))
 
-        # encode target grid
-        # self.encode_target_grid(save_fig_dir=save_fig_dir)
-        # self.target_observations.append(np.copy(self.target_encoding))
+        #normalize the distance
+        global_edt = global_edt / global_edt.max()
 
-        # encode obstacle centroids
-        self.encode_centroids(obstacles=cur_obstacles)
-        self.centroids_observations.append(self.obstacle_centroids)
+        #add walls to the normalized distance map as 1.0
+        global_edt[global_wall_binary == 1.0] = 1.0
 
-        # keep track of cur_grid_x, cur_grid_y info
-        self.cur_grids.append([self.cur_grid_x, self.cur_grid_y])
-
-        self.t += 1
-
-
-    def _step_con(self, save_fig_dir, suffix, ship_body, path):
-
-        # generate concentration labels for the previous step target
-        if (self.con_target_grid_y is not None) and (self.con_target_grid_y - self.cur_grid_y == 1):
-            con_label = self.occ_map[self.con_target_grid_y, self.con_target_grid_x]
-            self.con_labels[self.t - 1, 1] = con_label
-
-        # get next concentration target grid coordinates (spatio query)
-        target_grid_lower = (self.cur_grid_y + 2) * self.grid_height
-        target_grid_upper = (self.cur_grid_y + 3) * self.grid_height
-        within_grid_coords = path[(path[:, 1] > target_grid_lower) & (path[:, 1] < target_grid_upper)]   # (N x 3); 3 --> (x, y, z)
-        self.con_target_grid_x = int(np.mean(within_grid_coords[:, 0]) // self.grid_width)
-        self.con_target_grid_y = int(self.cur_grid_y + 2)
-        self.con_labels[self.t, 2] = self.con_target_grid_x
-        self.con_labels[self.t, 3] = self.con_target_grid_y
-
-        # current con observation for current target
-        cur_con_obs = self.occ_map[self.con_target_grid_y, self.con_target_grid_x]
-        self.con_labels[self.t, 0] = cur_con_obs
-
-        # get action query for concentration (entry and exit on the grid before the target grid, i.e. cur grid + 1)
-        entry_grid_lower = (self.cur_grid_y + 1) * self.grid_height
-        entry_grid_upper = (self.cur_grid_y + 2) * self.grid_height
-        entry_grid_coords = path[(path[:, 1] > entry_grid_lower) & (path[:, 1] < entry_grid_upper)]   # (N x 3); 3 --> (x, y, z)
-        entry_grid_x = int(np.mean(entry_grid_coords[:, 0]) // self.grid_width)
-        self.con_grid_entry = entry_grid_coords[0, 0] - entry_grid_x * self.grid_width
-        self.con_grid_exit = entry_grid_coords[-1, 0] - entry_grid_x * self.grid_width
-        if self.con_grid_entry < 0:
-            self.con_grid_entry = 0
-        elif self.con_grid_entry > self.grid_width:
-            self.con_grid_entry = self.grid_width
-        if self.con_grid_exit < 0:
-            self.con_grid_exit = 0
-        elif self.con_grid_exit > self.grid_width:
-            self.con_grid_exit = self.grid_width
-        self.con_labels[self.t, 4] = self.con_grid_entry
-        self.con_labels[self.t, 5] = self.con_grid_exit
+        return global_edt
+        
 
 
-    def get_observation(self, save_fig_dir, suffix, visualize):
-        # fp = os.path.join(save_fig_dir, str(suffix) + '_obs.png')
-        # img = cv2.imread(fp)
-        if visualize:
-            fp = os.path.join(save_fig_dir, str(suffix) + '.png')
-            img_vis = cv2.imread(fp)
-        else:
-            # img_vis = None
-            return None
 
-        # crop image NOTE this is an ad-hoc procedure. Cropping extend is manually adjusted
-        if self.map_height == 20 and self.map_width == 8:
-            # dimension for 20x8 map
-            desired_height = 757
-            desired_width = 305
-            # img = img[12:12+desired_height, 16:16+desired_width]
-            if visualize:
-                img_vis = img_vis[12:12+desired_height, 16:16+desired_width]
-
-        elif self.map_height == 40 and self.map_width == 8:
-            # dimension for 40x8 map
-            desired_height = 757 - 8
-            desired_width = 155 - 6
-            # img = img[12:12+desired_height, 16:16+desired_width]
-            if visualize:
-                img_vis = img_vis[12:12+desired_height, 16:16+desired_width]
-
-        elif self.map_height == 40 and self.map_width == 12:
-            # dimension for 40x4 map
-            # print("original size: ", img.shape)         # original size (774, 235)
-            desired_height = 774 - 4
-            desired_width = 235 - 4
-            # img = img[9:9+desired_height, 15:15+desired_width]
-            if visualize:
-                img_vis = img_vis[9:9+desired_height, 15:15+desired_width]
-
-        else:
-            # dimension for 40x4 map
-            # print("original size: ", img.shape)         # original size (774, 81)
-            desired_height = 774 - 4
-            desired_width = 81 - 4
-            # img = img[9:9+desired_height, 15:15+desired_width]
-            if visualize:
-                img_vis = img_vis[9:9+desired_height, 15:15+desired_width]
-
-        # segmented_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-        # raw_ice_binary = get_ice_binary_occgrid_simulated(segmented_image)
-        # raw_ice_edges = get_ice_edges_simulated(segmented_image)
-        # return raw_ice_binary, raw_ice_edges, img, img_vis
-        return img_vis
             
+    
+    def ego_view_goal_dist_transform(self, goal_y, ship_state, vertical_shift=2):
+        """
+        Compute an ego-centric local crop of a global goal-line distance transform from global_goal_dist_transform()
+        """
+        meter_to_grid_scale_x = self.occ_map_width / self.map_width
+        meter_to_grid_scale_y = self.occ_map_height / self.map_height
 
-    def export(self, save_fig_dir):
-        occ_observations = np.array(self.occ_observations)
-        swath_observations = np.array(self.swath_observations)
-        footprint_observations = np.array(self.footprint_observations)
-        # target_observations = np.array(self.target_observations)
-        centroids_observations = np.array(self.centroids_observations)
-        cur_grids = np.array(self.cur_grids)
+        global_edt = self.global_goal_dist_transform(goal_y=goal_y)
+        local_edt = np.ones((self.local_window_height, self.local_window_width))
 
-        print("Occupancy bservation shape: ", occ_observations.shape)
-        print("Swath observation shape: ", swath_observations.shape)
-        print("Footprint observation shape: ", footprint_observations.shape)
-        # print("Target observation shape: ", target_observations.shape)
-        print("Centroids observation shape: ", centroids_observations.shape)
-        print("Cur Grids shape: ", cur_grids.shape)
+        robot_x, robot_y = ship_state[:2]
+        window_x, window_y = robot_x, robot_y + vertical_shift      # shifting the local window upward
 
-        np_path = os.path.join(save_fig_dir, 'occ_observations.npy')
-        np.save(np_path, occ_observations)
+        window_x = int(window_x * meter_to_grid_scale_x)                              # center of local window on global window (unit: cell)
+        window_y = int(window_y * meter_to_grid_scale_y)
 
-        np_path = os.path.join(save_fig_dir, 'swath_observations.npy')
-        np.save(np_path, swath_observations)
+        for local_i in range(self.local_window_height):
+            for local_j in range(self.local_window_width):
 
-        np_path = os.path.join(save_fig_dir, 'footprint_observations.npy')
-        np.save(np_path, footprint_observations)
+                global_i = int(local_i + window_y - (self.local_window_height / 2))
+                global_j = int(local_j + window_x - (self.local_window_width / 2))
 
-        # np_path = os.path.join(save_fig_dir, 'target_observations.npy')
-        # np.save(np_path, target_observations)
+                # check out-of-bound
+                if global_i < 0 or global_i >= global_edt.shape[0] or global_j < 0 or global_j >= global_edt.shape[1]:
+                    continue
 
-        np_path = os.path.join(save_fig_dir, 'centroids_observations.npy')
-        np.save(np_path, centroids_observations)
-
-        np_path = os.path.join(save_fig_dir, 'cur_grids.npy')
-        np.save(np_path, cur_grids)
+                local_edt[local_i, local_j] = global_edt[global_i, global_j]
+        
+        self.local_edt = local_edt  
+        return local_edt
 
 
-    def get_current_grid(self, ship_body):
-        return (int(ship_body.position.x // self.grid_width), int(ship_body.position.y // self.grid_height))
+    def global_orientation_map(self, ship_state, head, tail):
+        """
+        Compute a global orientation map. This is a grayscale map with a single line indicating the orientation of the ship
+        """
+        global_orientation = np.zeros((self.occ_map_height, self.occ_map_width))
+        meter_to_grid_scale_x = self.occ_map_width / self.map_width
+        meter_to_grid_scale_y = self.occ_map_height / self.map_height
+
+        position = ship_state[:2]
+        angle = ship_state[2]
+
+        # ship vertices in meter
+        heading = angle
+        R = np.asarray([
+            [math.cos(heading), -math.sin(heading)], [math.sin(heading), math.cos(heading)]
+        ])
+
+        # get global position for ship head and tail
+        head_pos = np.array(head) @ R.T + np.array(position)
+        tail_pos = np.array(tail) @ R.T + np.array(position)
+
+        # convert to grid coordinate
+        head_pix = np.array([head_pos[0] * meter_to_grid_scale_x, head_pos[1] * meter_to_grid_scale_y]).astype(np.uint16)       # (x, y)
+        tail_pix = np.array([tail_pos[0] * meter_to_grid_scale_x, tail_pos[1] * meter_to_grid_scale_y]).astype(np.uint16)       # (x, y)
+
+        cv2.line(global_orientation, head_pix, tail_pix, color=0.5, thickness=1)
+
+        head_pix = np.clip(head_pix, a_min=[0, 0], a_max=[global_orientation.shape[1] - 1, global_orientation.shape[0] - 1])
+        global_orientation[head_pix[1], head_pix[0]] = 1.0              # mark the head
+
+        return global_orientation
+
+
+    def ego_view_orientation_map(self, ship_state, head, tail, vertical_shift):
+        """
+        Compute an ego-centric local crop of the global orientation map, computed from global_orientation_map()
+        """
+        meter_to_grid_scale_x = self.occ_map_width / self.map_width
+        meter_to_grid_scale_y = self.occ_map_height / self.map_height
+
+        local_orientation = np.zeros((self.local_window_height, self.local_window_width))
+
+        robot_x, robot_y = ship_state[:2]
+        window_x, window_y = robot_x, robot_y + vertical_shift      # shifting the local window upward
+
+        window_x = int(window_x * meter_to_grid_scale_x)                              # center of local window on global window (unit: cell)
+        window_y = int(window_y * meter_to_grid_scale_y)
+
+        global_orientation = self.global_orientation_map(ship_state, head, tail)
+
+        for local_i in range(self.local_window_height):
+            for local_j in range(self.local_window_width):
+
+                global_i = int(local_i + window_y - (self.local_window_height / 2))
+                global_j = int(local_j + window_x - (self.local_window_width / 2))
+
+                # check out-of-bound
+                if global_i < 0 or global_i >= global_orientation.shape[0] or global_j < 0 or global_j >= global_orientation.shape[1]:
+                    continue
+
+                local_orientation[local_i, local_j] = global_orientation[global_i, global_j]
+        
+        self.local_orientation = local_orientation  
+        return local_orientation

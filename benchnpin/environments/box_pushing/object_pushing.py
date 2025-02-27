@@ -870,16 +870,6 @@ class ObjectPushing(gym.Env):
 
             # step the simulation until everything is still
             self.step_simulation_until_still()
-        
-
-
-
-
-
-
-
-
-
 
         else:
             # move simulation forward
