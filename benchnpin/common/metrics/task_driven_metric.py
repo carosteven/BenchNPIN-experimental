@@ -39,12 +39,12 @@ class TaskDrivenMetric(BaseMetric):
         completed_box_positions = [box.centroid for box in completed_boxes]
         completed_box_positions = [[pos.x, pos.y] for pos in completed_box_positions]
 
-        robot_node_id = len(completed_box_positions)
-        goal_node_id = len(completed_box_positions) + 1
+        robot_node_id = 2*len(completed_box_positions)
 
-        G.add_nodes_from(range(len(completed_box_positions)))
+        nearest_goal_points = []
+
+        G.add_nodes_from(range(2*len(completed_box_positions)))
         G.add_node(robot_node_id)
-        G.add_node(goal_node_id)
         for i in range(len(completed_box_positions)):
             for j in range(i+1, len(completed_box_positions)):
                 G.add_edge(i, j, weight=np.linalg.norm(np.array(completed_box_positions[i]) - np.array(completed_box_positions[j])))
@@ -56,12 +56,30 @@ class TaskDrivenMetric(BaseMetric):
         # add goal node
         for i in range(len(completed_box_positions)):
             min_dist = np.inf
+            nearest_goal = -1
             for j in range(len(self.goal_positions)):
                 dist = np.linalg.norm(np.array(completed_box_positions[i]) - np.array(self.goal_positions[j]))
                 min_dist = min(min_dist, dist)
-            G.add_edge(i, goal_node_id, weight=min_dist)
+                if dist == min_dist:
+                    nearest_goal = self.goal_positions[j]
+            G.add_edge(i, i + len(completed_box_positions), weight=min_dist)
+            nearest_goal_points.append(nearest_goal)
+
+        all_positions = completed_box_positions + nearest_goal_points + [self.initial_robot_state[:2]]
 
         mst = nx.minimum_spanning_tree(G)
+
+        ### DEBUG: Plot this to visualize the MST
+        # fig, ax = plt.subplots()
+        # for edge in mst.edges:
+        #     start = all_positions[edge[0]]
+        #     end = all_positions[edge[1]]
+        #     ax.plot([start[0], end[0]], [start[1], end[1]], color='red')
+        # for box in completed_boxes:
+        #     x, y = box.exterior.xy
+        #     ax.plot(x, y, color='blue')
+
+        # plt.show()
 
         mst_cost = sum([mst.edges[edge]['weight'] for edge in mst.edges])
         return mst_cost
@@ -76,7 +94,7 @@ class TaskDrivenMetric(BaseMetric):
         return success_rate * mst_cost / self.total_robot_dist
 
 
-    def compute_effort_score(self, mst_cost):
+    def compute_effort_score(self):
         """
         Compute (m_0 * l_0) / (\sum_{i=0}^k m_i * l_i)
         """
@@ -90,7 +108,7 @@ class TaskDrivenMetric(BaseMetric):
                 min_dist = min(min_dist, np.linalg.norm(np.array([goal[0], goal[1]]) - np.array([obstacle.centroid.x, obstacle.centroid.y])))
             min_mass_dist += min_dist * area
 
-        effort = (self.robot_mass * mst_cost) / (self.robot_mass * self.total_robot_dist) + (min_mass_dist / self.total_mass_dist)
+        effort = (self.robot_mass * self.total_robot_dist + min_mass_dist) / (self.robot_mass * self.total_robot_dist + self.total_mass_dist)
         return effort
 
     
@@ -109,7 +127,7 @@ class TaskDrivenMetric(BaseMetric):
             self.rewards.append(self.eps_reward)
             mst_cost = self.compute_mst_cost_for_successful_boxes()
             self.efficiency_scores.append(self.compute_efficiency_score(mst_cost))
-            self.effort_scores.append(self.compute_effort_score(mst_cost))
+            self.effort_scores.append(self.compute_effort_score())
 
 
     def reset(self, info):
