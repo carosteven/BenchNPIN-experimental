@@ -57,11 +57,15 @@ def main(args):
 
         elif cfg.train.job_type == 'ppo':
             # ================================ PPO Policy =================================    
-            ppo_policy = BoxPushingPPO(model_name=model_name, cfg=args.config_file)
+            for model_name in cfg.evaluate.models:
+                ppo_policy = BoxPushingPPO(model_name=model_name, cfg=args.config_file)
+                benchmark_results.append(ppo_policy.evaluate(num_eps=num_eps))
 
         elif cfg.train.job_type == 'sac':
             # ================================ SAC Policy =================================
-            sac_policy = BoxPushingSAC(model_name=model_name, cfg=args.config_file)
+            for model_name in cfg.evaluate.models:
+                sac_policy = BoxPushingSAC(model_name=model_name, cfg=args.config_file)
+                benchmark_results.append(sac_policy.evaluate(num_eps=num_eps))
         
         BaseMetric.plot_algs_scores(benchmark_results, save_fig_dir='./')
 
@@ -74,7 +78,7 @@ if __name__ == '__main__':
         '--config_file',
         type=str,
         help='path to the config file',
-        default=f'{dirname(dirname(__file__))}/benchnpin/environments/box_pushing/config_sam.yaml'
+        default=f'{dirname(dirname(__file__))}/benchnpin/environments/box_pushing/config_ppo.yaml'
     )
 
     parser.add_argument(
