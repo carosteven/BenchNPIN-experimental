@@ -675,7 +675,7 @@ class AreaClearingEnv(gym.Env):
         
         # nonmovement penalty
         nonmovement_penalty = 0
-        if robot_distance < NONMOVEMENT_DIST_THRESHOLD and abs(robot_turn_angle) < NONMOVEMENT_TURN_THRESHOLD:
+        if not(self.cfg.agent.action_type == 'velocity') and (robot_distance < NONMOVEMENT_DIST_THRESHOLD and abs(robot_turn_angle) < NONMOVEMENT_TURN_THRESHOLD):
             nonmovement_penalty = NONMOVEMENT_PENALTY
 
         ### compute work done
@@ -705,7 +705,10 @@ class AreaClearingEnv(gym.Env):
         
         done = terminated or truncated
         ministep_size = 2.5
-        ministeps = robot_distance / ministep_size
+        if(self.cfg.agent.action_type == 'position' or self.cfg.agent.action_type == 'heading'):
+            ministeps = robot_distance / ministep_size
+        else:
+            ministeps = 1
 
         # Optionally, we can add additional info
         info = {'state': (round(self.agent.body.position.x, 2),

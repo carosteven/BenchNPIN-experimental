@@ -204,20 +204,30 @@ class PlanningBasedPolicy(BasePolicy):
             observation, info = env.reset()
             metric.reset(info)
             obstacles = info['obs']
+
+            self.update_boundary_and_obstacles(info['boundary'], info['walls'], info['static_obstacles'])
             done = truncated = False
             eps_reward = 0.0
 
             while True:
-                action = self.act(observation=(observation / 255).astype(np.float64), ship_pos=info['state'], obstacles=obstacles, 
-                                    goal=env.goal,
-                                    conc=env.cfg.concentration, 
-                                    action_scale=env.max_yaw_rate_step)
-                observation, reward, done, truncated, info = env.step(action)
+                action = self.act(observation=(observation).astype(np.float64), agent_pos=info['state'], obstacles=obstacles)
+                env.update_path(self.path)
+
+                if env.cfg.agent.action_type == 'velocity':
+                    scaled_action = [action[0] / env.target_speed, action[1] / env.max_yaw_rate_step]
+                else:
+                    raise Exception('Invalid action type. Must use velocity control')
+
+                observation, reward, done, truncated, info = env.step(scaled_action)
+
                 metric.update(info=info, reward=reward, eps_complete=(done or truncated))
                 obstacles = info['obs']
+                env.render()
                 eps_reward += reward
+
                 if done or truncated:
                     rewards_list.append(eps_reward)
+                    self.reset()
                     break
 
         env.close()

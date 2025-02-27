@@ -1,5 +1,6 @@
+from matplotlib import pyplot as plt
+from shapely.geometry import Polygon
 from benchnpin.common.metrics.base_metric import BaseMetric
-from benchnpin.common.geometry.polygon import poly_area, poly_centroid
 
 import numpy as np
 import networkx as nx
@@ -35,7 +36,8 @@ class TaskPlanningMetric(BaseMetric):
         G = nx.Graph()
         completed_box_ids = [i for i, status in enumerate(self.box_completed_statuses) if status]
         completed_boxes = [self.all_boxes[i] for i in completed_box_ids]
-        completed_box_positions = [poly_centroid(box) for box in completed_boxes]
+        completed_box_positions = [box.centroid for box in completed_boxes]
+        completed_box_positions = [[pos.x, pos.y] for pos in completed_box_positions]
 
         robot_node_id = len(completed_box_positions)
         goal_node_id = len(completed_box_positions) + 1
@@ -49,7 +51,7 @@ class TaskPlanningMetric(BaseMetric):
 
         # add robot node
         for i in range(len(completed_box_positions)):
-            G.add_edge(robot_node_id, i, weight=np.linalg.norm(np.array(self.robot_state[:2]) - np.array(completed_box_positions[i])))
+            G.add_edge(robot_node_id, i, weight=np.linalg.norm(np.array(self.initial_robot_state[:2]) - np.array(completed_box_positions[i])))
 
         # add goal node
         for i in range(len(completed_box_positions)):
@@ -60,6 +62,7 @@ class TaskPlanningMetric(BaseMetric):
             G.add_edge(i, goal_node_id, weight=min_dist)
 
         mst = nx.minimum_spanning_tree(G)
+
         mst_cost = sum([mst.edges[edge]['weight'] for edge in mst.edges])
         return mst_cost
 
@@ -81,10 +84,10 @@ class TaskPlanningMetric(BaseMetric):
         min_mass_dist = 0
 
         for obstacle in self.all_boxes:
-            area = poly_area(obstacle)
+            area = obstacle.area
             min_dist = np.inf
             for goal in self.goal_positions:
-                min_dist = min(min_dist, np.linalg.norm(np.array(obstacle) - np.array(goal)))
+                min_dist = min(min_dist, np.linalg.norm(np.array([goal[0], goal[1]]) - np.array([obstacle.centroid.x, obstacle.centroid.y])))
             min_mass_dist += min_dist * area
 
         effort = (self.robot_mass * mst_cost) / (self.robot_mass * self.total_robot_dist) + (min_mass_dist / self.total_mass_dist)
@@ -95,7 +98,7 @@ class TaskPlanningMetric(BaseMetric):
         self.eps_reward += reward
 
         self.total_mass_dist = info['total_work']
-        self.box_completed_statuses = info['box_completed_status']
+        self.box_completed_statuses = info['box_completed_statuses']
 
         # compute robot motion distance
         cur_robot_state = info['state']
@@ -116,5 +119,9 @@ class TaskPlanningMetric(BaseMetric):
         self.trial_success = False
 
         self.robot_state = info['state']
+        self.initial_robot_state = info['state']
 
         self.all_boxes, self.goal_positions = info['obs'], info['goal_positions']
+
+        self.all_boxes = [Polygon(box) for box in self.all_boxes]
+        self.goal_positions = [[goal.x, goal.y] for goal in self.goal_positions]
