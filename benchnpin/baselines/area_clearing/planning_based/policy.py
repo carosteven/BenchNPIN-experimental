@@ -9,6 +9,7 @@ from shapely import shortest_line
 from benchnpin.common.controller.dp import DP
 from benchnpin.common.utils.utils import DotDict
 from benchnpin.common.evaluation.metrics import euclid_dist
+from benchnpin.common.metrics.task_planning_metric import TaskPlanningMetric
 
 from benchnpin.baselines.base_class import BasePolicy
 
@@ -195,29 +196,43 @@ class PlanningBasedPolicy(BasePolicy):
     def evaluate(self, num_eps: int, model_eps: str ='latest') -> list:
         env = gym.make('area-clearing-v0')
         env = env.unwrapped
+        metric = TaskPlanningMetric(alg_name="GTSP", robot_mass=env.cfg.agent.mass)
 
         rewards_list = []
         for eps_idx in range(num_eps):
             print("Progress: ", eps_idx, " / ", num_eps, " episodes")
             observation, info = env.reset()
+            metric.reset(info)
             obstacles = info['obs']
+
+            self.update_boundary_and_obstacles(info['boundary'], info['walls'], info['static_obstacles'])
             done = truncated = False
             eps_reward = 0.0
 
             while True:
-                action = self.act(observation=(observation / 255).astype(np.float64), ship_pos=info['state'], obstacles=obstacles, 
-                                    goal=env.goal,
-                                    conc=env.cfg.concentration, 
-                                    action_scale=env.max_yaw_rate_step)
-                observation, reward, done, truncated, info = env.step(action)
+                action = self.act(observation=(observation).astype(np.float64), agent_pos=info['state'], obstacles=obstacles)
+                env.update_path(self.path)
+
+                if env.cfg.agent.action_type == 'velocity':
+                    scaled_action = [action[0] / env.target_speed, action[1] / env.max_yaw_rate_step]
+                else:
+                    raise Exception('Invalid action type. Must use velocity control')
+
+                observation, reward, done, truncated, info = env.step(scaled_action)
+
+                metric.update(info=info, reward=reward, eps_complete=(done or truncated))
                 obstacles = info['obs']
+                env.render()
                 eps_reward += reward
+
                 if done or truncated:
                     rewards_list.append(eps_reward)
+                    self.reset()
                     break
 
         env.close()
-        return rewards_list
+        metric.plot_scores(save_fig_dir=env.cfg.output_dir)
+        return metric.efficiency_scores, metric.effort_scores, metric.rewards, "GTSP"
     
     def reset(self):
         self.path = None

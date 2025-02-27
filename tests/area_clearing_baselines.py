@@ -28,21 +28,24 @@ def main(args):
             model_name = f'{cfg.train.job_name}_{args.job_id}'
     elif cfg.evaluate.eval_mode:
         model_name = cfg.evaluate.model
+
+
     # ========================= PPO Policy =====================================
     # ppo_policy = AreaClearingPPO()
-    # ppo_policy.train(total_timesteps=int(4e5), checkpoint_freq=10000)
+    # ppo_policy.train(total_timesteps=int(5e5), checkpoint_freq=10000, from_model_eps='260000')
     # evaluations = ppo_policy.evaluate(num_eps=5)
 
-    # ppo_policy = AreaClearingPPO(model_path='/Storage2/m5ramesh/git/BenchNPIN/benchnpin/baselines/area_clearing/ppo/final_models/clear_env_small/')
-    # evaluations = ppo_policy.evaluate(num_eps=5, model_eps='280000') # For small - 280000 Intuitively performing model! For large - V2-260000 is pretty close
+    # # ppo_policy = AreaClearingPPO(model_path='/Storage2/m5ramesh/git/BenchNPIN/benchnpin/baselines/area_clearing/ppo/final_models/clear_env/V2/')
+    # # evaluations = ppo_policy.evaluate(num_eps=5, model_eps='260000') # For small - 280000 Intuitively performing model! For large - V2-260000 is pretty close
     # print("PPO Eval: ", evaluations)
 
 
     # ========================= SAC Policy =====================================
-    # sac_policy = AreaClearingSAC()
-    # sac_policy.train(total_timesteps=int(2e5), checkpoint_freq=10000)
-    # evaluations = sac_policy.evaluate(num_eps=5)
-    # print("SAC Eval: ", evaluations)
+    sac_policy = AreaClearingSAC()
+    sac_policy.train(total_timesteps=int(1e6), checkpoint_freq=20000)
+    # sac_policy.train(total_timesteps=int(5e5), checkpoint_freq=20000, from_model_eps='260000')
+    evaluations = sac_policy.evaluate(num_eps=5)
+    print("SAC Eval: ", evaluations)
 
 
     # ========================= TD3 Policy =====================================
@@ -52,11 +55,11 @@ def main(args):
     # print("PPO Eval: ", evaluations)
 
     # ========================= SAM Policy =====================================
-    sam_policy = AreaClearingSAM(model_name=model_name, cfg=args.config_file)
-    # sam_policy.train(job_id=args.job_id, **cfg.train)
-    evaluations = sam_policy.evaluate(num_eps=5)
-    # evaluations = td3_policy.evaluate(num_eps=5, model_eps='latest')
-    # print("PPO Eval: ", evaluations)
+    # sam_policy = AreaClearingSAM(model_name=model_name, cfg=args.config_file)
+    # # sam_policy.train(job_id=args.job_id, **cfg.train)
+    # evaluations = sam_policy.evaluate(num_eps=5)
+    # # evaluations = td3_policy.evaluate(num_eps=5, model_eps='latest')
+    # # print("PPO Eval: ", evaluations)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(

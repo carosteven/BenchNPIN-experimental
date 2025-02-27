@@ -43,8 +43,9 @@ agent:
   padding: 0.25  # adds padding to ship footprint
   length: 1.38  # length of the NRC ship in meters
   width: 2.4
-  action_type: 'position' # options are 'velocity', 'heading', 'position'
-  # action_type: 'velocity'
+  # action_type: 'position' # options are 'velocity', 'heading', 'position'
+  # action_type: 'heading' # Use for PPO and SAC
+  action_type: 'velocity' # Use for GTSP
   movement_step_size: 1.5 # If action type is heading, this is the distance to move in that heading
   vertices: [
               [0.69, -1.2],
@@ -61,8 +62,8 @@ render:
   log_obs: false       # whether to log occupancy observation
   show: true                # if true show animation plots
 sim:
-  # t_max: 512  # max number of iterations in simulation loop (originally 5000)
-  t_max: 100
+  t_max: 1000  # max number of iterations - Use for GTSP
+  # t_max: 100
   steps: 100    # number of simulation steps per iteration (originally 10)
   gravity: !!python/tuple
     - 0

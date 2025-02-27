@@ -35,12 +35,12 @@ R = lambda theta: np.asarray([
 ])
 
 BOUNDARY_PENALTY = -0.25
-BOX_PUTBACK_PENALTY = -1
+BOX_PUTBACK_PENALTY = -10 # -1
 TRUNCATION_PENALTY = 0
-TERMINAL_REWARD = 0
-BOX_CLEARED_REWARD = 1
+TERMINAL_REWARD = 50
+BOX_CLEARED_REWARD = 10 # 1
 BOX_PUSHING_REWARD_MULTIPLIER = 0.2
-NONMOVEMENT_PENALTY = -0.25
+NONMOVEMENT_PENALTY = 0 #-0.25
 # TIME_PENALTY = -0.01
 TIME_PENALTY = 0
 
@@ -557,7 +557,8 @@ class AreaClearingEnv(gym.Env):
                 'box_count': 0,
                 'boundary': self.boundary_vertices,
                 'walls': self.walls,
-                'static_obstacles': self.static_obstacles}
+                'static_obstacles': self.static_obstacles,
+                'goal_positions': self.goal_points}
 
         if self.low_dim_state:
             observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles)
@@ -662,7 +663,8 @@ class AreaClearingEnv(gym.Env):
         pushing_reward = diff_reward * BOX_PUSHING_REWARD_MULTIPLIER
         movement_reward = 0 if abs(diff_reward) > 0 else TIME_PENALTY
 
-        if(num_completed >= self.cleared_box_count):
+        box_completion_reward = 0
+        if(num_completed > self.cleared_box_count):
             box_completion_reward = abs(num_completed - self.cleared_box_count) * BOX_CLEARED_REWARD
             self.t = 0 # reset time if box is cleared
         else:
@@ -673,7 +675,7 @@ class AreaClearingEnv(gym.Env):
         
         # nonmovement penalty
         nonmovement_penalty = 0
-        if robot_distance < NONMOVEMENT_DIST_THRESHOLD and abs(robot_turn_angle) < NONMOVEMENT_TURN_THRESHOLD:
+        if not(self.cfg.agent.action_type == 'velocity') and (robot_distance < NONMOVEMENT_DIST_THRESHOLD and abs(robot_turn_angle) < NONMOVEMENT_TURN_THRESHOLD):
             nonmovement_penalty = NONMOVEMENT_PENALTY
 
         ### compute work done
@@ -703,7 +705,10 @@ class AreaClearingEnv(gym.Env):
         
         done = terminated or truncated
         ministep_size = 2.5
-        ministeps = robot_distance / ministep_size
+        if(self.cfg.agent.action_type == 'position' or self.cfg.agent.action_type == 'heading'):
+            ministeps = robot_distance / ministep_size
+        else:
+            ministeps = 1
 
         # Optionally, we can add additional info
         info = {'state': (round(self.agent.body.position.x, 2),
@@ -711,9 +716,10 @@ class AreaClearingEnv(gym.Env):
                                 round(self.agent.body.angle, 2)), 
                 'total_work': self.total_work[0], 
                 'collision reward': collision_reward, 
-                'diff reward': diff_reward,
-                'box completed reward': box_completion_reward, 
+                'diff_reward': diff_reward,
+                'box_completed_reward': box_completion_reward, 
                 'obs': updated_obstacles,
+                'box_completed_statuses': self.box_clearance_statuses,
                 'box_count': num_completed,
                 'ministeps': ministeps,}
         
