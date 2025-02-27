@@ -3,7 +3,7 @@ from gymnasium import spaces
 import numpy as np
 import os
 
-import random
+# import random
 import pymunk
 from pymunk import Vec2d
 from matplotlib import pyplot as plt
@@ -122,7 +122,9 @@ class BoxPushingEnv(gym.Env):
         # misc
         self.ministep_size = self.cfg.misc.ministep_size
         self.inactivity_cutoff = self.cfg.misc.inactivity_cutoff
-        # self.random_seed = self.cfg.misc.random_seed
+        self.random_seed = self.cfg.misc.random_seed
+
+        self.random_state = np.random.RandomState(self.random_seed)
 
         self.episode_idx = None
 
@@ -284,9 +286,9 @@ class BoxPushingEnv(gym.Env):
         length = self.robot_info.length
         width = self.robot_info.width
         size = max(length, width)
-        x_start = random.uniform(-self.room_length / 2 + size, self.room_length / 2 - size)
-        y_start = random.uniform(-self.room_width / 2 + size, self.room_width / 2 - size)
-        heading = random.uniform(0, 2 * np.pi)
+        x_start = self.random_state.uniform(-self.room_length / 2 + size, self.room_length / 2 - size)
+        y_start = self.random_state.uniform(-self.room_width / 2 + size, self.room_width / 2 - size)
+        heading = self.random_state.uniform(0, 2 * np.pi)
         return (x_start, y_start, heading)
     
     def get_receptacle_position_and_size(self):
@@ -332,7 +334,7 @@ class BoxPushingEnv(gym.Env):
             })
         
         def add_random_columns(obstacles, max_num_columns):
-            num_columns = random.randint(1, max_num_columns) # NOTE need to be able to manually set seed
+            num_columns = self.random_state.randint(1, max_num_columns)
             column_length = 1
             column_width = 1
             buffer_width = 0.8
@@ -342,9 +344,9 @@ class BoxPushingEnv(gym.Env):
             new_cols = []
             for _ in range(num_columns):
                 for _ in range(100): # try 100 times to generate a column that doesn't overlap with existing polygons
-                    x = random.uniform(-self.room_length / 2 + 2 * buffer_width + column_length / 2,
+                    x = self.random_state.uniform(-self.room_length / 2 + 2 * buffer_width + column_length / 2,
                                         self.room_length / 2 - 2 * buffer_width - column_length / 2)
-                    y = random.uniform(-self.room_width / 2 + 2 * buffer_width + column_width / 2,
+                    y = self.random_state.uniform(-self.room_width / 2 + 2 * buffer_width + column_width / 2,
                                         self.room_width / 2 - 2 * buffer_width - column_width / 2)
                     
                     overlapped = False
@@ -396,7 +398,7 @@ class BoxPushingEnv(gym.Env):
                 for _ in range(100):
                     overlapped = False
                     x = self.room_length / 2 - divider_length / 2
-                    y = random.uniform(-self.room_width / 2 + buffer_width + divider_width / 2,
+                    y = self.random_state.uniform(-self.room_width / 2 + buffer_width + divider_width / 2,
                                         self.room_width / 2 - buffer_width - divider_width / 2)
                     
                     # check if divider overlaps with robot
@@ -491,9 +493,9 @@ class BoxPushingEnv(gym.Env):
 
             cube_count = 0
             while cube_count < total_cubes_required:
-                center_x = random.uniform(min_x, max_x)
-                center_y = random.uniform(min_y, max_y)
-                heading = random.uniform(0, 2 * np.pi)
+                center_x = self.random_state.uniform(min_x, max_x)
+                center_y = self.random_state.uniform(min_y, max_y)
+                heading = self.random_state.uniform(0, 2 * np.pi)
 
                 # loop through previous cubes to check for overlap
                 overlapped = False

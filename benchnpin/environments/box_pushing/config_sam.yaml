@@ -18,7 +18,7 @@ fixed_trial_idx: 1
 render:
   log_obs: false        # whether to log occupancy observation
   show: true            # if true show animation plots
-  show_obs: true       # if true show occupancy observation
+  show_obs: false       # if true show occupancy observation
   frequency: 20         # frequency of rendering
 sim:
   t_max: 2000  # max number of iterations in simulation loop (originally 5000)
@@ -88,7 +88,7 @@ agent:
 
 ### ENVIRONMENT PARAMS
 env:
-  obstacle_config: small_empty # options are small_empty, small_columns, large_columns, large_divider
+  obstacle_config: small_columns # options are small_empty, small_columns, large_columns, large_divider
   room_length: 10
   room_width: 5 # 5 for small, 10 for large
   receptacle_width: 1.5
@@ -101,7 +101,7 @@ env:
 misc:
   ministep_size: 2.5
   inactivity_cutoff: 100
-  # random_seed: 42 # not implemented yet
+  random_seed: 42
 
 rewards:
   partial_rewards_scale: 0.2
@@ -137,14 +137,14 @@ evaluate:
   eval_mode: true
   num_eps: 20
   models: [
-            small_empty,
+            # small_empty,
             small_columns,
-            large_columns,
-            large_divider
+            # large_columns,
+            # large_divider
           ]
   obs_configs: [
-                small_empty,
+                # small_empty,
                 small_columns,
-                large_columns,
-                large_divider
+                # large_columns,
+                # large_divider
               ]

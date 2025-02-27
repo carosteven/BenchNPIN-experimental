@@ -17,7 +17,7 @@ fixed_trial_idx: 1
 ### SIMULATION PARAMS
 render:
   log_obs: false        # whether to log occupancy observation
-  show: false            # if true show animation plots
+  show: true            # if true show animation plots
   show_obs: false       # if true show occupancy observation
   frequency: 20         # frequency of rendering
 sim:
@@ -101,7 +101,7 @@ env:
 misc:
   ministep_size: 2.5
   inactivity_cutoff: 200
-  # random_seed: 42 # not implemented yet
+  random_seed: 42
 
 rewards:
   partial_rewards_scale: 0.2
@@ -111,6 +111,7 @@ rewards:
   correct_direction_reward_scale: 2
 
 train:
+  train_mode: false
   job_type: ppo
   job_name: last_chance
   batch_size: 64
@@ -121,3 +122,12 @@ train:
   resume_training: false
   use_correct_direction_reward: true
   verbose: 2 
+
+evaluate:
+  eval_mode: true
+  num_eps: 2
+  models: [
+    's15_g5_cdr2_PPO3',
+    's15_g5_cdr2_PPO4',
+    'last_chance_15045234_90000_steps',
+  ]

@@ -17,7 +17,7 @@ fixed_trial_idx: 1
 ### SIMULATION PARAMS
 render:
   log_obs: false        # whether to log occupancy observation
-  show: false            # if true show animation plots
+  show: true            # if true show animation plots
   show_obs: false       # if true show occupancy observation
   frequency: 20         # frequency of rendering
 sim:
@@ -73,7 +73,7 @@ cubes:
 
 agent:
   action_type: 'heading' # options are velocity, heading, position
-  step_size: 2.0 # distance travelled per step in heading control
+  step_size: 1.25 # distance travelled per step in heading control
   random_start: true
   mass: 1  # mass of the NRC ship in kg
   padding: 0.25  # adds padding to ship footprint
@@ -101,7 +101,7 @@ env:
 misc:
   ministep_size: 2.5
   inactivity_cutoff: 100
-  # random_seed: 42 # not implemented yet
+  random_seed: 42
 
 rewards:
   partial_rewards_scale: 0.2
@@ -111,6 +111,7 @@ rewards:
   correct_direction_reward_scale: 2
 
 train:
+  train_mode: false
   job_type: sac
   job_name: ss25_cdr2
   batch_size: 64
@@ -122,3 +123,10 @@ train:
   resume_training: true
   use_correct_direction_reward: true
   verbose: 2
+
+evaluate:
+  eval_mode: true
+  num_eps: 2
+  models: [
+    'fingers_crossed_15049270_60000_steps',
+  ]
