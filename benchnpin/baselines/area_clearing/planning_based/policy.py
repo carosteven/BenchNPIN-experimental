@@ -196,6 +196,13 @@ class PlanningBasedPolicy(BasePolicy):
     def evaluate(self, num_eps: int, model_eps: str ='latest') -> list:
         env = gym.make('area-clearing-v0')
         env = env.unwrapped
+
+        old_action_type = env.cfg.agent.action_type
+        old_t_max = env.cfg.sim.t_max
+
+        env.cfg.agent.action_type = 'velocity'
+        env.cfg.sim.t_max = 1000
+
         metric = TaskPlanningMetric(alg_name="GTSP", robot_mass=env.cfg.agent.mass)
 
         rewards_list = []
@@ -232,6 +239,10 @@ class PlanningBasedPolicy(BasePolicy):
 
         env.close()
         metric.plot_scores(save_fig_dir=env.cfg.output_dir)
+
+        env.cfg.agent.action_type = old_action_type
+        env.cfg.sim.t_max = old_t_max
+
         return metric.efficiency_scores, metric.effort_scores, metric.rewards, "GTSP"
     
     def reset(self):

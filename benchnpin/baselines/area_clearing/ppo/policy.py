@@ -7,6 +7,7 @@ from stable_baselines3.common.env_checker import check_env
 from stable_baselines3.common.callbacks import CheckpointCallback
 import os
 
+from benchnpin.common.metrics.task_planning_metric import TaskPlanningMetric
 
 class AreaClearingPPO(BasePolicy):
 
@@ -83,17 +84,21 @@ class AreaClearingPPO(BasePolicy):
 
         env = gym.make('area-clearing-v0')
         env = env.unwrapped
+        metric = TaskPlanningMetric(alg_name="PPO", robot_mass=env.cfg.agent.mass)
 
         rewards_list = []
         for eps_idx in range(num_eps):
             print("Progress: ", eps_idx, " / ", num_eps, " episodes")
             obs, info = env.reset()
+            metric.reset(info)
             done = truncated = False
             eps_reward = 0.0
             while True:
                 action, _ = self.model.predict(obs)
                 # print(action)
                 obs, reward, done, truncated, info = env.step(action)
+                metric.update(info=info, reward=reward, eps_complete=(done or truncated))
+
                 eps_reward += reward
                 env.render()
                 if done or truncated:
@@ -101,7 +106,9 @@ class AreaClearingPPO(BasePolicy):
                     break
         
         env.close()
-        return rewards_list
+        metric.plot_scores(save_fig_dir=env.cfg.output_dir)
+
+        return metric.efficiency_scores, metric.effort_scores, metric.rewards, "PPO"
 
 
     
