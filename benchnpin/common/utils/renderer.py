@@ -18,6 +18,7 @@ class Renderer():
         # get parameters
         self.goal_line = kwargs.get('goal_line', None)
         self.goal_point = kwargs.get('goal_point', None)
+        self.goal_region = kwargs.get('goal_region', None)                  # a tuple (goal_center,region_size)
         self.clearance_boundary = kwargs.get('clearance_boundary', None)
         self.centered = kwargs.get('centered', False)
 
@@ -48,6 +49,8 @@ class Renderer():
 
         self.path = None
 
+        self.teleop_paths = None
+
 
     def to_pygame(self, pymunk_point):
         """
@@ -66,6 +69,8 @@ class Renderer():
         """
         self.path = path
 
+    def add_teleop_paths(self, paths):
+        self.teleop_paths = paths
     
     def reset(self, new_space):
         """
@@ -82,6 +87,29 @@ class Renderer():
                 self.window, (255, 0, 0), False,  # red color, not a closed shape
                 [self.to_pygame(point) for point in self.path],  # Convert trajectory to Pygame coordinates
                 1,  # Line thickness
+            )
+
+    
+    def display_teleop_paths(self):
+        """
+        Display the planned path given from a planner
+        """
+        pygame.draw.lines(
+                self.window, (255, 100, 100), False,  # red color, not a closed shape
+                [self.to_pygame(point) for point in self.teleop_paths[0]],  # Convert trajectory to Pygame coordinates
+                10,  # Line thickness
+            )
+
+        pygame.draw.lines(
+                self.window, (255, 222, 33), False,  # red color, not a closed shape
+                [self.to_pygame(point) for point in self.teleop_paths[1]],  # Convert trajectory to Pygame coordinates
+                10,  # Line thickness
+            )
+
+        pygame.draw.lines(
+                self.window, (0, 0, 255), False,  # red color, not a closed shape
+                [self.to_pygame(point) for point in self.teleop_paths[2]],  # Convert trajectory to Pygame coordinates
+                10,  # Line thickness
             )
 
     
@@ -103,7 +131,17 @@ class Renderer():
         """
         Display goal regions for navigation tasks
         """
-        raise NotImplementedError
+        """
+        Display goal point for navigation tasks
+        """
+        pygame.draw.circle(
+            self.window,
+            (144, 238, 144),  # Circle color (green)
+            self.to_pygame(self.goal_region[0]),  # Circle center
+            self.goal_region[1] * self.render_scale,  # Circle radius
+            0   # Circle thickness
+        )
+
 
     def display_goal_point(self):
         """
@@ -123,9 +161,10 @@ class Renderer():
         """
         pygame.draw.polygon(
             self.window,
-            '#20FE20',  # Line color (green)
+            # '#20FE20',  # Line color (green)
+            (144, 238, 144),
             [self.to_pygame(point) for point in self.clearance_boundary],  # Convert boundary to Pygame coordinates
-            2  # Line width
+            3  # Line width
         )
 
     def render(self, save=False, path=None, manual_draw=False):
@@ -153,9 +192,15 @@ class Renderer():
 
         if self.path is not None:
             self.display_planned_path()
+
+        if self.teleop_paths is not None:
+            self.display_teleop_paths()
         
         if self.goal_line is not None:
             self.display_goal_line()
+
+        if self.goal_region is not None:
+            self.display_goal_region()
         
         if self.clearance_boundary is not None:
             self.display_clearance_boundary()

@@ -477,12 +477,12 @@ class OccupancyGrid:
                 queue.append((new_y, new_x))
 
         #normalize the distance
-        global_edt = global_edt / global_edt.max()
+        normalized_global_edt = global_edt / global_edt.max()
 
         #add walls to the normalized distance map as 1.0
-        global_edt[global_wall_binary == 1.0] = 1.0
+        normalized_global_edt[global_wall_binary == 1.0] = 1.0
 
-        return global_edt
+        return normalized_global_edt, global_edt
         
 
 

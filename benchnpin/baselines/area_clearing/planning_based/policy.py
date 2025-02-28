@@ -243,7 +243,7 @@ class PlanningBasedPolicy(BasePolicy):
         env.cfg.agent.action_type = old_action_type
         env.cfg.sim.t_max = old_t_max
 
-        return metric.efficiency_scores, metric.effort_scores, metric.rewards, "GTSP"
+        return metric.success_rates, metric.efficiency_scores, metric.effort_scores, metric.rewards, "GTSP"
     
     def reset(self):
         self.path = None

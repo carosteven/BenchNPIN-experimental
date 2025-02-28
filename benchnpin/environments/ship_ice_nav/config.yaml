@@ -11,7 +11,7 @@ plot:
 # parameters for low-dim environment
 low_dim_state: false
 fixed_trial_idx: 4            # 4 for 25x12 (c01) environment; 
-random_start: true
+random_start: false
 start_x_range: 7
 
 randomize_obstacles: false

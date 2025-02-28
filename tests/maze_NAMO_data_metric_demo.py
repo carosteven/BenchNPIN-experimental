@@ -7,14 +7,23 @@ A simple script to run a teleoperation pipeline for demonstration dataset collec
 'esc': exit teleoperation
 """
 
+"""
+NOTE (Feb 27) This is a temporary script to collect teleoperation path. 
+This script save the teleoperated path into the pickle file under the 'action' key, along with the performance metrics for the paths.
+This is intended for plotting
+"""
+
 import benchnpin.environments
 import gymnasium as gym
 import numpy as np
 import pickle
 from pynput import keyboard
 import time
+from benchnpin.common.merics.maze_namo_metric import MazeNamoMetric
 
 env = gym.make('maze-NAMO-v0')
+env = env.unwrapped
+metric = MazeNamoMetric(alg_name="PPO", robot_mass=env.cfg.robot.mass)
 
 observations = []
 actions = []                # this is actually the states (i.e. 3 dof pose)
@@ -94,7 +103,8 @@ def collect_demos():
     total_reward = 0
 
     observation, info = env.reset()
-    record_transition(observation, angular_velocity, 0, False, False)
+    metric.reset(info)
+    record_transition(0, [info['state'][0], info['state'][1]], 0, False, False)
 
     terminated = False
     truncated = False
@@ -106,17 +116,13 @@ def collect_demos():
                 loop_start_time = time.time()
 
                 global command
-                observation, reward, terminated, truncated, info = env.step(angular_velocity)
-                record_transition(observation, angular_velocity, reward, terminated, truncated)
+                _, reward, terminated, truncated, info = env.step(angular_velocity)
+                metric.update(info=info, reward=reward, eps_complete=(terminated or truncated))
+                record_transition(0, [info['state'][0], info['state'][1]], reward, terminated, truncated)
 
-                # print("reward: ", reward, "; dist increment reward: ", info['dist increment reward'], "; col reward scaled: ", info['scaled collision reward'])
                 print("increment reward: ", info['dist increment reward'], "; col reward scaled: ", info['scaled collision reward'])
-                # print("angular vel: ", angular_velocity, "; step: ", t)
 
                 total_reward += reward
-                # print("reward: ", info['dist increment reward'])
-
-
 
                 if terminated or truncated:
                     print("\nterminated: ", terminated, "; truncated: ", truncated)
@@ -165,11 +171,8 @@ def collect_demos():
 
     try:
         # load previous demos
-        with open('maze_NAMO_demo.pkl', 'rb') as file:
+        with open('maze_metric_data.pkl', 'rb') as file:
             pickle_dict = pickle.load(file)
-
-        with open('maze_NAMO_demo_info.pkl', 'rb') as f:
-            pickle_dict_info = pickle.load(f)
         
         # append current demonstration data
         pickle_dict['observations'] = np.concatenate((pickle_dict['observations'], observations))
@@ -178,10 +181,6 @@ def collect_demos():
         pickle_dict['terminals'] = np.concatenate((pickle_dict['terminals'], terminals))
         pickle_dict['timeouts'] = np.concatenate((pickle_dict['timeouts'], timeouts))
 
-        # append current meta-info data
-        pickle_dict_info['path_lengths'] = np.concatenate((pickle_dict_info['path_lengths'], path_lengths))
-        pickle_dict_info['demo_count'] = pickle_dict_info['demo_count'] + 1
-
     except:
         # if pushing_demo file not exist, create one with current demos
         pickle_dict = {
@@ -189,12 +188,10 @@ def collect_demos():
             'actions': actions, 
             'rewards': rewards, 
             'terminals': terminals,
-            'timeouts': timeouts
-        }
-
-        pickle_dict_info = {
-            'path_lengths': path_lengths,
-            'demo_count': 1
+            'timeouts': timeouts, 
+            'efficiency_scores': metric.efficiency_scores[0],
+            'effort_scores': metric.effort_scores[0],
+            'rewards': metric.rewards[0]
         }
 
     print("Total Demonstration Data ======== \n")
@@ -204,17 +201,12 @@ def collect_demos():
     print("terminals shape: ", pickle_dict['terminals'].shape)
     print("timeouts shape: ", pickle_dict['timeouts'].shape)
 
-    print("max path lengths: ", np.max(pickle_dict_info['path_lengths']), "; min path length: ", np.min(pickle_dict_info['path_lengths']), "; average path length: ", np.mean(pickle_dict_info['path_lengths']))
-    print("Total number of demos: ", pickle_dict_info['demo_count'])
-
     
     # save demo data
-    with open('maze_NAMO_demo.pkl', 'wb') as f:
+    with open('maze_metric_data.pkl', 'wb') as f:
         pickle.dump(pickle_dict, f)
 
-    # save demo info data
-    with open('maze_NAMO_demo_info.pkl', 'wb') as f:
-        pickle.dump(pickle_dict_info, f)
+    print(metric.efficiency_scores, metric.effort_scores, metric.rewards)
 
     
 if __name__ == "__main__":

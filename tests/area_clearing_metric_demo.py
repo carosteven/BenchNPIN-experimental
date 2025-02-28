@@ -7,14 +7,26 @@ A simple script to run a teleoperation pipeline for demonstration dataset collec
 'esc': exit teleoperation
 """
 
+"""
+NOTE (Feb 27) This is a temporary script to collect teleoperation path. 
+This script save the teleoperated path into the pickle file under the 'action' key, along with the performance metrics for the paths.
+This is intended for plotting
+"""
+
 import benchnpin.environments
 import gymnasium as gym
 import numpy as np
 import pickle
 from pynput import keyboard
 import time
+from benchnpin.common.metrics.task_driven_metric import TaskDrivenMetric
 
-env = gym.make('maze-NAMO-v0')
+env = gym.make('area-clearing-v0')
+env = env.unwrapped
+env.activate_demo_mode()
+env.cfg.agent.action_type = 'velocity'
+
+metric = TaskDrivenMetric(alg_name="PPO", robot_mass=env.cfg.agent.mass)
 
 observations = []
 actions = []                # this is actually the states (i.e. 3 dof pose)
@@ -22,53 +34,39 @@ rewards = []
 terminals = []              # This is true when episodes end due to termination conditions such as falling over.
 timeouts = []               # This is true when episodes end due to reaching the maximum episode length
 
+TELEOPT_FREQ = 10
+
 FORWARD = 0
 STOP_TURNING = 1
 LEFT = 2
 RIGHT = 3
 STOP = 4
-OTHER = 5
+BACKWARD = 5
 SMALL_LEFT = 6
 SMALL_RIGHT = 7
-BACKWARD = 8
-
-TELEOPT_FREQ = 5
-
-angular_velocity = 0
 
 command = STOP
 manual_stop = False
 
 def on_press(key):
-    global command, angular_velocity
+    global command
     try:
         if key.char == 'w':  # Move up
             command = FORWARD
-        elif key.char == 'y':  # Stop turning
-            command = STOP_TURNING
         elif key.char == 'x':  # Move down
             command = BACKWARD
-
         elif key.char == 'a':  # Move left
             command = LEFT
-            angular_velocity += 0.1
-            angular_velocity = np.clip(angular_velocity, a_max=1.0, a_min=-1.0)
-
         elif key.char == 'd':  # Move right
             command = RIGHT
-            angular_velocity -= 0.1
-            angular_velocity = np.clip(angular_velocity, a_max=1.0, a_min=-1.0)
-
-        elif key.char == 'z':  # Move right
+        elif key.char == 't':  # Stop moving
+            command = STOP
+        elif key.char == 'r':  # Stop turning
+            command = STOP_TURNING
+        elif key.char == 'z':  # Move left slowly
             command = SMALL_LEFT
-            angular_velocity += 0.05
-            angular_velocity = np.clip(angular_velocity, a_max=1.0, a_min=-1.0)
-
-        elif key.char == 'c':  # Move right
+        elif key.char == 'c':  # Move right slowly
             command = SMALL_RIGHT
-            angular_velocity -= 0.05
-            angular_velocity = np.clip(angular_velocity, a_max=1.0, a_min=-1.0)
-
     except AttributeError:
         pass
 
@@ -94,7 +92,8 @@ def collect_demos():
     total_reward = 0
 
     observation, info = env.reset()
-    record_transition(observation, angular_velocity, 0, False, False)
+    metric.reset(info)
+    record_transition(0, [info['state'][0], info['state'][1]], 0, False, False)
 
     terminated = False
     truncated = False
@@ -106,17 +105,13 @@ def collect_demos():
                 loop_start_time = time.time()
 
                 global command
-                observation, reward, terminated, truncated, info = env.step(angular_velocity)
-                record_transition(observation, angular_velocity, reward, terminated, truncated)
-
-                # print("reward: ", reward, "; dist increment reward: ", info['dist increment reward'], "; col reward scaled: ", info['scaled collision reward'])
-                print("increment reward: ", info['dist increment reward'], "; col reward scaled: ", info['scaled collision reward'])
-                # print("angular vel: ", angular_velocity, "; step: ", t)
+                print("command: ", command, "; step: ", t, \
+                      "; num completed: ", info['box_count'],  end="\r")
+                _, reward, terminated, truncated, info = env.step(command)
+                metric.update(info=info, reward=reward, eps_complete=(terminated or truncated))
+                record_transition(0, [info['state'][0], info['state'][1]], reward, terminated, truncated)
 
                 total_reward += reward
-                # print("reward: ", info['dist increment reward'])
-
-
 
                 if terminated or truncated:
                     print("\nterminated: ", terminated, "; truncated: ", truncated)
@@ -133,6 +128,7 @@ def collect_demos():
 
         except KeyboardInterrupt:
             print("Exiting teleoperation.")
+            metric.update(info=info, reward=reward, eps_complete=True)
         finally:
             env.close()
     
@@ -144,8 +140,7 @@ def collect_demos():
     # don't save the demo if this trial is truncated
     global manual_stop
     if manual_stop:
-        print("\nDemo manually stopped. Ignored")
-        return
+        print("\nDemo manually stopped.")
         
     global observations, actions, rewards, terminals, timeouts
     observations = np.array(observations).astype(np.float32)
@@ -165,11 +160,8 @@ def collect_demos():
 
     try:
         # load previous demos
-        with open('maze_NAMO_demo.pkl', 'rb') as file:
+        with open('area_clearing_metric_data.pkl', 'rb') as file:
             pickle_dict = pickle.load(file)
-
-        with open('maze_NAMO_demo_info.pkl', 'rb') as f:
-            pickle_dict_info = pickle.load(f)
         
         # append current demonstration data
         pickle_dict['observations'] = np.concatenate((pickle_dict['observations'], observations))
@@ -178,10 +170,6 @@ def collect_demos():
         pickle_dict['terminals'] = np.concatenate((pickle_dict['terminals'], terminals))
         pickle_dict['timeouts'] = np.concatenate((pickle_dict['timeouts'], timeouts))
 
-        # append current meta-info data
-        pickle_dict_info['path_lengths'] = np.concatenate((pickle_dict_info['path_lengths'], path_lengths))
-        pickle_dict_info['demo_count'] = pickle_dict_info['demo_count'] + 1
-
     except:
         # if pushing_demo file not exist, create one with current demos
         pickle_dict = {
@@ -189,12 +177,10 @@ def collect_demos():
             'actions': actions, 
             'rewards': rewards, 
             'terminals': terminals,
-            'timeouts': timeouts
-        }
-
-        pickle_dict_info = {
-            'path_lengths': path_lengths,
-            'demo_count': 1
+            'timeouts': timeouts, 
+            'efficiency_scores': metric.efficiency_scores[0],
+            'effort_scores': metric.effort_scores[0],
+            'rewards': metric.rewards[0]
         }
 
     print("Total Demonstration Data ======== \n")
@@ -204,17 +190,12 @@ def collect_demos():
     print("terminals shape: ", pickle_dict['terminals'].shape)
     print("timeouts shape: ", pickle_dict['timeouts'].shape)
 
-    print("max path lengths: ", np.max(pickle_dict_info['path_lengths']), "; min path length: ", np.min(pickle_dict_info['path_lengths']), "; average path length: ", np.mean(pickle_dict_info['path_lengths']))
-    print("Total number of demos: ", pickle_dict_info['demo_count'])
-
     
     # save demo data
-    with open('maze_NAMO_demo.pkl', 'wb') as f:
+    with open('area_clearing_metric_data.pkl', 'wb') as f:
         pickle.dump(pickle_dict, f)
 
-    # save demo info data
-    with open('maze_NAMO_demo_info.pkl', 'wb') as f:
-        pickle.dump(pickle_dict_info, f)
+    print(metric.efficiency_scores, metric.effort_scores, metric.rewards)
 
     
 if __name__ == "__main__":
