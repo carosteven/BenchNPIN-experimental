@@ -52,7 +52,7 @@ def create_agent(space, vertices: List,
             front_bumper.mass = 1
             front_bumper.elasticity = 0.01
             if color is not None:
-                front_bumper.color = color
+                front_bumper.color = (76, 59, 77, 255)
 
         if front_bumper is not None:
             space.add(body, shape, *wheels, front_bumper)

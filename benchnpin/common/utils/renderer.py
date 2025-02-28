@@ -161,9 +161,10 @@ class Renderer():
         """
         pygame.draw.polygon(
             self.window,
-            '#20FE20',  # Line color (green)
+            # '#20FE20',  # Line color (green)
+            (144, 238, 144),
             [self.to_pygame(point) for point in self.clearance_boundary],  # Convert boundary to Pygame coordinates
-            2  # Line width
+            3  # Line width
         )
 
     def render(self, save=False, path=None, manual_draw=False):

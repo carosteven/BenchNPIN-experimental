@@ -35,11 +35,11 @@ def main(args):
         model_name = cfg.evaluate.model
 
     benchmark_results = []
-    num_eps = 10
+    num_eps = 1
 
-    # initialize planning based policy
-    policy = PlanningBasedPolicy()
-    benchmark_results.append(policy.evaluate(num_eps=num_eps))
+    ### initialize planning based policy
+    # policy = PlanningBasedPolicy()
+    # benchmark_results.append(policy.evaluate(num_eps=num_eps))
 
     # ========================= PPO Policy =====================================
     ppo_policy = AreaClearingPPO()
