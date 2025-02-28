@@ -101,7 +101,10 @@ class TaskDrivenMetric(BaseMetric):
 
         min_mass_dist = 0
 
-        for obstacle in self.all_boxes:
+        completed_box_ids = [i for i, status in enumerate(self.box_completed_statuses) if status]
+        completed_boxes = [self.all_boxes[i] for i in completed_box_ids]
+
+        for obstacle in completed_boxes:
             area = obstacle.area
             min_dist = np.inf
             for goal in self.goal_positions:
