@@ -216,7 +216,7 @@ class BoxPushingEnv(gym.Env):
             if self.renderer is None:
                 self.renderer = Renderer(self.space, env_width=self.room_length + self.wall_thickness / 2,
                                          env_height=self.room_width + self.wall_thickness / 2,
-                                         render_scale=30, background_color=(200, 200, 200), caption='Box Pushing', centered=True)
+                                         render_scale=30, background_color=(234, 234, 234), caption='Box Pushing', centered=True)
             else:
                 self.renderer.reset(new_space=self.space)
 
@@ -236,7 +236,8 @@ class BoxPushingEnv(gym.Env):
         self.cubes_dicts = self.generate_cubes()
 
         # initialize sim objects
-        self.robot = generate_sim_agent(self.space, self.robot_info, label='robot', body_type=pymunk.Body.KINEMATIC)
+        self.robot = generate_sim_agent(self.space, self.robot_info, label='robot',
+                                        body_type=pymunk.Body.KINEMATIC, wheel_vertices_list=self.robot_info['wheel_vertices'])
         self.cubes = generate_sim_cubes(self.space, self.cubes_dicts, self.cfg.cubes.cube_density)
         self.boundaries = generate_sim_bounds(self.space, self.boundary_dicts)
         self.robot.collision_type = 1
@@ -543,7 +544,7 @@ class BoxPushingEnv(gym.Env):
                                     [cubes_x + cubes_size, cubes_y - cubes_size]])
             cubes_info['heading'] = cubes_heading
             cubes_info['idx'] = i
-            cubes_info['color'] = get_color('blue')
+            cubes_info['color'] = get_color('box')
             cubes_dict.append(cubes_info)
         return cubes_dict
 

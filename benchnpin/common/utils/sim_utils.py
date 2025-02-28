@@ -8,10 +8,10 @@ from benchnpin.common.ship import Ship
 
 BLACK = (0, 0, 0, 255)
 RED = (255, 0, 0, 255)
-GREEN = (35, 163, 33, 255)
-BLUE = (7, 86, 217, 255)
+GREEN = (144, 238, 144, 255)
+BOX = (204, 153, 102, 255)
 AGENT = (100, 100, 100, 255)
-BOUNDARY = (145, 145, 160, 255)
+BOUNDARY = (125, 125, 135, 255)
 
 def get_color(name):
     return globals()[name.upper()]
@@ -45,6 +45,7 @@ def create_agent(space, vertices: List,
                 wheel = pymunk.Poly(body, [tuple(item) for item in wheel_vertices], radius=0.02)
                 wheel.mass = 1
                 wheel.elasticity = 0.01
+                wheel.label = 'wheel'
                 if color is not None:
                     wheel.color = (0, 0, 0, 255)
                 wheels.append(wheel)
@@ -53,6 +54,7 @@ def create_agent(space, vertices: List,
             front_bumper = pymunk.Poly(body, [tuple(item) for item in front_bumper_vertices], radius=0.02)
             front_bumper.mass = 1
             front_bumper.elasticity = 0.01
+            front_bumper.label = 'front_bumper'
             if color is not None:
                 front_bumper.color = (76, 59, 77, 255)
 
