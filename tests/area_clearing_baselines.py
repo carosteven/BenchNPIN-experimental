@@ -33,7 +33,7 @@ def main(args):
         model_name = cfg.evaluate.model
 
     benchmark_results = []
-    num_eps = 1
+    num_eps = 5
 
     ### initialize planning based policy
     policy = PlanningBasedPolicy()
@@ -64,9 +64,11 @@ def main(args):
     # print("SAC Eval: ", evaluations)
 
     # ========================= SAM Policy =====================================
-    sam_policy = AreaClearingSAM(model_name=model_name, cfg=args.config_file)
+    # sam_policy = AreaClearingSAM(model_name=model_name, cfg=args.config_file)
     # # sam_policy.train(job_id=args.job_id, **cfg.train)
-    evaluations = sam_policy.evaluate(num_eps=num_eps)
+    # evaluations = sam_policy.evaluate(num_eps=num_eps)
+
+    # print("SAM Eval: ", evaluations)
 
 
 

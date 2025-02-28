@@ -34,6 +34,8 @@ R = lambda theta: np.asarray([
     [np.sin(theta), np.cos(theta)]
 ])
 
+PAPER_RENDER_MODE = False
+
 BOUNDARY_PENALTY = -0.25
 BOX_PUTBACK_PENALTY = -10 # -1
 TRUNCATION_PENALTY = 0
@@ -353,6 +355,10 @@ class AreaClearingEnv(gym.Env):
             mid_x = (self.min_x_boundary + self.max_x_boundary) / 2
             self.start = (mid_x, self.min_y_boundary + 1.0, np.pi / 2)
 
+        ### DEBUG: Used for paper image
+        if PAPER_RENDER_MODE:
+            self.start = (-0.07870898347806499, -4.0, 1.5707963267948966)
+
         self.agent_info['start_pos'] = self.start
         self.agent_info['color'] = (100, 100, 100, 255)
 
@@ -520,6 +526,10 @@ class AreaClearingEnv(gym.Env):
             if not overlapped:
                 obstacles.append([center_x, center_y])
                 obs_count += 1
+
+        ### DEBUG: Used for paper image
+        if PAPER_RENDER_MODE:
+            obstacles = [[1.063661985378661, 1.6179951647752544], [0.828027030103013, -2.367158808926069], [3.1821729623802204, -0.4006169916647311], [-2.4851040478952173, -1.6834657290847765], [2.7372134329372644, -3.6831299721809874]]
         
         # convert to obs dict
         obs_dict = []
@@ -655,8 +665,8 @@ class AreaClearingEnv(gym.Env):
                 action = y_pixel * self.local_map_pixel_width + x_pixel
 
             self.path, robot_move_sign = self.position_controller.get_waypoints_to_spatial_action(robot_initial_position, robot_initial_heading, action)
-            if self.cfg.render.show:
-                self.renderer.update_path(self.path)
+            # if self.cfg.render.show:
+            #     self.renderer.update_path(self.path)
 
             robot_distance, robot_turn_angle = self.execute_robot_path(robot_initial_position, robot_initial_heading, robot_move_sign)
 

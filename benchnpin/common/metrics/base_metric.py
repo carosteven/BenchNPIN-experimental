@@ -13,6 +13,7 @@ class BaseMetric(ABC):
         self.rewards = []
         self.efficiency_scores = []
         self.effort_scores = []
+        self.success_rates = []
 
         self.alg_name = alg_name
 
@@ -49,6 +50,15 @@ class BaseMetric(ABC):
         ax.set_xlabel("Trials")
         ax.set_ylabel("Rewards")
         fp = os.path.join(save_fig_dir, self.alg_name + '_rewards.png')
+        fig.savefig(fp)
+
+        ax.clear()
+        bp_data = [self.success_rates]
+        ax.boxplot(bp_data, showmeans=True)
+        ax.set_title("Success Rates Plot")
+        ax.set_xlabel("Trials")
+        ax.set_ylabel("Success Rates")
+        fp = os.path.join(save_fig_dir, self.alg_name + '_success_rates.png')
         fig.savefig(fp)
 
         plt.close('all')

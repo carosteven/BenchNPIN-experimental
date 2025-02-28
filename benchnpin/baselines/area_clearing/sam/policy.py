@@ -1,6 +1,6 @@
 from benchnpin.baselines.base_class import BasePolicy
 from benchnpin.baselines.feature_extractors import DenseActionSpaceDQN
-from benchnpin.common.metrics.box_pushing_metric import BoxPushingMetric
+from benchnpin.common.metrics.task_driven_metric import TaskDrivenMetric
 import benchnpin.environments
 import gymnasium as gym
 from collections import namedtuple
@@ -398,7 +398,13 @@ class AreaClearingSAM(BasePolicy):
             env = gym.make('area-clearing-v0')
         env = env.unwrapped
 
-        # metric = BoxPushingMetric(alg_name="SAM", robot_mass=env.cfg.agent.mass)
+        old_action_type = env.cfg.agent.action_type
+        old_t_max = env.cfg.sim.t_max
+
+        env.cfg.agent.action_type = 'position'
+        env.cfg.sim.t_max = 100
+
+        metric = TaskDrivenMetric(alg_name="SAM", robot_mass=env.cfg.agent.mass)
 
         checkpoint_dir = os.path.join(os.path.dirname(__file__), f'checkpoint/')
         model_path = f'{checkpoint_dir}/{self.model_name}.pt'
@@ -414,19 +420,24 @@ class AreaClearingSAM(BasePolicy):
         for eps_idx in range(num_eps):
             print("Progress: ", eps_idx, " / ", num_eps, " episodes")
             obs, info = env.reset()
-            # metric.reset(info)
+            metric.reset(info)
             done = truncated = False
             eps_reward = 0.0
             while True:
                 action, _ = self.model.step(obs)
                 obs, reward, done, truncated, info = env.step(action)
-                # metric.update(info=info, eps_complete=(done or truncated))
+                metric.update(info=info, reward=reward, eps_complete=(done or truncated))
+                
                 if done or truncated:
                     break
         
         env.close()
-        # metric.plot_scores(save_fig_dir=env.cfg.output_dir)
-        # return metric.efficiency_scores, metric.effort_scores, metric.rewards, "SAM"
+        metric.plot_scores(save_fig_dir=env.cfg.output_dir)
+
+        env.cfg.agent.action_type = old_action_type
+        env.cfg.sim.t_max = old_t_max
+
+        return metric.success_rates, metric.efficiency_scores, metric.effort_scores, metric.rewards, "SAM"
 
 
     

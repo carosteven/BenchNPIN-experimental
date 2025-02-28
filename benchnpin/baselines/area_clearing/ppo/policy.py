@@ -108,7 +108,7 @@ class AreaClearingPPO(BasePolicy):
         env.close()
         metric.plot_scores(save_fig_dir=env.cfg.output_dir)
 
-        return metric.efficiency_scores, metric.effort_scores, metric.rewards, "PPO"
+        return metric.success_rates, metric.efficiency_scores, metric.effort_scores, metric.rewards, "PPO"
 
 
     
