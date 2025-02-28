@@ -36,8 +36,8 @@ def main(args):
     num_eps = 1
 
     ### initialize planning based policy
-    # policy = PlanningBasedPolicy()
-    # benchmark_results.append(policy.evaluate(num_eps=num_eps))
+    policy = PlanningBasedPolicy()
+    benchmark_results.append(policy.evaluate(num_eps=num_eps))
 
     # ========================= PPO Policy =====================================
     # ppo_policy = AreaClearingPPO()

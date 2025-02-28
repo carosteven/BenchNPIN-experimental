@@ -191,6 +191,16 @@ class AreaClearingEnv(gym.Env):
         self.cleared_box_count = 0
 
         self.state_fig, self.state_ax = plt.subplots(1, self.num_channels, figsize=(4 * self.num_channels, 6))
+
+        ### DEBUG: Seperate figures for paper
+        # self.state_figs = []
+        # self.state_axes = []
+
+        # for i in range(self.num_channels):
+        #     fig, ax = plt.subplots(figsize=(6, 6))
+        #     self.state_figs.append(fig)
+        #     self.state_axes.append(ax)
+
         self.colorbars = [None] * self.num_channels
 
         self.boundary_goals, self.goal_points = self._compute_boundary_goals()
@@ -1123,6 +1133,20 @@ class AreaClearingEnv(gym.Env):
                         self.colorbars[i] = self.state_fig.colorbar(im, ax=ax)
                 
                 self.state_fig.savefig(os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx), str(self.t) + '_obs.png'))
+
+
+                ### DEBUG: Seperate figures for paper
+                
+                # for i in range(self.num_channels):
+                #     self.state_axes[i].clear()
+                #     im = self.state_axes[i].imshow(self.observation[:,:,i], cmap='hot', interpolation='nearest')
+                #     if self.colorbars[i] is not None:
+                #         self.colorbars[i].update_normal(im)
+                #     else:
+                #         self.colorbars[i] = self.state_figs[i].colorbar(im, ax=self.state_axes[i])
+
+                #     self.state_axes[i].axis('off')
+                #     self.state_figs[i].savefig(os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx), str(self.t) + f'_obs_{i}.png'), bbox_inches='tight', pad_inches=0)
 
         else:
             if(self.renderer):
