@@ -13,9 +13,9 @@ env: 'clear_env'
 # env: 'walled_env_with_columns'
 
 # obstacles information
-num_obstacles: 3
+num_obstacles: 10
 obstacle_size: 0.5
-min_obs_dist: 3.5       # minimum obstacle distance during random initialization
+min_obs_dist: 1.5       # minimum obstacle distance during random initialization
 
 # parameters for low-dim environment
 low_dim_state: false
@@ -47,15 +47,58 @@ agent:
   # action_type: 'heading' # Use for PPO and SAC
   # action_type: 'velocity' # Use for GTSP
   movement_step_size: 1.5 # If action type is heading, this is the distance to move in that heading
-  vertices: [
+  footprint_vertices: [ # Used for the observation classes
               [0.69, -1.2],
               [-0.69, -0.89],
 
               [-0.69, 0.89],
-              [0.69, 1.2], 
+              [0.69, 1.2],
+  ]
+  vertices: [[0.6, -0.8],
+              [-0.7, -0.8],
 
-              
+              [-0.7, 0.8],
+              [0.6, 0.8],
+          ]
+  front_bumper_vertices: [
+              [0.7, -1.2],
+              [0.45, -0.9],
+              [0.45, 0.9],
+              [0.7, 1.2],     
               ]
+  wheel_vertices: [
+    # left front
+    [
+        [0.2, 0.8],
+        [0.2, 0.9],
+        [0.55, 0.9], 
+        [0.55, 0.8]
+    ],
+
+    # right front
+    [
+        [0.2, -0.9],
+        [0.2, -0.8],
+        [0.55, -0.8], 
+        [0.55, -0.9]
+    ],
+
+    # left rear
+    [
+        [-0.2, 0.8],
+        [-0.2, 0.9],
+        [-0.55, 0.9], 
+        [-0.55, 0.8]
+    ],
+
+    # right rear
+    [
+        [-0.2, -0.8],
+        [-0.2, -0.9],
+        [-0.55, -0.9], 
+        [-0.55, -0.8]
+    ],
+  ]
 
 ### SIMULATION PARAMS
 render:
@@ -73,7 +116,7 @@ sim:
   obstacle_density: 0.001
 anim:
   save: true               # if true save to disk animation plots
-  plot_steps: 100            # steps between plot updates
+  plot_steps: 30            # steps between plot updates
   plan_steps: 10            # steps between obstacle and planner updates
   inf_stream: false         # if true then infinite obstacle stream mode is enabled
   move_yaxis_threshold: 10  # distance traveled before y-axis moves

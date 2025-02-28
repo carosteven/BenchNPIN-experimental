@@ -54,14 +54,44 @@ class BaseMetric(ABC):
         plt.close('all')
 
 
+    @staticmethod
+    def plot_algs_score(scores, score_name, alg_names, save_fig_dir, filename):
+        fig, ax = plt.subplots()
+
+        color_list = [
+            (0.43, 0.64, 0.68), 
+            (0.84, 0.39, 0.26),
+            (0.65, 0.65, 0.65),
+            (0.3, 0.3, 0.3), 
+        ]
+
+        # plot scores
+        ax.clear()
+        bps = []
+        colors = []
+        for i in range(len(scores)):
+            score = scores[i]
+
+            color = color_list[i]
+            bp = ax.boxplot([score], positions=[i + 1], showmeans=False, patch_artist=True, 
+                                boxprops=dict(facecolor=color), medianprops=dict(color="black"))
+            bps.append(bp["boxes"][0])
+            colors.append(color)
+
+        ax.set_xticks(list(range(1, len(scores) + 1)))
+        ax.set_xticklabels(alg_names)
+        # ax.set_xlabel(score_name)
+        # ax.set_ylabel("Algorithms")
+        ax.legend(bps, alg_names, loc="upper left")
+        fp = os.path.join(save_fig_dir, filename + '.png')
+        fig.savefig(fp)
+
 
     @staticmethod
     def plot_algs_scores(benchmark_results: List[Tuple[List[float], List[float], List[float], str]], save_fig_dir: str) -> None:
         """
         :param benchmark_results: a list of evaluation tuples, where each tuple is computed from policy.evaluate()
         """
-
-        fig, ax = plt.subplots()
 
         # parse benchmark results
         efficiency_data = []
@@ -73,36 +103,10 @@ class BaseMetric(ABC):
             effort_data.append(alg_effort)
             reward_data.append(alg_reward)
             alg_names.append(alg_name)
-        
-        ax.clear()
-        ax.boxplot(efficiency_data, showmeans=True)
-        ax.set_xticks(list(range(1, len(efficiency_data) + 1)))
-        ax.set_xticklabels(alg_names)
-        ax.set_title("Efficiency Benchmark")
-        ax.set_xlabel("Efficiency Score")
-        ax.set_ylabel("Algorithms")
-        fp = os.path.join(save_fig_dir, 'efficiency_benchmark.png')
-        fig.savefig(fp)
 
-        ax.clear()
-        ax.boxplot(effort_data, showmeans=True)
-        ax.set_xticks(list(range(1, len(effort_data) + 1)))
-        ax.set_xticklabels(alg_names)
-        ax.set_title("Interaction Effort Benchmark")
-        ax.set_xlabel("Effort Score")
-        ax.set_ylabel("Algorithms")
-        fp = os.path.join(save_fig_dir, 'effort_benchmark.png')
-        fig.savefig(fp)
-
-        ax.clear()
-        ax.boxplot(reward_data, showmeans=True)
-        ax.set_xticks(list(range(1, len(reward_data) + 1)))
-        ax.set_xticklabels(alg_names)
-        ax.set_title("Reward Benchmark")
-        ax.set_xlabel("Rewards")
-        ax.set_ylabel("Algorithms")
-        fp = os.path.join(save_fig_dir, 'reward_benchmark.png')
-        fig.savefig(fp)
+        BaseMetric.plot_algs_score(scores=efficiency_data, score_name="Efficiency Score", alg_names=alg_names, save_fig_dir=save_fig_dir, filename="efficiency_benchmark")
+        BaseMetric.plot_algs_score(scores=effort_data, score_name="Effort Score", alg_names=alg_names, save_fig_dir=save_fig_dir, filename="effort_benchmark")
+        BaseMetric.plot_algs_score(scores=reward_data, score_name="Rewards", alg_names=alg_names, save_fig_dir=save_fig_dir, filename="reward_benchmark")
 
 
     @abstractmethod

@@ -61,9 +61,9 @@ class MazeNAMO(gym.Env):
                                        ship_body=None, meter_to_pixel_scale=cfg.occ.m_to_pix_scale)
         self.cfg = cfg
 
-        self.beta = 1         # amount to scale the collision reward
+        self.beta = 1.5         # amount to scale the collision reward
         self.k = 2        # amount to scale the distance reward
-        self.k_increment = 300
+        self.k_increment = 150
         self.episode_idx = None     # the increment of this index is handled in reset()
 
         self.path = None
@@ -215,8 +215,10 @@ class MazeNAMO(gym.Env):
         self.handler_robot_wall.pre_solve = pre_solve_handler_walls
         if self.cfg.render.show:
             if self.renderer is None:
+                # self.renderer = Renderer(self.space, env_width=self.cfg.env.width, env_height=self.cfg.env.length, render_scale=80, 
+                #         background_color=(200, 200, 200), caption="ASV Navigation", goal_point= (self.cfg.goal_x, self.cfg.goal_y))
                 self.renderer = Renderer(self.space, env_width=self.cfg.env.width, env_height=self.cfg.env.length, render_scale=80, 
-                        background_color=(28, 107, 160), caption="ASV Navigation", goal_point= (self.cfg.goal_x, self.cfg.goal_y))
+                        background_color=(200, 200, 200), caption="ASV Navigation", goal_region=((self.cfg.goal_x, self.cfg.goal_y), self.cfg.goal_radius))
             else:
                 self.renderer.reset(new_space=self.space)
         
@@ -243,6 +245,8 @@ class MazeNAMO(gym.Env):
             # self.start = (2, 2,np.pi*3/2)
             self.start = (11.25, 3.75, np.pi / 2)         # for 15x15, v1
 
+            # self.start = (15, 15, 3 * np.pi / 2)         # for 15x15, v1
+
         # if self.cfg.randomize_obstacles:
         #     self.randomize_obstacles()
 
@@ -255,16 +259,16 @@ class MazeNAMO(gym.Env):
         self.goal = (self.cfg.goal_x, self.cfg.goal_y)
         
         # initialize ship sim objects
-        self.polygons = generate_sim_obs(self.space, self.obs_dicts, self.cfg.sim.obstacle_density, color=(173, 216, 230, 255))
+        self.polygons = generate_sim_obs(self.space, self.obs_dicts, self.cfg.sim.obstacle_density, color=(204, 153, 102, 255))
         for p in self.polygons:
             p.collision_type = 2
 
-        self.robot_body, self.robot_shape = Robot.sim(self.cfg.robot.vertices, self.start, body_type=pymunk.Body.KINEMATIC, color=(64, 64, 64, 255))
+        self.robot_body, self.robot_shape, self.wheels = Robot.sim(self.cfg.robot.vertices, self.start, body_type=pymunk.Body.KINEMATIC, color=(100, 100, 100, 255), wheel_vertices_list=self.cfg.robot.wheel_vertices)
         self.robot_shape.collision_type = 1
-        self.space.add(self.robot_body, self.robot_shape)
+        self.space.add(self.robot_body, self.robot_shape, self.wheels[0], self.wheels[1], self.wheels[2], self.wheels[3])
 
         #compute the global distance map
-        self.global_distance_map = self.occupancy.global_goal_point_dist_transform(self.goal, self.maze_walls)
+        self.global_distance_map, self.unnormalized_dist_map = self.occupancy.global_goal_point_dist_transform(self.goal, self.maze_walls)
         # run initial simulation steps to let environment settle
         for _ in range(1000):
             self.space.step(self.dt / self.steps)
@@ -303,9 +307,12 @@ class MazeNAMO(gym.Env):
                     obs_count += 1
         
         else:
-            obstacles.apself.startpend([8, 5.5])
-            obstacles.append([3, 7])
-            obstacles.append([13, 8])
+            obstacles.append([8.5, 11])
+            obstacles.append([10, 9])
+            obstacles.append([11.25, 11.5])
+            
+            obstacles.append([6, 10])
+            obstacles.append([3.5, 8.5])
             self.num_box = 3
         
         # convert to obs dict
@@ -345,7 +352,9 @@ class MazeNAMO(gym.Env):
                                 round(self.robot_body.angle, 2)), 
                 'total_work': self.total_work[0], 
                 'obs': updated_obstacles, 
-                'box_count': 0}
+                'box_count': 0, 
+                'goal_dt': self.unnormalized_dist_map, 
+                'm_to_pix_scale': self.cfg.occ.m_to_pix_scale}
 
         if self.low_dim_state:
             observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles)
@@ -394,8 +403,9 @@ class MazeNAMO(gym.Env):
         robot_pose = (self.robot_body.position.x, self.robot_body.position.y, self.robot_body.angle)
         robot_pixel_x = int(robot_pose[0] * self.cfg.occ.m_to_pix_scale) 
         robot_pixel_y = int(robot_pose[1] * self.cfg.occ.m_to_pix_scale)
-        dist_value = 1/np.exp(self.global_distance_map[robot_pixel_y, robot_pixel_x] * self.k)
-        return dist_value
+        # dist_value = 1/np.exp(self.global_distance_map[robot_pixel_y, robot_pixel_x] * self.k)
+        # return dist_value
+        return self.global_distance_map[robot_pixel_y, robot_pixel_x]
 
     def step(self, action):
         """Executes one time step in the environment and returns the result."""
@@ -450,7 +460,7 @@ class MazeNAMO(gym.Env):
             # apply velocity controller
             # self.robot_body.angular_velocity = action[1]
 
-            global_velocity = R(self.robot_body.angle) @ [0.1, 0]           # fixed linear forward velocity 0.2 m/s
+            global_velocity = R(self.robot_body.angle) @ [0.15, 0]           # fixed linear forward velocity 0.2 m/s
             action = action * self.max_yaw_rate_step #scaling from [-1, 1] to [-max_yaw_rate_step, max_yaw_rate_step]
             self.robot_body.angular_velocity = action
 
@@ -458,18 +468,12 @@ class MazeNAMO(gym.Env):
 
         # move simulation forward
         boundary_constraint_violated = False
-        boundary_violation_terminal = False      # if out of boundary for too much, terminate and truncate the episode
         for _ in range(self.steps):
             self.space.step(self.dt / self.steps)
 
             # apply boundary constraints
             if self.robot_body.position.x < 0 or self.robot_body.position.x > self.cfg.occ.map_width:
                 boundary_constraint_violated = True
-        if self.robot_body.position.x < 0 and abs(self.robot_body.position.x - 0) >= self.boundary_violation_limit:
-            boundary_violation_terminal = True
-        if self.robot_body.position.x > self.cfg.occ.map_width and abs(self.robot_body.position.x - self.cfg.occ.map_width) >= self.boundary_violation_limit:
-            boundary_violation_terminal = True
-
         
         # get updated obstacles
         updated_obstacles = CostMap.get_obs_from_poly(self.polygons)
@@ -496,7 +500,8 @@ class MazeNAMO(gym.Env):
             if self.prev_dist_value is None:
                 dist_increment_reward = 0
             else:
-                dist_increment_reward = (dist_value - self.prev_dist_value)*self.k_increment
+                # dist_increment_reward = (dist_value - self.prev_dist_value)*self.k_increment
+                dist_increment_reward = (self.prev_dist_value - dist_value)*self.k_increment
             #
             self.prev_dist_value = dist_value
             #print("dist reward: ", dist_reward)
@@ -516,9 +521,10 @@ class MazeNAMO(gym.Env):
             reward += BOUNDARY_PENALTY
 
         # apply terminal reward
+        trial_success = False
         if terminated and not self.wall_collision:
             reward += TERMINAL_REWARD
-        #print("reward: ", reward)
+            trial_success = True
         
         # Optionally, we can add additional info
         info = {'state': (round(self.robot_body.position.x, 2),
@@ -528,6 +534,7 @@ class MazeNAMO(gym.Env):
                 'collision reward': collision_reward, 
                 'scaled collision reward': collision_reward * self.beta, 
                 'dist increment reward': dist_increment_reward, 
+                'trial_success': trial_success,
                 'obs': updated_obstacles, 
                }    
         
@@ -587,29 +594,16 @@ class MazeNAMO(gym.Env):
         observation = (observation*255).astype(np.uint8)
         return observation
 
+
     def goal_is_reached(self):
         #check if the goal is within the robot's dimensions
         robot_x = self.robot_body.position.x
         robot_y = self.robot_body.position.y
         goal_dist = ((robot_x - self.goal[0])**2 + (robot_y - self.goal[1])**2)**(0.5)
-        if goal_dist <= 2:
+        if goal_dist <= self.cfg.goal_radius + self.cfg.robot.min_r:
             return True
         else:
             return False
-
-        # robot_angle = self.robot_body.angle
-        # robot_vertices = self.robot_shape.get_vertices()
-        # robot_transformed_vertices = [R(robot_angle) @ vertex + np.array([robot_x, robot_y]) for vertex in robot_vertices]
-        # #check if the goal is within the robot's dimensions (cross-product method)
-        # cross_product = []
-        # for i in range(len(robot_transformed_vertices)):
-        #     vertex1 = robot_transformed_vertices[i]
-        #     vertex2 = robot_transformed_vertices[(i+1)%len(robot_transformed_vertices)]
-        #     cross_product.append(np.cross(vertex2 - vertex1, self.goal - vertex1))
-        # if all([cross >= 0 for cross in cross_product]) or all([cross <= 0 for cross in cross_product]):
-        #     print("goal reached")
-        #     return True
-            
 
     
     def render(self, mode='human', close=False):

@@ -1,6 +1,6 @@
 from benchnpin.baselines.base_class import BasePolicy
 from benchnpin.baselines.feature_extractors import ResNet18
-from benchnpin.common.metrics.ship_ice_metric import ShipIceMetric #change later to MazeNAMOMetric
+from benchnpin.common.merics.maze_namo_metric import MazeNamoMetric
 from typing import List, Tuple
 import benchnpin.environments
 import gymnasium as gym
@@ -74,20 +74,22 @@ class MazeNAMOPPO(BasePolicy):
 
         env = gym.make('maze-NAMO-v0')
         env = env.unwrapped
-        metric = ShipIceMetric(env=env, alg_name="PPO")  #change later to MazeNAMOMetric
+        metric = MazeNamoMetric(alg_name="PPO", robot_mass=env.cfg.robot.mass)
 
         for eps_idx in range(num_eps):
             print("PPO Progress: ", eps_idx, " / ", num_eps, " episodes")
-            obs, info = metric.reset()
+            obs, info = env.reset()
+            metric.reset(info)
             done = truncated = False
             while True:
-                action, _ = self.model.predict(obs)
-                obs, reward, done, truncated, info = metric.step(action)
+                action, _ = self.model.predict(obs, deterministic=True)
+                obs, reward, done, truncated, info = env.step(action)
+                metric.update(info=info, reward=reward, eps_complete=(done or truncated))
                 if done or truncated:
                     break
         
         env.close()
-        metric.plot_scores()
+        metric.plot_scores(save_fig_dir=env.cfg.output_dir)
         return metric.efficiency_scores, metric.effort_scores, metric.rewards, "PPO"
     
 
