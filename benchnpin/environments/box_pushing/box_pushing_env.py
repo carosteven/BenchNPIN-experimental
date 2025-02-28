@@ -1303,11 +1303,13 @@ class BoxPushingEnv(gym.Env):
                 for ax, i in zip(self.state_ax, range(self.num_channels)):
                     ax.clear()
                     ax.set_title(f'Channel {i}')
+                    ax.set_xticks([])
+                    ax.set_yticks([])
                     im = ax.imshow(self.observation[:,:,i], cmap='hot', interpolation='nearest')
-                    if self.colorbars[i] is not None:
-                        self.colorbars[i].update_normal(im)
-                    else:
-                        self.colorbars[i] = self.state_fig.colorbar(im, ax=ax)
+                    # if self.colorbars[i] is not None:
+                    #     self.colorbars[i].update_normal(im)
+                    # else:
+                    #     self.colorbars[i] = self.state_fig.colorbar(im, ax=ax)
                 
                 self.state_plot.draw()
                 # self.state_plot.pause(0.001)

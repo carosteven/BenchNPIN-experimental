@@ -99,7 +99,7 @@ class DenseActionSpacePolicy:
             if resume_training:
                 model_path = os.path.join(os.path.dirname(__file__), f'checkpoint/{job_id_to_resume}/model-{model_name}.pt')
             elif evaluate:
-                model_path = os.path.join(os.path.dirname(__file__), f'models_to_test/{model_name}.pt')
+                model_path = os.path.join(os.path.dirname(__file__), f'models/{model_name}.pt')
             else:
                 checkpoint_dir = os.path.dirname(checkpoint_path)
                 model_path = f'{checkpoint_dir}/model-{self.model_name}.pt'
