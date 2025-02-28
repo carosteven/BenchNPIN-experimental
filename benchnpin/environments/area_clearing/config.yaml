@@ -47,19 +47,66 @@ agent:
   action_type: 'heading' # Use for PPO and SAC
   # action_type: 'velocity' # Use for GTSP
   movement_step_size: 1.5 # If action type is heading, this is the distance to move in that heading
-  vertices: [
+  footprint_vertices: [ # Used for the observation classes
               [0.69, -1.2],
               [-0.69, -0.89],
 
               [-0.69, 0.89],
-              [0.69, 1.2], 
+              [0.69, 1.2],
+  ]
+  vertices: [[0.7, -0.5],
+              [0.55, -0.6],
+              [-0.55, -0.6],
+              [-0.7, -0.5],
 
-              
+              [-0.7, 0.5],
+              [-0.55, 0.6],
+              [0.55, 0.6], 
+              [0.7, 0.5]
+          ]
+  front_bumper_vertices: [
+              [0.7, -1.2],
+              [0.6, -0.89],
+              [0.6, 0.89],
+              [0.7, 1.2],     
               ]
+  wheel_vertices: [
+    # left front
+    [
+        [0.2, 0.6],
+        [0.2, 0.7],
+        [0.5, 0.7], 
+        [0.55, 0.6]
+    ],
+
+    # right front
+    [
+        [0.2, -0.7],
+        [0.2, -0.6],
+        [0.55, -0.6], 
+        [0.55, -0.7]
+    ],
+
+    # left rear
+    [
+        [-0.2, 0.6],
+        [-0.2, 0.7],
+        [-0.55, 0.7], 
+        [-0.55, 0.6]
+    ],
+
+    # right rear
+    [
+        [-0.2, -0.6],
+        [-0.2, -0.7],
+        [-0.55, -0.7], 
+        [-0.55, -0.6]
+    ],
+  ]
 
 ### SIMULATION PARAMS
 render:
-  log_obs: false       # whether to log occupancy observation
+  log_obs: true       # whether to log occupancy observation
   show: true                # if true show animation plots
 sim:
   # t_max: 1000  # max number of iterations - Use for GTSP
@@ -73,7 +120,7 @@ sim:
   obstacle_density: 0.001
 anim:
   save: true               # if true save to disk animation plots
-  plot_steps: 100            # steps between plot updates
+  plot_steps: 30            # steps between plot updates
   plan_steps: 10            # steps between obstacle and planner updates
   inf_stream: false         # if true then infinite obstacle stream mode is enabled
   move_yaxis_threshold: 10  # distance traveled before y-axis moves

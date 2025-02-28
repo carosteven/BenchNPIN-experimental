@@ -190,7 +190,7 @@ class AreaClearingEnv(gym.Env):
 
         self.cleared_box_count = 0
 
-        # self.state_fig, self.state_ax = plt.subplots(1, self.num_channels, figsize=(4 * self.num_channels, 6))
+        self.state_fig, self.state_ax = plt.subplots(1, self.num_channels, figsize=(4 * self.num_channels, 6))
         self.colorbars = [None] * self.num_channels
 
         self.boundary_goals, self.goal_points = self._compute_boundary_goals()
@@ -326,7 +326,7 @@ class AreaClearingEnv(gym.Env):
         if self.cfg.render.show:
             if self.renderer is None:
                 self.renderer = Renderer(self.space, env_width=self.map_width + 2, env_height=self.map_height + 2, render_scale=20, 
-                        background_color=(255, 255, 255), caption="Area Clearing", 
+                        background_color=(206, 224, 220), caption="Area Clearing", 
                         centered=True,
                         clearance_boundary=self.boundary_vertices
                         )
@@ -344,7 +344,7 @@ class AreaClearingEnv(gym.Env):
             self.start = (mid_x, self.min_y_boundary + 1.0, np.pi / 2)
 
         self.agent_info['start_pos'] = self.start
-        self.agent_info['color'] = get_color('red')
+        self.agent_info['color'] = (100, 100, 100, 255)
 
         self.obs_dicts = self.generate_obstacles()
         obs_dicts, self.static_obs_shapes = self.generate_static_obstacles()
@@ -361,13 +361,14 @@ class AreaClearingEnv(gym.Env):
 
         # initialize ship sim objects
         self.dynamic_obs = [ob for ob in self.obs_dicts if ob['type'] == ObstacleType.DYNAMIC]
-        self.box_shapes = generate_sim_obs(self.space, self.dynamic_obs, self.cfg.sim.obstacle_density)
+        self.box_shapes = generate_sim_obs(self.space, self.dynamic_obs, self.cfg.sim.obstacle_density, color=(204, 153, 102, 255))
         for p in self.box_shapes:
             p.collision_type = 2
         
         self.box_clearance_statuses = [False for i in range(len(self.box_shapes))]
 
-        self.agent = generate_sim_agent(self.space, self.agent_info, body_type=pymunk.Body.KINEMATIC)
+        self.agent = generate_sim_agent(self.space, self.agent_info, body_type=pymunk.Body.KINEMATIC, 
+                                        wheel_vertices_list=self.cfg.agent.wheel_vertices, front_bumper_vertices=self.cfg.agent.front_bumper_vertices)
         self.agent.collision_type = 1
 
         # Initialize configuration space (only need to compute once)
@@ -973,8 +974,8 @@ class AreaClearingEnv(gym.Env):
                 fillPoly(small_overhead_map, [vertices_px], color=COMPLETED_CUBE_SEG_INDEX/MAX_SEG_INDEX)
             else:
                 fillPoly(small_overhead_map, [vertices_px], color=CUBE_SEG_INDEX/MAX_SEG_INDEX)
-        
-        vertices = [self.agent.body.local_to_world(v) for v in self.agent.get_vertices()]
+
+        vertices = [self.agent.body.local_to_world(v) for v in self.agent_info.footprint_vertices]
         robot_vertices = np.array([[v.x, v.y] for v in vertices])
         robot_vertices_px = (robot_vertices * self.local_map_pixels_per_meter).astype(np.int32)
         robot_vertices_px[:, 0] += int(self.local_map_width * self.local_map_pixels_per_meter / 2) + 10
