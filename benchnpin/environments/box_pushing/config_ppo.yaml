@@ -127,7 +127,7 @@ evaluate:
   eval_mode: true
   num_eps: 2
   models: [
-    's15_g5_cdr2_PPO3',
-    's15_g5_cdr2_PPO4',
-    'last_chance_15045234_90000_steps',
+    'last_chance_15045234_90000_steps_20000_steps',
+    # 's15_g5_cdr2_PPO4',
+    # 'last_chance_15045234_90000_steps',
   ]

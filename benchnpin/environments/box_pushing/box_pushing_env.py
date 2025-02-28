@@ -101,7 +101,7 @@ class BoxPushingEnv(gym.Env):
         # robot
         self.robot_hit_obstacle = False
         self.robot_info = self.cfg.agent
-        self.robot_info['color'] = get_color('red')
+        self.robot_info['color'] = get_color('agent')
         self.robot_radius = ((self.robot_info.length**2 + self.robot_info.width**2)**0.5 / 2) * 1.2
         self.robot_half_width = max(self.robot_info.length, self.robot_info.width) / 2
         robot_pixel_width = int(2 * self.robot_radius * self.local_map_pixels_per_meter)
@@ -214,7 +214,7 @@ class BoxPushingEnv(gym.Env):
             if self.renderer is None:
                 self.renderer = Renderer(self.space, env_width=self.room_length + self.wall_thickness / 2,
                                          env_height=self.room_width + self.wall_thickness / 2,
-                                         render_scale=30, background_color=(255, 255, 255), caption='Box Pushing', centered=True)
+                                         render_scale=30, background_color=(200, 200, 200), caption='Box Pushing', centered=True)
             else:
                 self.renderer.reset(new_space=self.space)
 
@@ -330,7 +330,7 @@ class BoxPushingEnv(gym.Env):
                     [x + length / 2, y + width / 2],  # top-right
                     [x - length / 2, y + width / 2],  # top-left
                 ]),
-                'color': get_color('black')
+                'color': get_color('boundary')
             })
         
         def add_random_columns(obstacles, max_num_columns):
@@ -383,7 +383,7 @@ class BoxPushingEnv(gym.Env):
                                       ]),
                                   'length': column_length,
                                   'width': column_width,
-                                  'color': get_color('black')
+                                  'color': get_color('boundary')
                                 })
             return cols_dict
         
@@ -427,7 +427,7 @@ class BoxPushingEnv(gym.Env):
                                           ]),
                                         'length': divider_length,
                                         'width': divider_width,
-                                        'color': get_color('black')
+                                        'color': get_color('boundary')
                                     })
             return divider_dicts
                     
@@ -458,7 +458,7 @@ class BoxPushingEnv(gym.Env):
                 {'type': 'corner',
                  'position': (x, y),
                  'heading': heading,
-                 'color': get_color('black')
+                 'color': get_color('boundary')
                 })
             
         # generate corners for divider
@@ -473,7 +473,7 @@ class BoxPushingEnv(gym.Env):
                         {'type': 'corner',
                         'position': position,
                         'heading': heading,
-                        'color': get_color('black')
+                        'color': get_color('boundary')
                         })
 
         return boundary_dicts

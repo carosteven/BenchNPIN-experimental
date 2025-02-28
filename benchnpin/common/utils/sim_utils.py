@@ -8,13 +8,15 @@ from benchnpin.common.ship import Ship
 
 BLACK = (0, 0, 0, 255)
 RED = (255, 0, 0, 255)
-GREEN = (0, 255, 0, 255)
-BLUE = (0, 0, 255, 255)
+GREEN = (35, 163, 33, 255)
+BLUE = (7, 86, 217, 255)
+AGENT = (100, 100, 100, 255)
+BOUNDARY = (145, 145, 160, 255)
 
 def get_color(name):
     return globals()[name.upper()]
 
-def create_agent(space, vertices: List, start_pos: Tuple[float, float, float], body_type: int, label: str, color=None):
+def create_agent(space, vertices: List, start_pos: Tuple[float, float, float], body_type: int, label: str, color=None, wheels=None):
 
         x, y, heading = start_pos
         # setup for pymunk
@@ -25,18 +27,30 @@ def create_agent(space, vertices: List, start_pos: Tuple[float, float, float], b
         centre_of_g = dummy_shape.center_of_gravity
         vs = [(x - centre_of_g[0], y - centre_of_g[1]) for x, y in vertices]
 
-        shape = pymunk.Poly(body, vs)#, radius=0.08)
-        shape.mass = 10.0
-        shape.elasticity = 0.01
-        shape.friction = 1.0
-        shape.label = label
+        agent_shape = pymunk.Poly(body, vs)#, radius=0.08)
+        agent_shape.mass = 10.0
+        agent_shape.elasticity = 0.01
+        agent_shape.friction = 1.0
+        agent_shape.label = label
         if color is not None:
-            shape.color = color
-        space.add(body, shape)
-        return shape
+            agent_shape.color = color
+        
+        if wheels is None:
+            space.add(body, agent_shape)
+        else:
+            wheel_shapes = []
+            for wheel_vertices in wheels:
+                wheel = pymunk.Poly(body, [tuple(vs) for vs in wheel_vertices])
+                wheel.mass = 1.0
+                wheel.elasticity = 0.01
+                wheel.color = (0, 0, 0, 255)
+                wheel.label = 'wheel'
+                wheel_shapes.append(wheel)
+            space.add(body, agent_shape, *wheel_shapes)
+        return agent_shape
 
 def generate_sim_agent(space, agent: dict, body_type: int=pymunk.Body.DYNAMIC, label: str='agent'):
-    return create_agent(space, agent['vertices'], agent['start_pos'], body_type, label, color=agent['color'])
+    return create_agent(space, agent['vertices'], agent['start_pos'], body_type, label, color=agent['color'], wheels=agent['wheel_vertices'])
 
 def create_static(space, boundary, color=None):
     body = pymunk.Body(body_type=pymunk.Body.STATIC)
