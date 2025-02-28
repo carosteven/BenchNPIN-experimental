@@ -36,3 +36,4 @@ events.out*
 *.pkl
 *.zip
 .DS_Store
+*.pt
