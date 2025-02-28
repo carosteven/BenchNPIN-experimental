@@ -111,6 +111,7 @@ def create_polygon(space, vertices, x, y, density, heading=0, label='poly', idx=
     shape.elasticity = 0.01
     shape.friction = 1.0
     shape.label = label
+    shape.idx = idx
     if color is not None:
         shape.color = color
     space.add(body, shape)

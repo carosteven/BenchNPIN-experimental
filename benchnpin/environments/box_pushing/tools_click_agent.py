@@ -5,7 +5,8 @@ import benchnpin.environments
 import gymnasium as gym
 import numpy as np
 import pickle
-from pynput import keyboard
+from os.path import dirname
+# from pynput import keyboard
 
 
 class ClickAgent:
@@ -18,6 +19,7 @@ class ClickAgent:
         self.fig.canvas.mpl_connect('button_press_event', self.mouse_callback)
         self.fig.canvas.mpl_connect('key_press_event', self.key_callback)
         self.key_pressed = None
+        self.map_scale = 96
         plt.ion()
         plt.show()
 
@@ -30,7 +32,7 @@ class ClickAgent:
         self.key_pressed = event.key
 
     def update_display(self, state, last_reward, last_ministeps):
-        state_img = state[0]
+        state_img = state[:,:,0]
         self.ax.clear()
         self.ax.imshow(state_img)
         plt.draw()
@@ -54,7 +56,7 @@ class ClickAgent:
                     break
 
             if self.selected_action is not None:
-                action = self.selected_action[0] * 96 + self.selected_action[1]
+                action = self.selected_action[0] * self.map_scale + self.selected_action[1] # 300 is current resolution
                 state, reward, done, _, info = self.env.step(action)
                 last_reward = reward
                 # last_ministeps = info['ministeps']
@@ -64,7 +66,7 @@ class ClickAgent:
                 pass
 
             if done or force_reset_env:
-                state = self.env.reset()
+                state, _ = self.env.reset()
                 done = False
                 force_reset_env = False
                 last_reward = 0
@@ -72,7 +74,8 @@ class ClickAgent:
         plt.close()
 
 def main():
-    env = gym.make('object-pushing-v0')
+    cfg_file = f'{dirname(__file__)}/config_sam.yaml'
+    env = gym.make('box-pushing-v0', cfg_file=cfg_file)
     agent = ClickAgent(env)
     agent.run()
     env.close()

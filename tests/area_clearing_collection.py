@@ -13,9 +13,16 @@ import numpy as np
 import pickle
 from pynput import keyboard
 
+import datetime
+
+step_size = 0.1
+
 env = gym.make('area-clearing-v0')
+env = env.unwrapped
+env.activate_demo_mode()
 
 observations = []
+states = []
 actions = []                # this is actually the states (i.e. 3 dof pose)
 rewards = []
 terminals = []              # This is true when episodes end due to termination conditions such as falling over.
@@ -63,21 +70,44 @@ def on_release(key):
         return False
 
 
-def record_transition(observation, state, reward, terminal, timeout):
+def record_transition(observation, state, action, reward, terminal, timeout):
     observations.append(observation)
-    actions.append(state)
+    states.append(state)
+    actions.append(action)
     rewards.append(reward)
     terminals.append(terminal)
     timeouts.append(timeout)
 
+def save_demo_data():
+    print('Saving demo data')
+
+    observations_np = np.array(observations).astype(np.float32)
+    states_np = np.array(states).astype(np.float32)
+    actions_np = np.array(actions).astype(np.float32)
+    rewards_np = np.array(rewards).astype(np.float32)
+    terminals_np = np.array(terminals)
+    timeouts_np = np.array(timeouts)
+
+    pickle_dict = {
+        'observations': observations_np, 
+        'states': observations_np, 
+        'actions': actions_np, 
+        'rewards': rewards_np, 
+        'terminals': terminals_np,
+        'timeouts': timeouts_np
+    }
+
+    now = datetime.datetime.now()
+    timestamp = now.strftime("%Y-%m-%d_%H-%M-%S")
+
+    with open('area_clearing_demo_' + timestamp + '.pkl', 'wb') as f:
+        pickle.dump(pickle_dict, f)
+
 
 def collect_demos():
 
-    path_length = 0
-    step_size = 0.1
-
     observation, info = env.reset()
-    record_transition(observation, [info['state'][0], info['state'][1]], 0, False, False)
+    record_transition(observation, [info['state'][0], info['state'][1]], -1, 0, False, False)
     prev_state = [info['state'][0], info['state'][1]]
 
     terminated = False
@@ -99,7 +129,7 @@ def collect_demos():
                 #     env.render()
 
                 if (((info['state'][0] - prev_state[0])**2 + (info['state'][1] - prev_state[1])**2)**(0.5) >= step_size) or terminated or truncated:
-                    record_transition(observation, [info['state'][0], info['state'][1]], reward, terminated, truncated)
+                    record_transition(observation, [info['state'][0], info['state'][1]], command, reward, terminated, truncated)
                     prev_state = [info['state'][0], info['state'][1]]
                     transition_count += 1
 
@@ -115,6 +145,7 @@ def collect_demos():
             print("Exiting teleoperation.")
         finally:
             env.close()
+            save_demo_data()
     
     # don't save the demo if this trial is truncated
     if truncated:

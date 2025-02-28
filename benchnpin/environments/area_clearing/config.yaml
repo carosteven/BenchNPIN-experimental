@@ -7,14 +7,13 @@ output_dir: "logs/" # 'output/trial0'
 plot:
   show: false       # true will show planner plots
 
+# env: 'clear_env_small'
 env: 'clear_env'
 # env: 'walled_env'
 # env: 'walled_env_with_columns'
 
-demo_mode: false     # when using demo mode, control both forward and angular speed
-
 # obstacles information
-num_obstacles: 5
+num_obstacles: 3
 obstacle_size: 0.5
 min_obs_dist: 3.5       # minimum obstacle distance during random initialization
 
@@ -42,15 +41,13 @@ prim:
 agent:
   mass: 1  # mass of the NRC ship in kg
   padding: 0.25  # adds padding to ship footprint
-
+  length: 1.38  # length of the NRC ship in meters
+  width: 2.4
+  # action_type: 'position' # options are 'velocity', 'heading', 'position'
+  action_type: 'heading' # Use for PPO and SAC
+  # action_type: 'velocity' # Use for GTSP
+  movement_step_size: 1.5 # If action type is heading, this is the distance to move in that heading
   vertices: [
-
-              # [0.69, -0.89],
-              # [-0.69, -0.89],
-
-              # [-0.69, 0.89],
-              # [0.69, 0.89], 
-
               [0.69, -1.2],
               [-0.69, -0.89],
 
@@ -62,10 +59,11 @@ agent:
 
 ### SIMULATION PARAMS
 render:
-  log_obs: true       # whether to log occupancy observation
+  log_obs: false       # whether to log occupancy observation
   show: true                # if true show animation plots
 sim:
-  t_max: 2000  # max number of iterations in simulation loop (originally 5000)
+  # t_max: 1000  # max number of iterations - Use for GTSP
+  t_max: 100
   steps: 100    # number of simulation steps per iteration (originally 10)
   gravity: !!python/tuple
     - 0
@@ -75,7 +73,7 @@ sim:
   obstacle_density: 0.001
 anim:
   save: true               # if true save to disk animation plots
-  plot_steps: 30            # steps between plot updates
+  plot_steps: 100            # steps between plot updates
   plan_steps: 10            # steps between obstacle and planner updates
   inf_stream: false         # if true then infinite obstacle stream mode is enabled
   move_yaxis_threshold: 10  # distance traveled before y-axis moves
@@ -101,9 +99,38 @@ controller:
   Lfc: 0.5
   
   # target speed
-  target_speed: 0.3  # m/s
+  target_speed: 0.2  # m/s
 
   PID_gains:  # gains for 3 PIDs
     - [ 5, 0, 5 ]
     - [ 10, 0, 20 ]
     - [ 10, 0, 20 ]
+
+train:
+  train_mode: false
+  job_type: 'sam'
+  job_name: 'ac'
+  batch_size: 32
+  checkpoint_freq: 6000
+  exploration_timesteps: 6000
+  final_exploration: 0.01
+  gamma: 0.99
+  grad_norm_clipping: 10
+  job_id_to_resume: null
+  learning_rate: 0.01
+  learning_starts: 1000
+  n_epochs: 10
+  n_steps: 256
+  replay_buffer_size: 10000
+  resume_training: false
+  target_update_freq: 1000
+  total_timesteps: 60000
+  use_correct_direction_reward: false
+  use_double_dqn: true
+  verbose: 2
+  weight_decay: 0.0001
+
+evaluate:
+  eval_mode: true
+  num_eps: 20
+  model: model-ac_1503642961000
