@@ -3,12 +3,12 @@ from gymnasium import spaces
 import numpy as np
 import os
 
-# import random
 import pymunk
 from pymunk import Vec2d
 from matplotlib import pyplot as plt
+from shapely.geometry import Point
 
-# ship-ice related imports
+# Bench-NPIN related imports
 from benchnpin.common.cost_map import CostMap
 from benchnpin.common.evaluation.metrics import total_work_done
 from benchnpin.common.geometry.polygon import poly_area
@@ -187,6 +187,8 @@ class BoxPushingEnv(gym.Env):
         self.room_width = self.cfg.env.room_width
         self.wall_thickness = self.cfg.env.wall_thickness
 
+        self.total_work = [0, []]
+
         def robot_boundary_pre_solve(arbiter, space, data):
             self.robot_hit_obstacle = self.prevent_boundary_intersection(arbiter)
             return True
@@ -221,6 +223,7 @@ class BoxPushingEnv(gym.Env):
     def init_box_pushing_env(self):
         
         self.receptacle_position, self.receptacle_size = self.get_receptacle_position_and_size()
+        self.goal_points = [Point(self.receptacle_position)]
 
         # generate random start point, if specified
         if self.cfg.agent.random_start:
@@ -258,10 +261,12 @@ class BoxPushingEnv(gym.Env):
         # Initialize configuration space (only need to compute once)
         self.update_configuration_space()
 
+        self.box_clearance_statuses = [False for i in range(len(self.cubes))]
+
         # run initial simulation steps to let environment settle
         for _ in range(1000):
             self.space.step(self.dt / self.steps)
-        self.prev_obs = CostMap.get_obs_from_poly(self.cubes)
+        self.prev_cubes = CostMap.get_obs_from_poly(self.cubes)
     
     def prevent_boundary_intersection(self, arbiter):
         collision = False
@@ -576,8 +581,8 @@ class BoxPushingEnv(gym.Env):
         self.robot_cumulative_cubes = 0
         self.robot_cumulative_reward = 0
 
+        updated_cubes = CostMap.get_obs_from_poly(self.cubes)
         if self.low_dim_state:
-            updated_cubes = CostMap.get_obs_from_poly(self.cubes)
             self.observation = self.generate_observation_low_dim(updated_cubes=updated_cubes)
 
         else:
@@ -588,15 +593,19 @@ class BoxPushingEnv(gym.Env):
             self.render()
         
         info = {
-            'ministeps': 0,
-            'inactivity': self.inactivity_counter,
-            'cumulative_cube_distance': self.cubes_cumulative_distance,
-            'cumulative_distance': self.robot_cumulative_distance,
-            'cumulative_cubes': self.robot_cumulative_cubes,
-            'cumulative_reward': self.robot_cumulative_reward,
             'state': (round(self.robot.body.position.x, 2),
                       round(self.robot.body.position.y, 2),
                       round(self.robot.body.angle, 2)),
+            'cumulative_distance': self.robot_cumulative_distance,
+            'cumulative_cubes': self.robot_cumulative_cubes,
+            'cumulative_reward': self.robot_cumulative_reward,
+            'total_work': self.total_work[0],
+            'obs': updated_cubes,
+            'box_completed_statuses': self.box_clearance_statuses,
+            'goal_positions': self.goal_points,
+            'ministeps': 0,
+            'inactivity': self.inactivity_counter,
+            # 'cumulative_cube_distance': self.cubes_cumulative_distance,
         }
 
         return self.observation, info
@@ -882,6 +891,7 @@ class BoxPushingEnv(gym.Env):
             cube_vertices = [cube.body.local_to_world(v) for v in cube.get_vertices()]
             if self.cube_position_in_receptacle(cube_vertices):
                 to_remove.append(cube)
+                self.box_clearance_statuses[cube.idx] = True
                 self.inactivity_counter = 0
                 robot_cubes += 1
                 robot_reward += self.goal_reward
@@ -901,10 +911,17 @@ class BoxPushingEnv(gym.Env):
         
         ############################################################################################################
         # Compute stats
-        self.cubes_cumulative_distance += cubes_distance
+        # self.cubes_cumulative_distance += cubes_distance
         self.robot_cumulative_distance += robot_distance
         self.robot_cumulative_cubes += robot_cubes
         self.robot_cumulative_reward += robot_reward
+
+        # work
+        updated_cubes = CostMap.get_obs_from_poly(self.cubes)
+        work = total_work_done(self.prev_cubes, updated_cubes)
+        self.total_work[0] += work
+        self.total_work[1].append(work)
+        self.prev_cubes = updated_cubes
 
         # increment inactivity counter, which measures steps elapsed since the previus cube was stashed
         if robot_cubes == 0:
@@ -925,15 +942,19 @@ class BoxPushingEnv(gym.Env):
         reward = robot_reward
         ministeps = robot_distance / self.ministep_size
         info = {
-            'ministeps': ministeps,
-            'inactivity': self.inactivity_counter,
-            'cumulative_cube_distance': self.cubes_cumulative_distance,
-            'cumulative_distance': self.robot_cumulative_distance,
-            'cumulative_cubes': self.robot_cumulative_cubes,
-            'cumulative_reward': self.robot_cumulative_reward,
             'state': (round(self.robot.body.position.x, 2),
                       round(self.robot.body.position.y, 2),
                       round(self.robot.body.angle, 2)),
+            'cumulative_distance': self.robot_cumulative_distance,
+            'cumulative_cubes': self.robot_cumulative_cubes,
+            'cumulative_reward': self.robot_cumulative_reward,
+            'total_work': self.total_work[0],
+            'obs': updated_cubes,
+            'box_completed_statuses': self.box_clearance_statuses,
+            'goal_positions': self.goal_points,
+            'ministeps': ministeps,
+            'inactivity': self.inactivity_counter,
+            # 'cumulative_cube_distance': self.cubes_cumulative_distance,
         }
         
         # render environment

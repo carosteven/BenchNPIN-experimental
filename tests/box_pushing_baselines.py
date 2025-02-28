@@ -78,7 +78,7 @@ if __name__ == '__main__':
         '--config_file',
         type=str,
         help='path to the config file',
-        default=f'{dirname(dirname(__file__))}/benchnpin/environments/box_pushing/config_ppo.yaml'
+        default=f'{dirname(dirname(__file__))}/benchnpin/environments/box_pushing/config_sam.yaml'
     )
 
     parser.add_argument(

@@ -1,7 +1,6 @@
 from benchnpin.baselines.base_class import BasePolicy
 from benchnpin.baselines.feature_extractors import DenseActionSpaceDQN
-from benchnpin.common.metrics.box_pushing_metric import BoxPushingMetric
-import benchnpin.environments
+from benchnpin.common.metrics.task_driven_metric import TaskDrivenMetric
 import gymnasium as gym
 from collections import namedtuple
 import random
@@ -391,6 +390,7 @@ class BoxPushingSAM(BasePolicy):
 
 
     def evaluate(self, obstacle_config: str, num_eps: int, model_eps: str ='latest'):
+
         if self.cfg is not None:
             env = gym.make('box-pushing-v0', cfg_file=self.cfg)
         else:
@@ -401,17 +401,15 @@ class BoxPushingSAM(BasePolicy):
         env.cfg.env.room_width = 5 if obstacle_config.split('_')[0] == 'small' else 10
         env.cfg.cubes.num_cubes = 10 if obstacle_config.split('_')[0] == 'small' else 20
 
-        metric = BoxPushingMetric(alg_name="SAM", robot_mass=env.cfg.agent.mass)
-
-        checkpoint_dir = os.path.join(os.path.dirname(__file__), f'checkpoint/')
-        model_path = f'{checkpoint_dir}/{self.model_name}.pt'
-
         if model_eps == 'latest':
             self.model = DenseActionSpacePolicy(env.action_space.high, env.num_channels, 0.0,
                                                 train=False, evaluate=True, model_name=self.model_name)
         else:
             model_checkpoint = self.model_name + '_' + model_eps + '_steps'
-            # self.model = PPO.load(os.path.join(self.model_path, model_checkpoint))
+            self.model = DenseActionSpacePolicy(env.action_space.high, env.num_channels, 0.0,
+                                                train=False, evaluate=True, model_name=model_checkpoint)
+        
+        metric = TaskDrivenMetric(alg_name="SAM", robot_mass=env.cfg.agent.mass)
 
         rewards_list = []
         for eps_idx in range(num_eps):
@@ -423,7 +421,7 @@ class BoxPushingSAM(BasePolicy):
             while True:
                 action, _ = self.model.step(obs)
                 obs, reward, done, truncated, info = env.step(action)
-                metric.update(info=info, eps_complete=(done or truncated))
+                metric.update(info=info, reward=reward, eps_complete=(done or truncated))
                 if done or truncated:
                     break
         
