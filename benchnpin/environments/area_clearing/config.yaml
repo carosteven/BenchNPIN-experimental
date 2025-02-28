@@ -43,8 +43,8 @@ agent:
   padding: 0.25  # adds padding to ship footprint
   length: 1.38  # length of the NRC ship in meters
   width: 2.4
-  # action_type: 'position' # options are 'velocity', 'heading', 'position'
-  action_type: 'heading' # Use for PPO and SAC
+  action_type: 'position' # options are 'velocity', 'heading', 'position'
+  # action_type: 'heading' # Use for PPO and SAC
   # action_type: 'velocity' # Use for GTSP
   movement_step_size: 1.5 # If action type is heading, this is the distance to move in that heading
   vertices: [
@@ -133,4 +133,4 @@ train:
 evaluate:
   eval_mode: true
   num_eps: 20
-  model: model-ac_1503642961000
+  model: clear_env
