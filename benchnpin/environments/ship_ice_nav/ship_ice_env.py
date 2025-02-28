@@ -78,9 +78,12 @@ class ShipIceEnv(gym.Env):
             _, _, self.obs_dicts = init_queue.values()
             self.observation_space = spaces.Box(low=-10, high=30, shape=(len(self.obs_dicts) * 2,), dtype=np.float64)
 
-        else:
-            # self.observation_shape = (2, self.occupancy.occ_map_height, self.occupancy.occ_map_width)
+        elif self.cfg.egocentric_obs:
             self.observation_shape = (4, self.occupancy.local_window_height, self.occupancy.local_window_width)
+            self.observation_space = spaces.Box(low=0, high=255, shape=self.observation_shape, dtype=np.uint8)
+
+        else:
+            self.observation_shape = (2, self.occupancy.occ_map_height, self.occupancy.occ_map_width)
             self.observation_space = spaces.Box(low=0, high=255, shape=self.observation_shape, dtype=np.uint8)
 
         self.yaw_lim = (0, np.pi)       # lower and upper limit of ship yaw  
@@ -389,35 +392,37 @@ class ShipIceEnv(gym.Env):
 
     def generate_observation(self):
 
+        if not self.cfg.egocentric_obs:
+            raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, 
+                            ice_binary_w=int(self.occupancy.map_width * self.cfg.occ.m_to_pix_scale), 
+                            ice_binary_h=int(self.occupancy.map_height * self.cfg.occ.m_to_pix_scale))
+            self.occupancy.compute_con_gridmap(raw_ice_binary=raw_ice_binary, save_fig_dir=None)
+            occupancy = np.copy(self.occupancy.occ_map)         # (H, W)
 
-        # raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, 
-        #                 ice_binary_w=int(self.occupancy.map_width * self.cfg.occ.m_to_pix_scale), 
-        #                 ice_binary_h=int(self.occupancy.map_height * self.cfg.occ.m_to_pix_scale))
-        # self.occupancy.compute_con_gridmap(raw_ice_binary=raw_ice_binary, save_fig_dir=None)
-        # occupancy = np.copy(self.occupancy.occ_map)         # (H, W)
+            # compute footprint observation  NOTE: here we want unscaled, unpadded vertices
+            ship_pose = (self.ship_body.position.x, self.ship_body.position.y, self.ship_body.angle)
+            self.occupancy.compute_ship_footprint_planner(ship_state=ship_pose, ship_vertices=self.cfg.ship.vertices)
+            footprint = np.copy(self.occupancy.footprint)       # (H, W)
 
-        # # compute footprint observation  NOTE: here we want unscaled, unpadded vertices
-        # ship_pose = (self.ship_body.position.x, self.ship_body.position.y, self.ship_body.angle)
-        # self.occupancy.compute_ship_footprint_planner(ship_state=ship_pose, ship_vertices=self.cfg.ship.vertices)
-        # footprint = np.copy(self.occupancy.footprint)       # (H, W)
+            observation = np.concatenate((np.array([occupancy]), np.array([footprint])))          # (2, H, W)
 
-        # observation = np.concatenate((np.array([occupancy]), np.array([footprint])))          # (2, H, W)
+        else:
+            ship_pose = (self.ship_body.position.x, self.ship_body.position.y, self.ship_body.angle)
 
-        ship_pose = (self.ship_body.position.x, self.ship_body.position.y, self.ship_body.angle)
+            raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, 
+                            ice_binary_w=int(self.occupancy.map_width * self.cfg.occ.m_to_pix_scale), 
+                            ice_binary_h=int(self.occupancy.map_height * self.cfg.occ.m_to_pix_scale), 
+                            local_range=[12, 12], ship_state=ship_pose)
+            occupancy = self.occupancy.ego_view_obstacle_map(raw_ice_binary=raw_ice_binary, ship_state=ship_pose, vertical_shift=self.local_window_v_shift)
+            
+            local_footprint = self.occupancy.ego_view_footprint(ship_state=ship_pose, ship_vertices=self.cfg.ship.vertices, vertical_shift=self.local_window_v_shift)
 
-        raw_ice_binary = self.occupancy.compute_occ_img(obstacles=self.obstacles, 
-                        ice_binary_w=int(self.occupancy.map_width * self.cfg.occ.m_to_pix_scale), 
-                        ice_binary_h=int(self.occupancy.map_height * self.cfg.occ.m_to_pix_scale), 
-                        local_range=[12, 12], ship_state=ship_pose)
-        occupancy = self.occupancy.ego_view_obstacle_map(raw_ice_binary=raw_ice_binary, ship_state=ship_pose, vertical_shift=self.local_window_v_shift)
+            local_edt = self.occupancy.ego_view_goal_dist_transform(goal_y=self.goal[1], ship_state=ship_pose, vertical_shift=self.local_window_v_shift)
+            
+            local_orientation_map = self.occupancy.ego_view_orientation_map(ship_state=ship_pose, head=self.cfg.ship.head, tail=self.cfg.ship.tail, vertical_shift=self.local_window_v_shift)
+            
+            observation = np.concatenate((np.array([local_footprint]), np.array([local_edt]), np.array([local_orientation_map]), np.array([occupancy])))          # (2, H, W)
         
-        local_footprint = self.occupancy.ego_view_footprint(ship_state=ship_pose, ship_vertices=self.cfg.ship.vertices, vertical_shift=self.local_window_v_shift)
-
-        local_edt = self.occupancy.ego_view_goal_dist_transform(goal_y=self.goal[1], ship_state=ship_pose, vertical_shift=self.local_window_v_shift)
-        
-        local_orientation_map = self.occupancy.ego_view_orientation_map(ship_state=ship_pose, head=self.cfg.ship.head, tail=self.cfg.ship.tail, vertical_shift=self.local_window_v_shift)
-        
-        observation = np.concatenate((np.array([local_footprint]), np.array([local_edt]), np.array([local_orientation_map]), np.array([occupancy])))          # (2, H, W)
         observation = (observation*255).astype(np.uint8)                                      # NOTE SB3 image format
         return observation
 

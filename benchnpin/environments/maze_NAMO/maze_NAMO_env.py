@@ -243,9 +243,9 @@ class MazeNAMO(gym.Env):
             self.start = (x_start, y_start,np.pi*3/2)
         else:
             # self.start = (2, 2,np.pi*3/2)
-            self.start = (11.25, 3.75, np.pi / 2)         # for 15x15, v1
+            # self.start = (11.25, 3.75, np.pi / 2)         # for 15x15, v1
 
-            # self.start = (15, 15, 3 * np.pi / 2)         # for 15x15, v1
+            self.start = (15, 15, 3 * np.pi / 2)         # for 15x15, v1
 
         # if self.cfg.randomize_obstacles:
         #     self.randomize_obstacles()
