@@ -9,7 +9,7 @@ from shapely import shortest_line
 from benchnpin.common.controller.dp import DP
 from benchnpin.common.utils.utils import DotDict
 from benchnpin.common.evaluation.metrics import euclid_dist
-from benchnpin.common.metrics.task_planning_metric import TaskPlanningMetric
+from benchnpin.common.metrics.task_driven_metric import TaskDrivenMetric
 
 from benchnpin.baselines.base_class import BasePolicy
 
@@ -196,7 +196,14 @@ class PlanningBasedPolicy(BasePolicy):
     def evaluate(self, num_eps: int, model_eps: str ='latest') -> list:
         env = gym.make('area-clearing-v0')
         env = env.unwrapped
-        metric = TaskPlanningMetric(alg_name="GTSP", robot_mass=env.cfg.agent.mass)
+
+        old_action_type = env.cfg.agent.action_type
+        old_t_max = env.cfg.sim.t_max
+
+        env.cfg.agent.action_type = 'velocity'
+        env.cfg.sim.t_max = 1000
+
+        metric = TaskDrivenMetric(alg_name="GTSP", robot_mass=env.cfg.agent.mass)
 
         rewards_list = []
         for eps_idx in range(num_eps):
@@ -232,6 +239,10 @@ class PlanningBasedPolicy(BasePolicy):
 
         env.close()
         metric.plot_scores(save_fig_dir=env.cfg.output_dir)
+
+        env.cfg.agent.action_type = old_action_type
+        env.cfg.sim.t_max = old_t_max
+
         return metric.efficiency_scores, metric.effort_scores, metric.rewards, "GTSP"
     
     def reset(self):
