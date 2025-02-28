@@ -50,7 +50,7 @@ for eps_idx in range(total_episodes):
         obstacles = info['obs']
         env.render()
 
-        # print("reward: ", reward, "; dist increment reward: ", info['dist increment reward'], "; col reward: ", info['collision reward'], "; col reward scaled: ", info['scaled collision reward'])
+        # haha print("reward: ", reward, "; dist increment reward: ", info['dist increment reward'], "; col reward: ", info['collision reward'], "; col reward scaled: ", info['scaled collision reward'])
         total_dist_reward += info['dist increment reward']
         total_col_reward += info['collision reward']
         total_scaled_col_reward += info['scaled collision reward']
