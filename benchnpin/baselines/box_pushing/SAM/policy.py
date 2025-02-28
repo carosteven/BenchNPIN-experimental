@@ -427,7 +427,7 @@ class BoxPushingSAM(BasePolicy):
         
         env.close()
         metric.plot_scores(save_fig_dir=env.cfg.output_dir)
-        return metric.efficiency_scores, metric.effort_scores, metric.rewards, "SAM"
+        return metric.efficiency_scores, metric.effort_scores, metric.rewards, "SAM", metric.success_rates
 
 
     

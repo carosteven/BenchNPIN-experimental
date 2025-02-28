@@ -74,7 +74,8 @@ def main(args):
             "efficiency_scores": result[0],
             "effort_scores": result[1],
             "rewards": result[2],
-            "algorithm": result[3]
+            "algorithm": result[3],
+            "success": result[4]
             }
             for result in benchmark_results
         ]
@@ -82,21 +83,22 @@ def main(args):
         with open(f'benchmark_results_{benchmark_results[0][3]}.json', 'w') as f:
             json.dump(results_to_save, f, indent=4)
 
-        # # Read benchmark results back from the JSON file
-        # with open(f'benchmark_results_{benchmark_results[0][3]}.json', 'r') as f:
-        #     benchmark_results = json.load(f)
+        # Read benchmark results back from the JSON file
+        with open(f'benchmark_results_{benchmark_results[0][3]}.json', 'r') as f:
+            benchmark_results = json.load(f)
             
-        # # Convert benchmark results back to a list of tuples
-        # benchmark_results = [
-        #     (
-        #     result["efficiency_scores"],
-        #     result["effort_scores"],
-        #     result["rewards"],
-        #     result["algorithm"]
-        #     )
-        #     for result in benchmark_results
-        # ]
-        # BaseMetric.plot_algs_scores(benchmark_results, save_fig_dir='./')
+        # Convert benchmark results back to a list of tuples
+        benchmark_results = [
+            (
+            result["efficiency_scores"],
+            result["effort_scores"],
+            result["rewards"],
+            result["algorithm"],
+            result["success"]
+            )
+            for result in benchmark_results
+        ]
+        BaseMetric.plot_algs_scores(benchmark_results, save_fig_dir='./', plot_success=True)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -107,7 +109,7 @@ if __name__ == '__main__':
         '--config_file',
         type=str,
         help='path to the config file',
-        default=f'{dirname(dirname(__file__))}/benchnpin/environments/box_pushing/config_sam.yaml'
+        default=f'{dirname(dirname(__file__))}/benchnpin/environments/box_pushing/config_ppo.yaml'
     )
 
     parser.add_argument(
