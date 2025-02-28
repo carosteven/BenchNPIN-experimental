@@ -17,7 +17,7 @@ fixed_trial_idx: 1
 ### SIMULATION PARAMS
 render:
   log_obs: false        # whether to log occupancy observation
-  show: true            # if true show animation plots
+  show: false            # if true show animation plots
   show_obs: false       # if true show occupancy observation
   frequency: 20         # frequency of rendering
 sim:
@@ -152,16 +152,16 @@ train:
 
 evaluate:
   eval_mode: true
-  num_eps: 20
+  num_eps: 200
   models: [
-            # small_empty,
-            small_columns,
+            small_empty,
+            # small_columns,
             # large_columns,
             # large_divider
           ]
   obs_configs: [
-                # small_empty,
-                small_columns,
+                small_empty,
+                # small_columns,
                 # large_columns,
                 # large_divider
               ]

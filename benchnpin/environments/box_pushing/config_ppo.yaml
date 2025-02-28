@@ -17,7 +17,7 @@ fixed_trial_idx: 1
 ### SIMULATION PARAMS
 render:
   log_obs: false        # whether to log occupancy observation
-  show: true            # if true show animation plots
+  show: false            # if true show animation plots
   show_obs: false       # if true show occupancy observation
   frequency: 20         # frequency of rendering
 sim:
@@ -85,6 +85,23 @@ agent:
               [-0.4, 0.25],
               [-0.4, -0.25]
               ]
+  wheel_vertices: [
+    # left
+    [
+        [-0.4, 0.2],
+        [-0.4, 0.3],
+        [-0.15, 0.3], 
+        [-0.15, 0.2]
+    ],
+
+    # right
+    [
+        [-0.4, -0.2],
+        [-0.4, -0.3],
+        [-0.15, -0.3], 
+        [-0.15, -0.2]
+    ],
+  ]
 
 ### ENVIRONMENT PARAMS
 env:
@@ -125,9 +142,9 @@ train:
 
 evaluate:
   eval_mode: true
-  num_eps: 2
+  num_eps: 200
   models: [
-    'last_chance_15045234_90000_steps_20000_steps',
+    'last_chance_15045234_90000_steps',
     # 's15_g5_cdr2_PPO4',
     # 'last_chance_15045234_90000_steps',
   ]
