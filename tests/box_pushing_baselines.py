@@ -9,6 +9,7 @@ from benchnpin.baselines.box_pushing.sac.policy import BoxPushingSAC
 from benchnpin.common.metrics.base_metric import BaseMetric
 from benchnpin.common.utils.utils import DotDict
 from os.path import dirname
+import json
 
 def main(args):
     cfg = DotDict.load_from_file(args.config_file)
@@ -67,7 +68,35 @@ def main(args):
                 sac_policy = BoxPushingSAC(model_name=model_name, cfg=args.config_file)
                 benchmark_results.append(sac_policy.evaluate(num_eps=num_eps))
         
-        BaseMetric.plot_algs_scores(benchmark_results, save_fig_dir='./')
+        # Save benchmark results to a JSON file
+        results_to_save = [
+            {
+            "efficiency_scores": result[0],
+            "effort_scores": result[1],
+            "rewards": result[2],
+            "algorithm": result[3]
+            }
+            for result in benchmark_results
+        ]
+
+        with open(f'benchmark_results_{benchmark_results[0][3]}.json', 'w') as f:
+            json.dump(results_to_save, f, indent=4)
+
+        # # Read benchmark results back from the JSON file
+        # with open(f'benchmark_results_{benchmark_results[0][3]}.json', 'r') as f:
+        #     benchmark_results = json.load(f)
+            
+        # # Convert benchmark results back to a list of tuples
+        # benchmark_results = [
+        #     (
+        #     result["efficiency_scores"],
+        #     result["effort_scores"],
+        #     result["rewards"],
+        #     result["algorithm"]
+        #     )
+        #     for result in benchmark_results
+        # ]
+        # BaseMetric.plot_algs_scores(benchmark_results, save_fig_dir='./')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
