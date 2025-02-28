@@ -326,7 +326,7 @@ class AreaClearingEnv(gym.Env):
         if self.cfg.render.show:
             if self.renderer is None:
                 self.renderer = Renderer(self.space, env_width=self.map_width + 2, env_height=self.map_height + 2, render_scale=20, 
-                        background_color=(206, 224, 220), caption="Area Clearing", 
+                        background_color=(234, 234, 234), caption="Area Clearing", 
                         centered=True,
                         clearance_boundary=self.boundary_vertices
                         )
@@ -883,8 +883,8 @@ class AreaClearingEnv(gym.Env):
 
     def update_path(self, new_path):
         self.path = new_path
-        if(self.renderer):
-            self.renderer.update_path(path=self.path)
+        # if(self.renderer):
+        #     self.renderer.update_path(path=self.path)
 
     def generate_observation(self):
         self.update_global_overhead_map()
