@@ -60,10 +60,10 @@ agent:
 ### SIMULATION PARAMS
 render:
   log_obs: false       # whether to log occupancy observation
-  show: true                # if true show animation plots
+  show: false                # if true show animation plots
 sim:
   # t_max: 1000  # max number of iterations - Use for GTSP
-  t_max: 100
+  t_max: 200
   steps: 100    # number of simulation steps per iteration (originally 10)
   gravity: !!python/tuple
     - 0
