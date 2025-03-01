@@ -5,7 +5,7 @@ Uncomment the code blocks to train/evaluate each baseline algorithms
 import numpy as np
 from benchnpin.baselines.maze_NAMO.ppo.policy import MazeNAMOPPO
 from benchnpin.baselines.maze_NAMO.sac.policy import MazeNAMOSAC
-from benchnpin.common.merics.base_metric import BaseMetric
+from benchnpin.common.metrics.base_metric import BaseMetric
 import pickle
 
 

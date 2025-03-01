@@ -255,6 +255,8 @@ class BoxPushingSAM(BasePolicy):
             env = gym.make('box-pushing-v0')
         env = env.unwrapped
 
+        env.configure_env_for_SAM()
+
         # policy
         policy = DenseActionSpacePolicy(env.action_space.high, env.num_channels, self.final_exploration,
                                          train=True, checkpoint_path=checkpoint_path, resume_training=resume_training)
@@ -396,6 +398,8 @@ class BoxPushingSAM(BasePolicy):
         else:
             env = gym.make('box-pushing-v0')
         env = env.unwrapped
+
+        env.configure_env_for_SAM()
 
         env.cfg.env.obstacle_config = obstacle_config
         env.cfg.env.room_width = 5 if obstacle_config.split('_')[0] == 'small' else 10
