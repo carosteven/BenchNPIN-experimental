@@ -73,29 +73,33 @@ class BaseMetric(ABC):
             (0.84, 0.39, 0.26),
             (0.65, 0.65, 0.65),
             (0.3, 0.3, 0.3), 
+            (0.1, 0.1, 0.1), 
         ]
 
         # plot scores
         ax.clear()
         bps = []
         colors = []
+        positions = []
         for i in range(len(scores)):
             score = scores[i]
 
             color = color_list[i]
-            bp = ax.boxplot([score], positions=[i + 1], showmeans=False, patch_artist=True, 
-                                boxprops=dict(facecolor=color), medianprops=dict(color="black"))
+            position = 1.5 * i + 1
+            bp = ax.boxplot([score], positions=[position], showmeans=False, widths=0.8,
+            patch_artist=True, boxprops=dict(facecolor=color), medianprops=dict(color="black"))
+
             bps.append(bp["boxes"][0])
             colors.append(color)
+            positions.append(position)
 
-        ax.set_xticks(list(range(1, len(scores) + 1)))
+        ax.set_xticks(positions)
         ax.set_xticklabels(alg_names)
         # ax.set_xlabel(score_name)
         # ax.set_ylabel("Algorithms")
-
-        if legend:
-            # ax.legend(bps, alg_names, loc="upper left")
-            ax.legend(bps, alg_names, loc="lower right")
+        # ax.legend(bps, alg_names, loc="upper left")
+        ax.legend(bps, alg_names, loc="lower right")
+        ax.set_xlim(0, 1.5 * len(scores) + 0.5)
         fp = os.path.join(save_fig_dir, filename + '.png')
         fig.savefig(fp)
 
@@ -112,6 +116,12 @@ class BaseMetric(ABC):
         reward_data = []
         alg_names = []
         for alg_efficiency, alg_effort, alg_reward, alg_name in benchmark_results:
+
+            # if alg_name == "Predictive Planning":
+            #     alg_name = "Predictive"
+            # elif alg_name == "Lattice Planning":
+            #     alg_name = "Lattice"
+
             efficiency_data.append(alg_efficiency)
             effort_data.append(alg_effort)
             reward_data.append(alg_reward)

@@ -13,11 +13,11 @@ env = gym.make('ship-ice-v0')
 env = env.unwrapped
 
 # initialize planning policy
-# planner_type = 'lattice'             # set planner type here. 'lattice' or 'predictive'
-# policy = PlanningBasedPolicy(planner_type=planner_type)
+planner_type = 'lattice'             # set planner type here. 'lattice' or 'predictive'
+policy = PlanningBasedPolicy(planner_type=planner_type)
 
 # initialize RL policy
-policy = ShipIcePPO()
+# policy = ShipIcePPO()
 # policy = ShipIceSAC()
 
 total_dist_reward = 0
@@ -34,14 +34,14 @@ for eps_idx in range(total_episodes):
     while True:
         
         # call planning based policy
-        # action = policy.act(observation=(observation / 255).astype(np.float64), ship_pos=info['state'], obstacles=obstacles, 
-        #                     goal=env.goal,
-        #                     conc=env.cfg.concentration, 
-        #                     action_scale=env.max_yaw_rate_step)
+        action = policy.act(observation=(observation / 255).astype(np.float64), ship_pos=info['state'], obstacles=obstacles, 
+                            goal=env.goal,
+                            conc=env.cfg.concentration, 
+                            action_scale=env.max_yaw_rate_step)
         # env.update_path(policy.path)
 
         # call RL policy
-        action = policy.act(observation=observation, model_eps='470000')
+        # action = policy.act(observation=observation, model_eps='470000')
         # action = policy.act(observation=observation, model_eps='130000')
 
 
@@ -55,7 +55,7 @@ for eps_idx in range(total_episodes):
         total_scaled_col_reward += info['scaled collision reward']
 
         if terminated or truncated:
-            # policy.reset()
+            policy.reset()
             break
 
 print(total_dist_reward, total_col_reward, total_scaled_col_reward)

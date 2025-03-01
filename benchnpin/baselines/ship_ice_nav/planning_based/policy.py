@@ -71,7 +71,12 @@ class PlanningBasedPolicy(BasePolicy):
     def evaluate(self, num_eps: int, model_eps: str ='latest') -> Tuple[List[float], List[float], List[float], str]:
         env = gym.make('ship-ice-v0')
         env = env.unwrapped
-        metric = ShipIceMetric(alg_name="planningBased", ship_mass=env.cfg.ship.mass, goal=env.goal)
+
+        if self.planner_type == 'lattice':
+            alg_name = "Lattice Planning"
+        elif self.planner_type == 'predictive':
+            alg_name = "Predictive Planning"
+        metric = ShipIceMetric(alg_name=alg_name, ship_mass=env.cfg.ship.mass, goal=env.goal)
 
         for eps_idx in range(num_eps):
             print("Planning Based Progress: ", eps_idx, " / ", num_eps, " episodes")
@@ -93,7 +98,7 @@ class PlanningBasedPolicy(BasePolicy):
 
         env.close()
         metric.plot_scores(save_fig_dir=env.cfg.output_dir)
-        return metric.efficiency_scores, metric.effort_scores, metric.rewards, "planning-Based"
+        return metric.efficiency_scores, metric.effort_scores, metric.rewards, alg_name
 
     
     def reset(self):
