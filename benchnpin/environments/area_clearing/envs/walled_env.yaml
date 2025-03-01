@@ -17,5 +17,5 @@ walls:
   - [ [-6.0, -6.0], [-6.0, 6.0] ]
   - [ [6.0, 6.0], [6.0, -6.0] ]
 local_map_pixel_width: 224
-# local_map_pixel_width: 96 # Use for SAMs
+sam_local_map_pixel_width: 96 # Use for SAMs
 local_map_width: 24 # meters
