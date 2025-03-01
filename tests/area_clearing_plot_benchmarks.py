@@ -2,7 +2,7 @@ import pickle
 
 from benchnpin.common.metrics.base_metric import BaseMetric
 
-pickle_files = ['area_clearing_benchmark_results.pkl']
+pickle_files = ['area_clearing_benchmark_results.pkl', 'ac_gtsp_benchmark_results.pkl']
 
 benchmark_results = []
 

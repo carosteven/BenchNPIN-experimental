@@ -65,7 +65,7 @@ class BaseMetric(ABC):
 
 
     @staticmethod
-    def plot_algs_score(scores, score_name, alg_names, save_fig_dir, filename):
+    def plot_algs_score(scores, score_name, alg_names, save_fig_dir, filename, legend=True):
         fig, ax = plt.subplots()
 
         color_list = [
@@ -92,7 +92,10 @@ class BaseMetric(ABC):
         ax.set_xticklabels(alg_names)
         # ax.set_xlabel(score_name)
         # ax.set_ylabel("Algorithms")
-        ax.legend(bps, alg_names, loc="upper left")
+
+        if legend:
+            # ax.legend(bps, alg_names, loc="upper left")
+            ax.legend(bps, alg_names, loc="lower right")
         fp = os.path.join(save_fig_dir, filename + '.png')
         fig.savefig(fp)
 

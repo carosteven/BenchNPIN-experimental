@@ -40,11 +40,11 @@ def main(args):
     num_eps = 200
 
     ### initialize planning based policy
-    # policy = PlanningBasedPolicy()
-    # benchmark_results.append(policy.evaluate(num_eps=num_eps))
+    policy = PlanningBasedPolicy()
+    benchmark_results.append(policy.evaluate(num_eps=num_eps))
 
     # ========================= PPO Policy =====================================
-    ppo_policy = AreaClearingPPO()
+    # ppo_policy = AreaClearingPPO()
     
     # ppo_policy.train(total_timesteps=int(5e5), checkpoint_freq=10000, from_model_eps='260000')
     # evaluations = ppo_policy.evaluate(num_eps=5)
@@ -52,26 +52,25 @@ def main(args):
     # # ppo_policy = AreaClearingPPO(model_path='/Storage2/m5ramesh/git/BenchNPIN/benchnpin/baselines/area_clearing/ppo/final_models/clear_env/V2/')
     # # evaluations = ppo_policy.evaluate(num_eps=5, model_eps='260000') # For small - 280000 Intuitively performing model! For large - V2-260000 is pretty close
 
-    benchmark_results.append(ppo_policy.evaluate(num_eps=num_eps))
+    # benchmark_results.append(ppo_policy.evaluate(num_eps=num_eps))
 
     # print("PPO Eval: ", evaluations)
 
 
     # ========================= SAC Policy =====================================
-    sac_policy = AreaClearingSAC()
-
+    # sac_policy = AreaClearingSAC()
     # sac_policy.train(total_timesteps=int(1e6), checkpoint_freq=20000)
     # sac_policy.train(total_timesteps=int(5e5), checkpoint_freq=20000, from_model_eps='260000')
     # evaluations = sac_policy.evaluate(num_eps=5)
 
-    benchmark_results.append(sac_policy.evaluate(num_eps=num_eps))
+    # benchmark_results.append(sac_policy.evaluate(num_eps=num_eps))
 
     # print("SAC Eval: ", evaluations)
 
     # ========================= SAM Policy =====================================
-    sam_policy = AreaClearingSAM(model_name=model_name, cfg=args.config_file)
+    # sam_policy = AreaClearingSAM(model_name=model_name, cfg=args.config_file)
     # # sam_policy.train(job_id=args.job_id, **cfg.train)
-    benchmark_results.append(sam_policy.evaluate(num_eps=num_eps))
+    # benchmark_results.append(sam_policy.evaluate(num_eps=num_eps))
 
     # print("SAM Eval: ", evaluations)
 
@@ -82,7 +81,7 @@ def main(args):
     pickle_dict = {
         'benchmark_results': benchmark_results
     }
-    with open('area_clearing_benchmark_results.pkl', 'wb') as f:
+    with open('ac_gtsp_benchmark_results.pkl', 'wb') as f:
         pickle.dump(pickle_dict, f)
 
 
