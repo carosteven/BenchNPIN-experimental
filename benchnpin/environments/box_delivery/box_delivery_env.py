@@ -10,6 +10,7 @@ from shapely.geometry import Point
 
 # Bench-NPIN related imports
 from benchnpin.common.cost_map import CostMap
+from benchnpin.common.controller.position_controller import PositionController
 from benchnpin.common.evaluation.metrics import total_work_done
 from benchnpin.common.geometry.polygon import poly_area
 from benchnpin.common.utils.plot_pushing import Plot
@@ -268,6 +269,12 @@ class BoxDeliveryEnv(gym.Env):
         for _ in range(1000):
             self.space.step(self.dt / self.steps)
         self.prev_cubes = CostMap.get_obs_from_poly(self.cubes)
+
+        self.position_controller = PositionController(self.cfg, self.robot_radius, self.room_width, self.room_length, 
+                                                      self.configuration_space, self.configuration_space_thin, self.closest_cspace_indices,
+                                                      self.local_map_pixel_width, self.local_map_width, self.local_map_pixels_per_meter, 
+                                                      TURN_STEP_SIZE, MOVE_STEP_SIZE, WAYPOINT_MOVING_THRESHOLD, WAYPOINT_TURNING_THRESHOLD)
+        
     
     def prevent_boundary_intersection(self, arbiter):
         collision = False
@@ -704,165 +711,12 @@ class BoxDeliveryEnv(gym.Env):
                 action = y_pixel * self.local_map_pixel_width + x_pixel
 
             ################################ Position Control ################################
-            robot_action = np.unravel_index(action, (self.local_map_pixel_width, self.local_map_pixel_width))
-            
-            # ****************** Make into function ******************
-
-            # compute target position for front of robot:
-            # computes distance from front of robot (not center), which is used to find the
-            # robot position and heading needed in order to place front over specified location
-            x_movement = -self.local_map_width / 2 + float(robot_action[1]) / self.local_map_pixels_per_meter
-            y_movement = self.local_map_width / 2 - float(robot_action[0]) / self.local_map_pixels_per_meter
-
-            straight_line_dist = np.sqrt(x_movement**2 + y_movement**2)
-            turn_angle = np.arctan2(-x_movement, y_movement)
-            straight_line_heading = self.restrict_heading_range(robot_initial_heading + turn_angle)
-
-            robot_target_front_position = [
-                robot_initial_position[0] + straight_line_dist * np.cos(straight_line_heading),
-                robot_initial_position[1] + straight_line_dist * np.sin(straight_line_heading)
-            ]
-
-            # bound the robot to the room
-            diff = np.asarray(robot_target_front_position) - np.asarray(robot_initial_position)
-            ratio_x, ratio_y = (1, 1)
-            bound_x = np.sign(robot_target_front_position[0]) * self.room_length / 2
-            bound_y = np.sign(robot_target_front_position[1]) * self.room_width / 2
-            if abs(robot_target_front_position[0]) > abs(bound_x):
-                ratio_x = (bound_x - robot_initial_position[0]) / (robot_target_front_position[0] - robot_initial_position[0])
-            if abs(robot_target_front_position[1]) > abs(bound_y):
-                ratio_y = (bound_y - robot_initial_position[1]) / (robot_target_front_position[1] - robot_initial_position[1])
-            ratio = min(ratio_x, ratio_y)
-            robot_target_front_position = (np.asarray(robot_initial_position) + ratio * diff).tolist()
-            # compute waypoint positions
-            robot_waypoint_positions = self.shortest_path(robot_initial_position, robot_target_front_position, check_straight=True)
-
-            # compute waypoint headings
-            robot_waypoint_headings = [None]
-            for i in range(1, len(robot_waypoint_positions)):
-                x_diff = robot_waypoint_positions[i][0] - robot_waypoint_positions[i - 1][0]
-                y_diff = robot_waypoint_positions[i][1] - robot_waypoint_positions[i - 1][1]
-                waypoint_headings = self.restrict_heading_range(np.arctan2(y_diff, x_diff))
-                robot_waypoint_headings.append(waypoint_headings)
-            
-            # compute movement from final waypoint to the target and apply robot radius offset to the final waypoint
-            dist_to_target_end_effector_position = self.distance(robot_waypoint_positions[-2], robot_waypoint_positions[-1])
-            signed_dist = dist_to_target_end_effector_position - self.robot_radius
-
-            robot_move_sign = np.sign(signed_dist) # might have to move backwards to get to final position
-            robot_target_heading = robot_waypoint_headings[-1]
-            robot_target_position = [
-                robot_waypoint_positions[-2][0] + signed_dist * np.cos(robot_target_heading),
-                robot_waypoint_positions[-2][1] + signed_dist * np.sin(robot_target_heading)
-            ]
-            # robot_waypoint_positions[-1] = robot_target_position
-
-            # avoid awkward backing up to reach the last waypoint
-            if len(robot_waypoint_positions) > 2 and signed_dist < 0:
-                robot_waypoint_positions[-2] = robot_waypoint_positions[-1]
-                x_diff = robot_waypoint_positions[-2][0] - robot_waypoint_positions[-3][0]
-                y_diff = robot_waypoint_positions[-2][1] - robot_waypoint_positions[-3][1]
-                waypoint_heading = self.restrict_heading_range(np.arctan2(y_diff, x_diff))
-                robot_waypoint_headings[-2] = waypoint_heading
-                robot_move_sign = 1
-            
-            self.path = []
-            for position, heading in zip(robot_waypoint_positions, robot_waypoint_headings):
-                self.path.append([position[0], position[1], heading])
-            self.path = np.array(self.path)
+            self.path, robot_move_sign = self.position_controller.get_waypoints_to_spatial_action(robot_initial_position, robot_initial_heading, action)
             if self.cfg.render.show:
                 self.renderer.update_path(self.path)
-            # ****************** Make into function ******************
-
-            ############################################################################################################
-            # Movement
-            robot_position = robot_initial_position.copy()
-            robot_heading = robot_initial_heading
-            robot_is_moving = True
-            robot_distance = 0
-            robot_waypoint_index = 1
-            robot_prev_waypoint_position = robot_waypoint_positions[robot_waypoint_index - 1]
-            robot_waypoint_position = robot_waypoint_positions[robot_waypoint_index]
-            robot_waypoint_heading = robot_waypoint_headings[robot_waypoint_index]
-
-            sim_steps = 0
-            done_turning = False
-            prev_heading_diff = 0
-            while True:
-                if not robot_is_moving:
-                    break
-
-                # store pose to determine distance moved during simulation step
-                robot_prev_position = robot_position.copy()
-                robot_prev_heading = robot_heading
-
-                # compute robot pose for new constraint
-                robot_new_position = robot_position.copy()
-                robot_new_heading = robot_heading
-                heading_diff = self.heading_difference(robot_heading, robot_waypoint_heading)
-                if np.abs(heading_diff) > TURN_STEP_SIZE and np.abs(heading_diff - prev_heading_diff) > 0.001:
-                    # turn towards next waypoint first
-                    robot_new_heading += np.sign(heading_diff) * TURN_STEP_SIZE
-                else:
-                    done_turning = True
-                    dx = robot_waypoint_position[0] - robot_position[0]
-                    dy = robot_waypoint_position[1] - robot_position[1]
-                    if self.distance(robot_position, robot_waypoint_position) < MOVE_STEP_SIZE:
-                        robot_new_position = robot_waypoint_position
-                    else:
-                        if robot_waypoint_index == len(robot_waypoint_position) - 1:
-                            move_sign = robot_move_sign
-                        else:
-                            move_sign = 1
-                        robot_new_heading = np.arctan2(move_sign * dy, move_sign * dx)
-                        robot_new_position[0] += move_sign * MOVE_STEP_SIZE * np.cos(robot_new_heading)
-                        robot_new_position[1] += move_sign * MOVE_STEP_SIZE * np.sin(robot_new_heading)
-                # change robot pose
-                omega, v = self.controller(robot_prev_position, robot_prev_heading)
-                if not done_turning:
-                    self.apply_controller(omega, v*0)
-                else:
-                    self.apply_controller(omega, v)
-                self.space.step(self.dt / self.steps)
-
-                # get new robot pose
-                robot_position, robot_heading = self.robot.body.position, self.restrict_heading_range(self.robot.body.angle)
-                robot_position = list(robot_position)
-                prev_heading_diff = heading_diff
-
-                # stop moving if robot collided with obstacle
-                if self.distance(robot_prev_waypoint_position, robot_position) > MOVE_STEP_SIZE:
-                    if self.robot_hit_obstacle:
-                        # self.robot_hit_obstacle = False
-                        robot_is_moving = False
-                        break  # Note: self.robot_distance does not get not updated
                 
-                # stop if robot reached waypoint
-                if (self.distance(robot_position, robot_waypoint_positions[robot_waypoint_index]) < WAYPOINT_MOVING_THRESHOLD
-                    and np.abs(robot_heading - robot_waypoint_headings[robot_waypoint_index]) < WAYPOINT_TURNING_THRESHOLD):
-                    
-                    # update distance moved
-                    robot_distance += self.distance(robot_prev_waypoint_position, robot_position)
+            robot_distance, robot_turn_angle = self.execute_robot_path(robot_initial_position, robot_initial_heading, robot_move_sign)
 
-                    # increment waypoint index or stop moving if done
-                    if robot_waypoint_index == len(robot_waypoint_positions) - 1:
-                        robot_is_moving = False
-                    else:
-                        robot_waypoint_index += 1
-                        robot_prev_waypoint_position = robot_waypoint_positions[robot_waypoint_index - 1]
-                        robot_waypoint_position = robot_waypoint_positions[robot_waypoint_index]
-                        robot_waypoint_heading = robot_waypoint_headings[robot_waypoint_index]
-                        done_turning = False
-                        self.dp = None
-                        self.path = self.path[1:]
-                
-                sim_steps += 1
-                if sim_steps % 5 == 0 and self.cfg.render.show:
-                    self.render()
-
-                # break if robot is stuck
-                if sim_steps > STEP_LIMIT:
-                    break
 
         # step the simulation until everything is still
         self.step_simulation_until_still()
@@ -1023,6 +877,105 @@ class BoxDeliveryEnv(gym.Env):
     def apply_controller(self, omega, v):
         self.robot.body.angular_velocity = omega / 2
         self.robot.body.velocity = (v*5).tolist()
+
+    def execute_robot_path(self, robot_initial_position, robot_initial_heading, robot_move_sign):
+        ############################################################################################################
+        # Movement
+        robot_position = robot_initial_position.copy()
+        robot_heading = robot_initial_heading
+        robot_is_moving = True
+        robot_distance = 0
+        robot_waypoint_index = 1
+
+        robot_waypoint_positions = [(waypoint[0], waypoint[1]) for waypoint in self.path]
+        robot_waypoint_headings = [waypoint[2] for waypoint in self.path]
+
+        robot_prev_waypoint_position = robot_waypoint_positions[robot_waypoint_index - 1]
+        robot_waypoint_position = robot_waypoint_positions[robot_waypoint_index]
+        robot_waypoint_heading = robot_waypoint_headings[robot_waypoint_index]
+
+        sim_steps = 0
+        done_turning = False
+        prev_heading_diff = 0
+        while True:
+            if not robot_is_moving:
+                break
+
+            # store pose to determine distance moved during simulation step
+            robot_prev_position = robot_position.copy()
+            robot_prev_heading = robot_heading
+
+            # compute robot pose for new constraint
+            robot_new_position = robot_position.copy()
+            robot_new_heading = robot_heading
+            heading_diff = self.heading_difference(robot_heading, robot_waypoint_heading)
+            if np.abs(heading_diff) > TURN_STEP_SIZE and np.abs(heading_diff - prev_heading_diff) > 0.001:
+                # turn towards next waypoint first
+                robot_new_heading += np.sign(heading_diff) * TURN_STEP_SIZE
+            else:
+                done_turning = True
+                dx = robot_waypoint_position[0] - robot_position[0]
+                dy = robot_waypoint_position[1] - robot_position[1]
+                if self.distance(robot_position, robot_waypoint_position) < MOVE_STEP_SIZE:
+                    robot_new_position = robot_waypoint_position
+                else:
+                    if robot_waypoint_index == len(robot_waypoint_position) - 1:
+                        move_sign = robot_move_sign
+                    else:
+                        move_sign = 1
+                    robot_new_heading = np.arctan2(move_sign * dy, move_sign * dx)
+                    robot_new_position[0] += move_sign * MOVE_STEP_SIZE * np.cos(robot_new_heading)
+                    robot_new_position[1] += move_sign * MOVE_STEP_SIZE * np.sin(robot_new_heading)
+            # change robot pose
+            omega, v = self.controller(robot_prev_position, robot_prev_heading)
+            if not done_turning:
+                self.apply_controller(omega, v*0)
+            else:
+                self.apply_controller(omega, v)
+            self.space.step(self.dt / self.steps)
+
+            # get new robot pose
+            robot_position, robot_heading = self.robot.body.position, self.restrict_heading_range(self.robot.body.angle)
+            robot_position = list(robot_position)
+            prev_heading_diff = heading_diff
+
+            # stop moving if robot collided with obstacle
+            if self.distance(robot_prev_waypoint_position, robot_position) > MOVE_STEP_SIZE:
+                if self.robot_hit_obstacle:
+                    # self.robot_hit_obstacle = False
+                    robot_is_moving = False
+                    break  # Note: self.robot_distance does not get not updated
+            
+            # stop if robot reached waypoint
+            if (self.distance(robot_position, robot_waypoint_positions[robot_waypoint_index]) < WAYPOINT_MOVING_THRESHOLD
+                and np.abs(robot_heading - robot_waypoint_headings[robot_waypoint_index]) < WAYPOINT_TURNING_THRESHOLD):
+                
+                # update distance moved
+                robot_distance += self.distance(robot_prev_waypoint_position, robot_position)
+
+                # increment waypoint index or stop moving if done
+                if robot_waypoint_index == len(robot_waypoint_positions) - 1:
+                    robot_is_moving = False
+                else:
+                    robot_waypoint_index += 1
+                    robot_prev_waypoint_position = robot_waypoint_positions[robot_waypoint_index - 1]
+                    robot_waypoint_position = robot_waypoint_positions[robot_waypoint_index]
+                    robot_waypoint_heading = robot_waypoint_headings[robot_waypoint_index]
+                    done_turning = False
+                    self.dp = None
+                    self.path = self.path[1:]
+
+            sim_steps += 1
+            if sim_steps % 5 == 0 and self.cfg.render.show:
+                self.render()
+
+            # break if robot is stuck
+            if sim_steps > STEP_LIMIT:
+                break
+
+        robot_heading = self.restrict_heading_range(self.robot.body.angle)
+        robot_turn_angle = self.heading_difference(robot_initial_heading, robot_heading)
+        return robot_distance, robot_turn_angle
 
     def step_simulation_until_still(self):
         prev_positions = []
@@ -1299,7 +1252,7 @@ class BoxDeliveryEnv(gym.Env):
         else:
             self.renderer.render(save=False, manual_draw=True)
 
-            if self.cfg.render.show_obs and not self.low_dim_state and self.show_observation:# and self.t % self.cfg.render.frequency == 1:
+            if self.cfg.render.show_obs and not self.low_dim_state and self.show_observation and self.observation is not None:# and self.t % self.cfg.render.frequency == 1:
                 self.show_observation = False
                 for ax, i in zip(self.state_ax, range(self.num_channels)):
                     ax.clear()
