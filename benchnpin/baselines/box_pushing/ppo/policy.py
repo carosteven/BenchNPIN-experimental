@@ -79,9 +79,11 @@ class BoxPushingPPO(BasePolicy):
 
         if model_eps == 'latest':
             self.model = PPO.load(os.path.join(self.model_path, self.model_name))
+            print(f"=> loaded model '{self.model_name}'")
         else:
             model_checkpoint = self.model_name + '_' + model_eps + '_steps'
             self.model = PPO.load(os.path.join(self.model_path, model_checkpoint))
+            print(f"=> loaded model '{model_checkpoint}'")
 
         if self.cfg is not None:
             env = gym.make('box-pushing-v0', cfg_file=self.cfg)

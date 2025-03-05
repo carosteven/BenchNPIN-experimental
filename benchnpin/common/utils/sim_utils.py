@@ -11,7 +11,7 @@ RED = (255, 0, 0, 255)
 GREEN = (144, 238, 144, 255)
 BOX = (204, 153, 102, 255)
 AGENT = (100, 100, 100, 255)
-BOUNDARY = (125, 125, 135, 255)
+BOUNDARY = (140, 155, 155, 255)
 
 def get_color(name):
     return globals()[name.upper()]
