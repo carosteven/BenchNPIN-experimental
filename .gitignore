@@ -5,16 +5,16 @@ bench_mano/ice_environments*
 benchnpin/baselines/area_clearing/sam/vector_logs/
 benchnpin/baselines/area_clearing/sam/output_logs/
 benchnpin/baselines/area_clearing/sam/checkpoint/
-benchnpin/baselines/box_pushing/SAM/vector_logs/
-benchnpin/baselines/box_pushing/SAM/output_logs/
-benchnpin/baselines/box_pushing/SAM/checkpoint/
-benchnpin/baselines/box_pushing/SAM/models/
-benchnpin/baselines/box_pushing/ppo/checkpoint/
-benchnpin/baselines/box_pushing/ppo/models/
-benchnpin/baselines/box_pushing/ppo/vector_logs/
-benchnpin/baselines/box_pushing/sac/checkpoint/
-benchnpin/baselines/box_pushing/sac/models/
-benchnpin/baselines/box_pushing/sac/vector_logs/
+benchnpin/baselines/box_delivery/SAM/vector_logs/
+benchnpin/baselines/box_delivery/SAM/output_logs/
+benchnpin/baselines/box_delivery/SAM/checkpoint/
+benchnpin/baselines/box_delivery/SAM/models/
+benchnpin/baselines/box_delivery/ppo/checkpoint/
+benchnpin/baselines/box_delivery/ppo/models/
+benchnpin/baselines/box_delivery/ppo/vector_logs/
+benchnpin/baselines/box_delivery/sac/checkpoint/
+benchnpin/baselines/box_delivery/sac/models/
+benchnpin/baselines/box_delivery/sac/vector_logs/
 
 /plots
 
