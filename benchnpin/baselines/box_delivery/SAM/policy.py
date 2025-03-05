@@ -123,7 +123,7 @@ class DenseActionSpacePolicy:
     def apply_transform(self, s):
         return self.transform(s).unsqueeze(0)
 
-    def step(self, state, exploration_eps=None, debug=False):
+    def predict(self, state, exploration_eps=None, debug=False):
         if exploration_eps is None:
             exploration_eps = self.final_exploration
         state = self.apply_transform(state).to(self.device)
@@ -303,7 +303,7 @@ class BoxDeliverySAM(BasePolicy):
                 exploration_eps = 1 - min(max(timestep - learning_starts, 0) / exploration_timesteps, 1) * (1 - self.final_exploration)
             else:
                 exploration_eps = self.final_exploration
-            action, _ = policy.step(state, exploration_eps=exploration_eps)
+            action, _ = policy.predict(state, exploration_eps=exploration_eps)
 
             # step the simulation
             next_state, reward, done, truncated, info = env.step(action)
@@ -419,7 +419,7 @@ class BoxDeliverySAM(BasePolicy):
             done = truncated = False
             eps_reward = 0.0
             while True:
-                action, _ = self.model.step(obs)
+                action, _ = self.model.predict(obs)
                 obs, reward, done, truncated, info = env.step(action)
                 metric.update(info=info, reward=reward, eps_complete=(done or truncated))
                 if done or truncated:
@@ -431,20 +431,19 @@ class BoxDeliverySAM(BasePolicy):
 
 
     
-    def act(self, observation, **kwargs):
-        raise NotImplementedError("The 'act' method is not implemented yet.")
-        # parameters for planners
-        model_eps = kwargs.get('model_eps', None)
-        
+    def act(self, observation, action_space: int = None, num_channels: int = None, model_eps='latest'):
         # load trained model for the first time
         if self.model is None:
-
-            if model_eps is None:
-                # self.model = PPO.load(os.path.join(self.model_path, self.model_name))
-                pass
+            if action_space is None or num_channels is None:
+                raise ValueError("action_space and num_channels must be provided")
+            
+            if model_eps == 'latest':
+                self.model = DenseActionSpacePolicy(action_space, num_channels, 0.0,
+                                                    train=False, evaluate=True, model_name=self.model_name)
             else:
                 model_checkpoint = self.model_name + '_' + model_eps + '_steps'
-                # self.model = PPO.load(os.path.join(self.model_path, model_checkpoint))
+                self.model = DenseActionSpacePolicy(action_space.high, num_channels, 0.0,
+                                                    train=False, evaluate=True, model_name=model_checkpoint)
 
         action, _ = self.model.predict(observation)
         return action
