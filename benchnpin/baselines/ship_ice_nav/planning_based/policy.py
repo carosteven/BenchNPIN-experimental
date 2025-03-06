@@ -69,7 +69,7 @@ class PlanningBasedPolicy(BasePolicy):
 
 
     def evaluate(self, num_eps: int, model_eps: str ='latest') -> Tuple[List[float], List[float], List[float], str]:
-        env = gym.make('ship-ice-v0')
+        env = gym.make('ship-ice-v0', config_dict={'egocentric_obs': False})
         env = env.unwrapped
         metric = ShipIceMetric(alg_name="planningBased", ship_mass=env.cfg.ship.mass, goal=env.goal)
 
