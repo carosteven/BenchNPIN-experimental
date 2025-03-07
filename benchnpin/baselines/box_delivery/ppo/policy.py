@@ -37,10 +37,7 @@ class BoxDeliveryPPO(BasePolicy):
             checkpoint_freq=10000,
             resume_training=False) -> None:
 
-        if self.cfg is not None:
-            env = gym.make('box-delivery-v0', cfg_file=self.cfg)
-        else:
-            env = gym.make('box-delivery-v0')
+        env = gym.make('box-delivery-v0', cfg=self.cfg)
         env = env.unwrapped
 
         if resume_training:
@@ -85,10 +82,7 @@ class BoxDeliveryPPO(BasePolicy):
             self.model = PPO.load(os.path.join(self.model_path, model_checkpoint))
             print(f"=> loaded model '{model_checkpoint}'")
 
-        if self.cfg is not None:
-            env = gym.make('box-delivery-v0', cfg_file=self.cfg)
-        else:
-            env = gym.make('box-delivery-v0')
+        env = gym.make('box-delivery-v0', cfg=self.cfg)
         env = env.unwrapped
 
         metric = TaskDrivenMetric(alg_name="PPO", robot_mass=env.cfg.agent.mass)

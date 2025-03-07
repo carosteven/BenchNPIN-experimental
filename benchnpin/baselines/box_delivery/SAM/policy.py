@@ -140,7 +140,7 @@ class DenseActionSpacePolicy:
 
 class BoxDeliverySAM(BasePolicy):
 
-    def __init__(self, model_name='sam_model', model_path=None, cfg=None) -> None:
+    def __init__(self, cfg, model_name='sam_model', model_path=None) -> None:
         super().__init__()
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -169,12 +169,10 @@ class BoxDeliverySAM(BasePolicy):
         next_state_values = torch.zeros(self.batch_size, dtype=torch.float32, device=self.device)
         non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)), dtype=torch.bool, device=self.device)
 
-        if self.use_double_dqn:
-            with torch.no_grad():
-                best_action = policy_net(non_final_next_states).view(non_final_next_states.size(0), -1).max(1)[1].view(non_final_next_states.size(0), 1)
-                next_state_values[non_final_mask] = target_net(non_final_next_states).view(non_final_next_states.size(0), -1).gather(1, best_action).view(-1)
-        else:
-            next_state_values[non_final_mask] = target_net(non_final_next_states).view(non_final_next_states.size(0), -1).max(1)[0].detach()
+        # Double DQN
+        with torch.no_grad():
+            best_action = policy_net(non_final_next_states).view(non_final_next_states.size(0), -1).max(1)[1].view(non_final_next_states.size(0), 1)
+            next_state_values[non_final_mask] = target_net(non_final_next_states).view(non_final_next_states.size(0), -1).gather(1, best_action).view(-1)
 
         expected_state_action_values = (reward_batch + torch.pow(self.gamma, ministeps_batch) * next_state_values)
         td_error = torch.abs(state_action_values - expected_state_action_values).detach()
@@ -195,30 +193,9 @@ class BoxDeliverySAM(BasePolicy):
         return train_info
 
 
-    def train(self, **kwargs) -> None:
-        default_params = {
-            'batch_size': 32,
-            'checkpoint_freq': 10000,
-            'exploration_timesteps': 6000,
-            'final_exploration': 0.01,
-            'gamma': 0.99,
-            'grad_norm_clipping': 10,
-            'job_id': None,
-            'job_id_to_resume': None,
-            'learning_rate': 0.01,
-            'learning_starts': 1000,
-            'n_epochs': 10,
-            'n_steps': 256,
-            'replay_buffer_size': 10000,
-            'resume_training': False,
-            'target_update_freq': 1000,
-            'total_timesteps': 60000,
-            'use_double_dqn': True,
-            'verbose': 2,
-            'weight_decay': 0.0001,
-        }
-
-        params = {**default_params, **kwargs}
+    def train(self, job_id) -> None:
+        job_id = job_id
+        params = self.cfg['train']
         self.batch_size = params['batch_size']
         self.checkpoint_freq = params['checkpoint_freq']
         self.final_exploration = params['final_exploration']
@@ -226,19 +203,17 @@ class BoxDeliverySAM(BasePolicy):
         self.grad_norm_clipping = params['grad_norm_clipping']
         self.learning_rate = params['learning_rate']
         self.replay_buffer_size = params['replay_buffer_size']
-        self.use_double_dqn = params['use_double_dqn']
         self.weight_decay = params['weight_decay']
 
         checkpoint_freq = params['checkpoint_freq']
         exploration_timesteps = params['exploration_timesteps']
-        job_id = params['job_id']
         job_id_to_resume = params['job_id_to_resume']
         learning_starts = params['learning_starts']
         resume_training = params['resume_training']
         target_update_freq = params['target_update_freq']
         total_timesteps = params['total_timesteps']
 
-        checkpoint_path = os.path.join(os.path.dirname(__file__), f'checkpoint/{params["job_id"]}/checkpoint-{self.model_name}.pt')
+        checkpoint_path = os.path.join(os.path.dirname(__file__), f'checkpoint/{job_id}/checkpoint-{self.model_name}.pt')
 
         log_dir = os.path.join(os.path.dirname(__file__), 'output_logs/')
         if not os.path.exists(log_dir):
@@ -248,15 +223,12 @@ class BoxDeliverySAM(BasePolicy):
         logging.info(f"Job ID: {job_id}")
 
         # create environment
-        if self.cfg is not None:
-            env = gym.make('box-delivery-v0', cfg_file=self.cfg)
-        else:
-            env = gym.make('box-delivery-v0')
+        env = gym.make('box-delivery-v0', config=self.cfg)
         env = env.unwrapped
 
         # policy
         policy = DenseActionSpacePolicy(env.action_space.high, env.num_channels, self.final_exploration,
-                                         train=True, checkpoint_path=checkpoint_path, resume_training=resume_training)
+                                         train=True, checkpoint_path=checkpoint_path, resume_training=resume_training, random_seed=self.cfg.misc.random_seed)
 
         # optimizer
         optimizer = optim.SGD(policy.policy_net.parameters(), lr=self.learning_rate, momentum=0.9, weight_decay=self.weight_decay)
@@ -391,10 +363,7 @@ class BoxDeliverySAM(BasePolicy):
 
     def evaluate(self, obstacle_config: str, num_eps: int, model_eps: str ='latest'):
 
-        if self.cfg is not None:
-            env = gym.make('box-delivery-v0', cfg_file=self.cfg)
-        else:
-            env = gym.make('box-delivery-v0')
+        env = gym.make('box-delivery-v0', cfg=self.cfg)
         env = env.unwrapped
 
         env.cfg.env.obstacle_config = obstacle_config

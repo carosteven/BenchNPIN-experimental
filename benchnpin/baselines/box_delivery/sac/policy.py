@@ -40,10 +40,7 @@ class BoxDeliverySAC(BasePolicy):
             checkpoint_freq=10000,
             resume_training=False) -> None:
 
-        if self.cfg is not None:
-            env = gym.make('box-delivery-v0', cfg_file=self.cfg)
-        else:
-            env = gym.make('box-delivery-v0')
+        env = gym.make('box-delivery-v0', cfg=self.cfg)
         env = env.unwrapped
 
         # The noise objects for SAC
@@ -93,10 +90,7 @@ class BoxDeliverySAC(BasePolicy):
             model_checkpoint = self.model_name + '_' + model_eps + '_steps'
             self.model = SAC.load(os.path.join(self.model_path, model_checkpoint))
 
-        if self.cfg is not None:
-            env = gym.make('box-delivery-v0', cfg_file=self.cfg)
-        else:
-            env = gym.make('box-delivery-v0')
+        env = gym.make('box-delivery-v0', cfg=self.cfg)
         env = env.unwrapped
 
         metric = TaskDrivenMetric(alg_name="SAC", robot_mass=env.cfg.agent.mass)
