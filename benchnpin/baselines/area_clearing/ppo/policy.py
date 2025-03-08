@@ -88,7 +88,7 @@ class AreaClearingPPO(BasePolicy):
 
         rewards_list = []
         for eps_idx in range(num_eps):
-            print("Progress: ", eps_idx, " / ", num_eps, " episodes")
+            print("PPO Progress: ", eps_idx, " / ", num_eps, " episodes")
             obs, info = env.reset()
             metric.reset(info)
             done = truncated = False

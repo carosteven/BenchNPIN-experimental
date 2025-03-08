@@ -33,7 +33,10 @@ def extend_linestring_at_start(line: LineString, distance: float) -> LineString:
     start_direction = start - second
 
     # Normalize and scale
-    start_extension = start + (start_direction / np.linalg.norm(start_direction)) * distance
+    if np.linalg.norm(start_direction) == 0:
+        start_extension = start
+    else:
+        start_extension = start + (start_direction / np.linalg.norm(start_direction)) * distance
 
     # Create new extended LineString
     new_coords = [tuple(start_extension)] + list(line.coords)
@@ -201,7 +204,7 @@ class PlanningBasedPolicy(BasePolicy):
         old_t_max = env.cfg.sim.t_max
 
         env.cfg.agent.action_type = 'velocity'
-        env.cfg.sim.t_max = 1000
+        env.cfg.sim.t_max = 2000
 
         metric = TaskDrivenMetric(alg_name="GTSP", robot_mass=env.cfg.agent.mass)
 

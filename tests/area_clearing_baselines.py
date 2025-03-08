@@ -11,10 +11,14 @@ from benchnpin.baselines.area_clearing.planning_based.policy import PlanningBase
 from benchnpin.baselines.area_clearing.td3.policy import AreaClearingTD3
 from benchnpin.baselines.area_clearing.sam.policy import AreaClearingSAM
 
+from benchnpin.common.metrics.base_metric import BaseMetric
+
 from benchnpin.common.utils.utils import DotDict
 from os.path import dirname
 
 import os
+
+import pickle
 
 def main(args):
     cfg = DotDict.load_from_file(args.config_file)
@@ -33,7 +37,7 @@ def main(args):
         model_name = cfg.evaluate.model
 
     benchmark_results = []
-    num_eps = 5
+    num_eps = 200
 
     ### initialize planning based policy
     policy = PlanningBasedPolicy()
@@ -66,9 +70,19 @@ def main(args):
     # ========================= SAM Policy =====================================
     # sam_policy = AreaClearingSAM(model_name=model_name, cfg=args.config_file)
     # # sam_policy.train(job_id=args.job_id, **cfg.train)
-    # evaluations = sam_policy.evaluate(num_eps=num_eps)
+    # benchmark_results.append(sam_policy.evaluate(num_eps=num_eps))
 
     # print("SAM Eval: ", evaluations)
+
+    BaseMetric.plot_algs_scores_task_driven(benchmark_results, save_fig_dir='./')
+
+
+    # save eval results to disk
+    pickle_dict = {
+        'benchmark_results': benchmark_results
+    }
+    with open('ac_gtsp_benchmark_results.pkl', 'wb') as f:
+        pickle.dump(pickle_dict, f)
 
 
 

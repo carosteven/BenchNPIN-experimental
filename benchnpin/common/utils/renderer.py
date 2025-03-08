@@ -50,6 +50,7 @@ class Renderer():
         self.path = None
 
         self.teleop_paths = None
+        self.teleop_path_thickness = 10
 
 
     def to_pygame(self, pymunk_point):
@@ -94,23 +95,30 @@ class Renderer():
         """
         Display the planned path given from a planner
         """
+
+
+        surface = self.window.convert_alpha()
+        surface.fill((0, 0, 0, 0))
+
         pygame.draw.lines(
-                self.window, (255, 100, 100), False,  # red color, not a closed shape
+                surface, (255, 100, 100), False,  # red color, not a closed shape
                 [self.to_pygame(point) for point in self.teleop_paths[0]],  # Convert trajectory to Pygame coordinates
-                10,  # Line thickness
+                self.teleop_path_thickness,  # Line thickness
             )
 
         pygame.draw.lines(
-                self.window, (255, 222, 33), False,  # red color, not a closed shape
+                surface, (255, 222, 33), False,  # red color, not a closed shape
                 [self.to_pygame(point) for point in self.teleop_paths[1]],  # Convert trajectory to Pygame coordinates
-                10,  # Line thickness
+                self.teleop_path_thickness,  # Line thickness
             )
 
         pygame.draw.lines(
-                self.window, (0, 0, 255), False,  # red color, not a closed shape
+                surface, (0, 0, 255), False,  # red color, not a closed shape
                 [self.to_pygame(point) for point in self.teleop_paths[2]],  # Convert trajectory to Pygame coordinates
-                10,  # Line thickness
+                self.teleop_path_thickness,  # Line thickness
             )
+
+        self.window.blit(surface, (0, 0))
 
     
     def display_goal_line(self):
