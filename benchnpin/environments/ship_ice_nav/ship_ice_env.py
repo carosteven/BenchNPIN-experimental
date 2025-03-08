@@ -94,6 +94,10 @@ class ShipIceEnv(gym.Env):
                 obs_shape = (2, self.occupancy.occ_map_height, self.occupancy.occ_map_width)
             self.observation_space = spaces.Box(low=0, high=255, shape=obs_shape, dtype=np.uint8)
 
+        else:
+            self.observation_shape = (2, self.occupancy.occ_map_height, self.occupancy.occ_map_width)
+            self.observation_space = spaces.Box(low=0, high=255, shape=self.observation_shape, dtype=np.uint8)
+
         self.yaw_lim = (0, np.pi)       # lower and upper limit of ship yaw  
         self.boundary_violation_limit = 0.0       # if the ship is out of boundary more than this limit, terminate and truncate the episode 
 

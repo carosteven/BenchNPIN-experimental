@@ -16,6 +16,3 @@ pygame
 opencv-python
 pynput
 git+https://github.com/rdesc/pydubins.git
-
-# cd benchnpin/common/spfa
-# python setup.py install

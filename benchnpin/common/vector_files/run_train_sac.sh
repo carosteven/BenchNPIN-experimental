@@ -14,7 +14,7 @@
 # We also recommend users to create a symlink of the checkpoint dir so your
 # training code stays the same with regards to different job IDs and it would
 # be easier to navigate the checkpoint directory
-ln -sfn /checkpoint/${USER}/${SLURM_JOB_ID} $PWD/benchnpin/baselines/box_pushing/sac/checkpoint/${SLURM_JOB_ID}
+ln -sfn /checkpoint/${USER}/${SLURM_JOB_ID} $PWD/benchnpin/baselines/box_delivery/sac/checkpoint/${SLURM_JOB_ID}
 
 
 # In the future, the checkpoint directory will be removed immediately after the
@@ -32,4 +32,4 @@ module purge && module load pytorch2.1-cuda11.8-python3.9
 # demonstrates how to perform checkpointing in pytorch, please navigate to the
 # file for more information.
 source $PWD/venv/bin/activate
-python $PWD/tests/box_pushing_baselines.py --job_id ${SLURM_JOB_ID} --config_file $PWD/benchnpin/environments/box_pushing/config_sac.yaml
+python $PWD/tests/box_delivery_baselines.py --job_id ${SLURM_JOB_ID} --config_file $PWD/benchnpin/environments/box_delivery/config_sac.yaml

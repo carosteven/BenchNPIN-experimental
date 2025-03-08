@@ -13,8 +13,6 @@ from benchnpin.baselines.area_clearing.sam.policy import AreaClearingSAM
 
 from benchnpin.common.utils.utils import DotDict
 from os.path import dirname
-from benchnpin.common.utils.utils import DotDict
-from os.path import dirname
 
 import os
 
@@ -35,21 +33,22 @@ def main(args):
         model_name = cfg.evaluate.model
 
     benchmark_results = []
-    num_eps = 10
+    num_eps = 5
 
-    # initialize planning based policy
+    ### initialize planning based policy
     policy = PlanningBasedPolicy()
     benchmark_results.append(policy.evaluate(num_eps=num_eps))
 
     # ========================= PPO Policy =====================================
-    ppo_policy = AreaClearingPPO()
+    # ppo_policy = AreaClearingPPO()
+    
     # ppo_policy.train(total_timesteps=int(5e5), checkpoint_freq=10000, from_model_eps='260000')
     # evaluations = ppo_policy.evaluate(num_eps=5)
 
     # # ppo_policy = AreaClearingPPO(model_path='/Storage2/m5ramesh/git/BenchNPIN/benchnpin/baselines/area_clearing/ppo/final_models/clear_env/V2/')
     # # evaluations = ppo_policy.evaluate(num_eps=5, model_eps='260000') # For small - 280000 Intuitively performing model! For large - V2-260000 is pretty close
 
-    benchmark_results.append(ppo_policy.evaluate(num_eps=num_eps))
+    # benchmark_results.append(ppo_policy.evaluate(num_eps=num_eps))
 
     # print("PPO Eval: ", evaluations)
 
@@ -64,19 +63,12 @@ def main(args):
 
     # print("SAC Eval: ", evaluations)
 
-
-    # ========================= TD3 Policy =====================================
-    # td3_policy = AreaClearingTD3()
-    # td3_policy.train(total_timesteps=500)
-    # evaluations = td3_policy.evaluate(num_eps=5, model_eps='latest')
-    # print("PPO Eval: ", evaluations)
-
     # ========================= SAM Policy =====================================
     # sam_policy = AreaClearingSAM(model_name=model_name, cfg=args.config_file)
     # # sam_policy.train(job_id=args.job_id, **cfg.train)
-    # evaluations = sam_policy.evaluate(num_eps=5)
-    # # evaluations = td3_policy.evaluate(num_eps=5, model_eps='latest')
-    # # print("PPO Eval: ", evaluations)
+    # evaluations = sam_policy.evaluate(num_eps=num_eps)
+
+    # print("SAM Eval: ", evaluations)
 
 
 

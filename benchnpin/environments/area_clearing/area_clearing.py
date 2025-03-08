@@ -8,7 +8,7 @@ import pymunk
 from pymunk import Vec2d
 from matplotlib import pyplot as plt
 
-# ship-ice related imports
+# Bench_NPIN related imports
 from benchnpin.common.controller.dp import DP
 from benchnpin.common.controller.position_controller import PositionController
 from benchnpin.common.cost_map import CostMap
@@ -33,6 +33,8 @@ R = lambda theta: np.asarray([
     [np.cos(theta), -np.sin(theta)],
     [np.sin(theta), np.cos(theta)]
 ])
+
+PAPER_RENDER_MODE = False
 
 BOUNDARY_PENALTY = -0.25
 BOX_PUTBACK_PENALTY = -10 # -1
@@ -190,7 +192,17 @@ class AreaClearingEnv(gym.Env):
 
         self.cleared_box_count = 0
 
-        # self.state_fig, self.state_ax = plt.subplots(1, self.num_channels, figsize=(4 * self.num_channels, 6))
+        self.state_fig, self.state_ax = plt.subplots(1, self.num_channels, figsize=(4 * self.num_channels, 6))
+
+        ### DEBUG: Seperate figures for paper
+        # self.state_figs = []
+        # self.state_axes = []
+
+        # for i in range(self.num_channels):
+        #     fig, ax = plt.subplots(figsize=(6, 6))
+        #     self.state_figs.append(fig)
+        #     self.state_axes.append(ax)
+
         self.colorbars = [None] * self.num_channels
 
         self.boundary_goals, self.goal_points = self._compute_boundary_goals()
@@ -326,7 +338,7 @@ class AreaClearingEnv(gym.Env):
         if self.cfg.render.show:
             if self.renderer is None:
                 self.renderer = Renderer(self.space, env_width=self.map_width + 2, env_height=self.map_height + 2, render_scale=20, 
-                        background_color=(255, 255, 255), caption="Area Clearing", 
+                        background_color=(234, 234, 234), caption="Area Clearing", 
                         centered=True,
                         clearance_boundary=self.boundary_vertices
                         )
@@ -343,8 +355,12 @@ class AreaClearingEnv(gym.Env):
             mid_x = (self.min_x_boundary + self.max_x_boundary) / 2
             self.start = (mid_x, self.min_y_boundary + 1.0, np.pi / 2)
 
+        ### DEBUG: Used for paper image
+        if PAPER_RENDER_MODE:
+            self.start = (-0.07870898347806499, -4.0, 1.5707963267948966)
+
         self.agent_info['start_pos'] = self.start
-        self.agent_info['color'] = get_color('red')
+        self.agent_info['color'] = (100, 100, 100, 255)
 
         self.obs_dicts = self.generate_obstacles()
         obs_dicts, self.static_obs_shapes = self.generate_static_obstacles()
@@ -361,13 +377,14 @@ class AreaClearingEnv(gym.Env):
 
         # initialize ship sim objects
         self.dynamic_obs = [ob for ob in self.obs_dicts if ob['type'] == ObstacleType.DYNAMIC]
-        self.box_shapes = generate_sim_obs(self.space, self.dynamic_obs, self.cfg.sim.obstacle_density)
+        self.box_shapes = generate_sim_obs(self.space, self.dynamic_obs, self.cfg.sim.obstacle_density, color=(204, 153, 102, 255))
         for p in self.box_shapes:
             p.collision_type = 2
         
         self.box_clearance_statuses = [False for i in range(len(self.box_shapes))]
 
-        self.agent = generate_sim_agent(self.space, self.agent_info, body_type=pymunk.Body.KINEMATIC)
+        self.agent = generate_sim_agent(self.space, self.agent_info, body_type=pymunk.Body.KINEMATIC, 
+                                        wheel_vertices_list=self.cfg.agent.wheel_vertices, front_bumper_vertices=self.cfg.agent.front_bumper_vertices)
         self.agent.collision_type = 1
 
         # Initialize configuration space (only need to compute once)
@@ -509,6 +526,10 @@ class AreaClearingEnv(gym.Env):
             if not overlapped:
                 obstacles.append([center_x, center_y])
                 obs_count += 1
+
+        ### DEBUG: Used for paper image
+        if PAPER_RENDER_MODE:
+            obstacles = [[1.063661985378661, 1.6179951647752544], [0.828027030103013, -2.367158808926069], [3.1821729623802204, -0.4006169916647311], [-2.4851040478952173, -1.6834657290847765], [2.7372134329372644, -3.6831299721809874]]
         
         # convert to obs dict
         obs_dict = []
@@ -644,8 +665,8 @@ class AreaClearingEnv(gym.Env):
                 action = y_pixel * self.local_map_pixel_width + x_pixel
 
             self.path, robot_move_sign = self.position_controller.get_waypoints_to_spatial_action(robot_initial_position, robot_initial_heading, action)
-            if self.cfg.render.show:
-                self.renderer.update_path(self.path)
+            # if self.cfg.render.show:
+            #     self.renderer.update_path(self.path)
 
             robot_distance, robot_turn_angle = self.execute_robot_path(robot_initial_position, robot_initial_heading, robot_move_sign)
 
@@ -882,8 +903,8 @@ class AreaClearingEnv(gym.Env):
 
     def update_path(self, new_path):
         self.path = new_path
-        if(self.renderer):
-            self.renderer.update_path(path=self.path)
+        # if(self.renderer):
+        #     self.renderer.update_path(path=self.path)
 
     def generate_observation(self):
         self.update_global_overhead_map()
@@ -973,8 +994,8 @@ class AreaClearingEnv(gym.Env):
                 fillPoly(small_overhead_map, [vertices_px], color=COMPLETED_CUBE_SEG_INDEX/MAX_SEG_INDEX)
             else:
                 fillPoly(small_overhead_map, [vertices_px], color=CUBE_SEG_INDEX/MAX_SEG_INDEX)
-        
-        vertices = [self.agent.body.local_to_world(v) for v in self.agent.get_vertices()]
+
+        vertices = [self.agent.body.local_to_world(v) for v in self.agent_info.footprint_vertices]
         robot_vertices = np.array([[v.x, v.y] for v in vertices])
         robot_vertices_px = (robot_vertices * self.local_map_pixels_per_meter).astype(np.int32)
         robot_vertices_px[:, 0] += int(self.local_map_width * self.local_map_pixels_per_meter / 2) + 10
@@ -1122,6 +1143,20 @@ class AreaClearingEnv(gym.Env):
                         self.colorbars[i] = self.state_fig.colorbar(im, ax=ax)
                 
                 self.state_fig.savefig(os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx), str(self.t) + '_obs.png'))
+
+
+                ### DEBUG: Seperate figures for paper
+                
+                # for i in range(self.num_channels):
+                #     self.state_axes[i].clear()
+                #     im = self.state_axes[i].imshow(self.observation[:,:,i], cmap='hot', interpolation='nearest')
+                #     if self.colorbars[i] is not None:
+                #         self.colorbars[i].update_normal(im)
+                #     else:
+                #         self.colorbars[i] = self.state_figs[i].colorbar(im, ax=self.state_axes[i])
+
+                #     self.state_axes[i].axis('off')
+                #     self.state_figs[i].savefig(os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx), str(self.t) + f'_obs_{i}.png'), bbox_inches='tight', pad_inches=0)
 
         else:
             if(self.renderer):

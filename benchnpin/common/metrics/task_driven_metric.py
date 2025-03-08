@@ -30,7 +30,7 @@ class TaskDrivenMetric(BaseMetric):
         """
 
         if not any(self.box_completed_statuses):
-            return -1
+            return 0
 
         # compute the minimum spanning tree for successful boxes
         G = nx.Graph()
@@ -91,7 +91,7 @@ class TaskDrivenMetric(BaseMetric):
 
         success_rate = sum(self.box_completed_statuses) / len(self.box_completed_statuses)
 
-        return success_rate * mst_cost / self.total_robot_dist
+        return success_rate, mst_cost / self.total_robot_dist
 
 
     def compute_effort_score(self):
@@ -101,7 +101,10 @@ class TaskDrivenMetric(BaseMetric):
 
         min_mass_dist = 0
 
-        for obstacle in self.all_boxes:
+        completed_box_ids = [i for i, status in enumerate(self.box_completed_statuses) if status]
+        completed_boxes = [self.all_boxes[i] for i in completed_box_ids]
+
+        for obstacle in completed_boxes:
             area = obstacle.area
             min_dist = np.inf
             for goal in self.goal_positions:
@@ -126,7 +129,11 @@ class TaskDrivenMetric(BaseMetric):
         if eps_complete:
             self.rewards.append(self.eps_reward)
             mst_cost = self.compute_mst_cost_for_successful_boxes()
-            self.efficiency_scores.append(self.compute_efficiency_score(mst_cost))
+
+            success_rate, efficiency_score = self.compute_efficiency_score(mst_cost)
+
+            self.success_rates.append(success_rate)
+            self.efficiency_scores.append(efficiency_score)
             self.effort_scores.append(self.compute_effort_score())
 
 

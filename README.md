@@ -78,11 +78,16 @@ cd BenchNPIN
 pip install -r requirements.txt
 ```
 
-2. Install Gym environment
+3. Install Gym environment
 ```bash
 pip install -e .
 ```
 
+4. Install shortest path module
+```bash
+cd benchnpin/common/spfa
+python setup.py install
+```
 
 ## Usage
 

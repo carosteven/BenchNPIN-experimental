@@ -1,5 +1,5 @@
 """
-An example script for running box pushing or ship ice environment
+An example script for running box delivery or ship ice environment
 """
 
 import benchnpin.environments
@@ -8,7 +8,7 @@ import numpy as np
 
 
 # env = gym.make('ship-ice-v0')
-# env = gym.make('box-pushing-v0')
+# env = gym.make('box-delivery-v0')
 
 # Area clearing. Demo mode is set through a member function.
 env = gym.make('area-clearing-v0')
