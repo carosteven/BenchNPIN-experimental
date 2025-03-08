@@ -27,8 +27,8 @@ sac_policy = ShipIceSAC()
 lattice_planning_policy = PlanningBasedPolicy(planner_type='lattice')
 predictive_planning_policy = PlanningBasedPolicy(planner_type='predictive')
 
-benchmark_results.append(ppo_policy.evaluate(num_eps=num_eps, model_eps='300000'))
-benchmark_results.append(sac_policy.evaluate(num_eps=num_eps, model_eps='130000'))
+benchmark_results.append(ppo_policy.evaluate(num_eps=num_eps))
+benchmark_results.append(sac_policy.evaluate(num_eps=num_eps))
 benchmark_results.append(lattice_planning_policy.evaluate(num_eps=num_eps))
 benchmark_results.append(predictive_planning_policy.evaluate(num_eps=num_eps))
 
