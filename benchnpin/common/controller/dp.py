@@ -131,14 +131,36 @@ class PID:
 
 class DP:
     def __init__(self,
-                 dt: float, A: List, B: List, input_lims: List,
-                 Lfc: float, target_speed: float, PID_gains: List,
+                 dt: float, target_speed: float,
                  x: float, y: float, yaw: float,
                  cx: np.ndarray, cy: np.ndarray, ch: np.ndarray,
+                 A: List = None, B: List = None, input_lims: List = None,
+                 Lfc: float = None, PID_gains: List = None,
                  output_dir=None):
         self.dt = dt
-        self.A = np.asarray(A)  # x_{k+1} = Ax_k + Bu_k, discretized dynamics
-        self.B = np.asarray(B)
+
+        if A is None:
+            self.A = np.zeros((3, 3))
+        else:
+            self.A = np.asarray(A)  # x_{k+1} = Ax_k + Bu_k, discretized dynamics
+        
+        if B is None:
+            self.B = np.zeros(3)
+        else:
+            self.B = np.asarray(B)
+        
+        if input_lims is None:
+            input_lims = [0, 0, 0]
+
+        if PID_gains is None:
+            PID_gains = [[0, 0, 0],
+                        [0, 0, 0],
+                        [0, 0, 0]]
+        
+        if Lfc is None:
+            Lfc = 0.0
+        
+
         self.target_speed = target_speed
 
         self.time = 0
