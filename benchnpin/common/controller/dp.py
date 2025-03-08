@@ -1,7 +1,6 @@
 from typing import List
 
 import numpy as np
-import pandas as pd
 
 from benchnpin.common.evaluation.metrics import euclid_dist, path_length
 
@@ -160,10 +159,6 @@ class DP:
         return self.target_course.advance(self.target_speed, self.dt)[0]
         # return self.target_course.search_target_index(self.state.x, self.state.y)[0]
 
-
-    def get_state_history(self):
-        data = self.state_storage.get_history()
-        return pd.DataFrame(data)
 
     def __call__(self, *pose):
         """
