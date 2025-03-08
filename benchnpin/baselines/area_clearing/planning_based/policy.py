@@ -9,6 +9,7 @@ from shapely import shortest_line
 from benchnpin.common.controller.dp import DP
 from benchnpin.common.utils.utils import DotDict
 from benchnpin.common.evaluation.metrics import euclid_dist
+from benchnpin.common.metrics.task_driven_metric import TaskDrivenMetric
 
 from benchnpin.baselines.base_class import BasePolicy
 
@@ -32,7 +33,10 @@ def extend_linestring_at_start(line: LineString, distance: float) -> LineString:
     start_direction = start - second
 
     # Normalize and scale
-    start_extension = start + (start_direction / np.linalg.norm(start_direction)) * distance
+    if np.linalg.norm(start_direction) == 0:
+        start_extension = start
+    else:
+        start_extension = start + (start_direction / np.linalg.norm(start_direction)) * distance
 
     # Create new extended LineString
     new_coords = [tuple(start_extension)] + list(line.coords)
@@ -172,13 +176,13 @@ class PlanningBasedPolicy(BasePolicy):
             self.current_point_id = 1
 
         if(self.current_point_id >= len(self.path)):
-            return np.array([0.0, 0.0]), 0.0
+            return 0.0, 0.0
 
         if(euclid_dist(agent_pos, self.path[self.current_point_id]) < 0.4):
             self.current_point_id += 1
 
             if(self.current_point_id >= len(self.path)):
-                return np.array([0.0, 0.0]), 0.0
+                return 0.0, 0.0
             
             # update setpoint
             x_s, y_s, h_s = self.path[self.current_point_id]
@@ -187,35 +191,62 @@ class PlanningBasedPolicy(BasePolicy):
         # call ideal controller to get angular velocity control
         omega, velocity = self.dp.ideal_control(agent_pos[0], agent_pos[1], agent_pos[2])
 
-        return velocity, omega
+        global_velocity = np.linalg.norm(velocity)
+
+        return global_velocity, omega
 
 
     def evaluate(self, num_eps: int, model_eps: str ='latest') -> list:
         env = gym.make('area-clearing-v0')
         env = env.unwrapped
 
+        old_action_type = env.cfg.agent.action_type
+        old_t_max = env.cfg.sim.t_max
+
+        env.cfg.agent.action_type = 'velocity'
+        env.cfg.sim.t_max = 2000
+
+        metric = TaskDrivenMetric(alg_name="GTSP", robot_mass=env.cfg.agent.mass)
+
         rewards_list = []
         for eps_idx in range(num_eps):
             print("Progress: ", eps_idx, " / ", num_eps, " episodes")
             observation, info = env.reset()
+            metric.reset(info)
             obstacles = info['obs']
+
+            self.update_boundary_and_obstacles(info['boundary'], info['walls'], info['static_obstacles'])
             done = truncated = False
             eps_reward = 0.0
 
             while True:
-                action = self.act(observation=(observation / 255).astype(np.float64), ship_pos=info['state'], obstacles=obstacles, 
-                                    goal=env.goal,
-                                    conc=env.cfg.concentration, 
-                                    action_scale=env.max_yaw_rate_step)
-                observation, reward, done, truncated, info = env.step(action)
+                action = self.act(observation=(observation).astype(np.float64), agent_pos=info['state'], obstacles=obstacles)
+                env.update_path(self.path)
+
+                if env.cfg.agent.action_type == 'velocity':
+                    scaled_action = [action[0] / env.target_speed, action[1] / env.max_yaw_rate_step]
+                else:
+                    raise Exception('Invalid action type. Must use velocity control')
+
+                observation, reward, done, truncated, info = env.step(scaled_action)
+
+                metric.update(info=info, reward=reward, eps_complete=(done or truncated))
                 obstacles = info['obs']
+                env.render()
                 eps_reward += reward
+
                 if done or truncated:
                     rewards_list.append(eps_reward)
+                    self.reset()
                     break
 
         env.close()
-        return rewards_list
+        metric.plot_scores(save_fig_dir=env.cfg.output_dir)
+
+        env.cfg.agent.action_type = old_action_type
+        env.cfg.sim.t_max = old_t_max
+
+        return metric.success_rates, metric.efficiency_scores, metric.effort_scores, metric.rewards, "GTSP"
     
     def reset(self):
         self.path = None

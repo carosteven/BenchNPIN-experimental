@@ -75,7 +75,8 @@ class Robot:
         plt.show()
 
     @staticmethod
-    def sim(vertices: List, start_pos: Tuple[float, float, float], body_type=None, velocity=(0, 0), color=None):
+    def sim(vertices: List, start_pos: Tuple[float, float, float], body_type=None, velocity=(0, 0), 
+            color=None, wheel_vertices_list=None, front_bumper_vertices=None):
         from pymunk import Vec2d, Body, Poly
 
         x, y, theta = start_pos
@@ -94,7 +95,27 @@ class Robot:
         if color is not None:
             shape.color = color
 
-        return body, shape
+        if wheel_vertices_list is None:
+            return body, shape
+
+        wheels = []
+        for wheel_vertices in wheel_vertices_list:
+            wheel = Poly(body, [tuple(item) for item in wheel_vertices], radius=0.02)
+            wheel.mass = 1
+            wheel.elasticity = 0.01
+            if color is not None:
+                wheel.color = (0, 0, 0, 255)
+            wheels.append(wheel)
+
+        if front_bumper_vertices is not None:
+            front_bumper = Poly(body, [tuple(item) for item in front_bumper_vertices], radius=0.02)
+            front_bumper.mass = 1
+            front_bumper.elasticity = 0.01
+            if color is not None:
+                front_bumper.color = color
+            return body, shape, wheels, front_bumper
+
+        return body, shape, wheels
 
     @staticmethod
     def calc_turn_radius(rate, speed):

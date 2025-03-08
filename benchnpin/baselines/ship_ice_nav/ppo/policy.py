@@ -1,6 +1,6 @@
 from benchnpin.baselines.base_class import BasePolicy
 from benchnpin.baselines.feature_extractors import ResNet18
-from benchnpin.common.merics.ship_ice_metric import ShipIceMetric
+from benchnpin.common.metrics.ship_ice_metric import ShipIceMetric
 from typing import List, Tuple
 import benchnpin.environments
 import gymnasium as gym
@@ -76,7 +76,7 @@ class ShipIcePPO(BasePolicy):
             model_checkpoint = self.model_name + '_' + model_eps + '_steps'
             self.model = PPO.load(os.path.join(self.model_path, model_checkpoint))
 
-        env = gym.make('ship-ice-v0')
+        env = gym.make('ship-ice-v0', config_dict={'egocentric_obs': True})
         env = env.unwrapped
         metric = ShipIceMetric(alg_name="PPO", ship_mass=env.cfg.ship.mass, goal=env.goal)
 

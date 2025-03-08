@@ -20,6 +20,7 @@ policy = MazeNAMOPPO()
 total_dist_reward = 0
 total_col_reward = 0
 total_scaled_col_reward = 0
+total_reward = 0
 
 total_episodes = 500
 for eps_idx in range(total_episodes):
@@ -28,6 +29,7 @@ for eps_idx in range(total_episodes):
     obstacles = info['obs']
 
     # start a new rollout
+    step_c = 0
     while True:
         
         # call planning based policy
@@ -39,17 +41,22 @@ for eps_idx in range(total_episodes):
 
         # call RL policy
         #action = policy.act(observation=observation, model_eps='90000')
-        action = policy.act(observation=observation, model_eps='500000')
-        print("action0: ", action[0])
+        action = policy.act(observation=observation, model_eps='1030000')
+        # print("action0: ", action)
+        # print("step count: ", step_c)
+        step_c += 1
 
         observation, reward, terminated, truncated, info = env.step(action)
         obstacles = info['obs']
         env.render()
 
-        print("reward: ", reward, "; dist increment reward: ", info['dist increment reward'], "; col reward: ", info['collision reward'], "; col reward scaled: ", info['scaled collision reward'])
+        # haha print("reward: ", reward, "; dist increment reward: ", info['dist increment reward'], "; col reward: ", info['collision reward'], "; col reward scaled: ", info['scaled collision reward'])
         total_dist_reward += info['dist increment reward']
         total_col_reward += info['collision reward']
         total_scaled_col_reward += info['scaled collision reward']
+
+        total_reward += reward
+        print("total reward: ", total_reward)
 
         if terminated or truncated:
             # policy.reset()

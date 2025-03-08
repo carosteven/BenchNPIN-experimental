@@ -23,8 +23,8 @@ class OccupancyGrid:
 
         self.local_width = local_width
         self.local_height = local_height
-        self.local_window_height = int(self.local_height / self.grid_height)            # local window height (unit: cell)
-        self.local_window_width = int(self.local_width / self.grid_width)            # local window width (unit: cell)
+        self.local_window_height = int(self.local_height * meter_to_pixel_scale)            # local window height (unit: cell)
+        self.local_window_width = int(self.local_width * meter_to_pixel_scale)            # local window width (unit: cell)
 
         # print("Occupancy map resolution: ", grid_width, "; occupancy map dimension: ", (self.occ_map_width, self.occ_map_height))
 
@@ -477,12 +477,12 @@ class OccupancyGrid:
                 queue.append((new_y, new_x))
 
         #normalize the distance
-        global_edt = global_edt / global_edt.max()
+        normalized_global_edt = global_edt / global_edt.max()
 
         #add walls to the normalized distance map as 1.0
-        global_edt[global_wall_binary == 1.0] = 1.0
+        normalized_global_edt[global_wall_binary == 1.0] = 1.0
 
-        return global_edt
+        return normalized_global_edt, global_edt
         
 
 

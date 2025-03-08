@@ -12,6 +12,7 @@ import gymnasium as gym
 import numpy as np
 import pickle
 from pynput import keyboard
+import time
 
 env = gym.make('maze-NAMO-v0')
 
@@ -31,11 +32,15 @@ SMALL_LEFT = 6
 SMALL_RIGHT = 7
 BACKWARD = 8
 
+TELEOPT_FREQ = 5
+
+angular_velocity = 0
+
 command = STOP
 manual_stop = False
 
 def on_press(key):
-    global command
+    global command, angular_velocity
     try:
         if key.char == 'w':  # Move up
             command = FORWARD
@@ -43,16 +48,27 @@ def on_press(key):
             command = STOP_TURNING
         elif key.char == 'x':  # Move down
             command = BACKWARD
+
         elif key.char == 'a':  # Move left
             command = LEFT
+            angular_velocity += 0.1
+            angular_velocity = np.clip(angular_velocity, a_max=1.0, a_min=-1.0)
+
         elif key.char == 'd':  # Move right
             command = RIGHT
-        elif key.char == 't':  # Move right
-            command = STOP
+            angular_velocity -= 0.1
+            angular_velocity = np.clip(angular_velocity, a_max=1.0, a_min=-1.0)
+
         elif key.char == 'z':  # Move right
             command = SMALL_LEFT
+            angular_velocity += 0.05
+            angular_velocity = np.clip(angular_velocity, a_max=1.0, a_min=-1.0)
+
         elif key.char == 'c':  # Move right
             command = SMALL_RIGHT
+            angular_velocity -= 0.05
+            angular_velocity = np.clip(angular_velocity, a_max=1.0, a_min=-1.0)
+
     except AttributeError:
         pass
 
@@ -64,22 +80,21 @@ def on_release(key):
         return False
 
 
-def record_transition(observation, state, reward, terminal, timeout):
+def record_transition(observation, action, reward, terminal, timeout):
     observations.append(observation)
-    actions.append(state)
+    actions.append(action)
     rewards.append(reward)
     terminals.append(terminal)
     timeouts.append(timeout)
 
 
 def collect_demos():
-
+    global angular_velocity
     path_length = 0
-    step_size = 0.1
+    total_reward = 0
 
     observation, info = env.reset()
-    record_transition(observation, [info['state'][0], info['state'][1]], 0, False, False)
-    prev_state = [info['state'][0], info['state'][1]]
+    record_transition(observation, angular_velocity, 0, False, False)
 
     terminated = False
     truncated = False
@@ -88,27 +103,32 @@ def collect_demos():
             t = 0
             transition_count = 1        # start from 1 as we recorded the reset step
             while listener.running:  # While the listener is active
+                loop_start_time = time.time()
+
                 global command
-                print("command: ", command, "; step: ", t, \
-                    "; num completed: ",  end="\r")
-                observation, reward, terminated, truncated, info = env.step(command)
+                observation, reward, terminated, truncated, info = env.step(angular_velocity)
+                record_transition(observation, angular_velocity, reward, terminated, truncated)
 
-                # command = OTHER
-                if t % 5 == 0:
-                    env.render()
+                # print("reward: ", reward, "; dist increment reward: ", info['dist increment reward'], "; col reward scaled: ", info['scaled collision reward'])
+                print("increment reward: ", info['dist increment reward'], "; col reward scaled: ", info['scaled collision reward'])
+                # print("angular vel: ", angular_velocity, "; step: ", t)
 
-                if (((info['state'][0] - prev_state[0])**2 + (info['state'][1] - prev_state[1])**2)**(0.5) >= step_size) or terminated or truncated:
-                    record_transition(observation, [info['state'][0], info['state'][1]], reward, terminated, truncated)
-                    prev_state = [info['state'][0], info['state'][1]]
-                    transition_count += 1
+                total_reward += reward
+                # print("reward: ", info['dist increment reward'])
+
+
 
                 if terminated or truncated:
                     print("\nterminated: ", terminated, "; truncated: ", truncated)
                     path_length = transition_count
                     break
-
                 t += 1
                 env.render()
+
+                # loop frequency control for human operator
+                loop_time = time.time() - loop_start_time
+                if loop_time <= (1 / TELEOPT_FREQ):
+                    time.sleep((1 / TELEOPT_FREQ) - loop_time)
 
 
         except KeyboardInterrupt:
@@ -193,7 +213,7 @@ def collect_demos():
         pickle.dump(pickle_dict, f)
 
     # save demo info data
-    with open('maze_NAMO_demow_info.pkl', 'wb') as f:
+    with open('maze_NAMO_demo_info.pkl', 'wb') as f:
         pickle.dump(pickle_dict_info, f)
 
     
