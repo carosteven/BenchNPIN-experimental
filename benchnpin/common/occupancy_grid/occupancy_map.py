@@ -23,8 +23,8 @@ class OccupancyGrid:
 
         self.local_width = local_width
         self.local_height = local_height
-        self.local_window_height = int(self.local_height / self.grid_height)            # local window height (unit: cell)
-        self.local_window_width = int(self.local_width / self.grid_width)            # local window width (unit: cell)
+        self.local_window_height = int(self.local_height * meter_to_pixel_scale)            # local window height (unit: cell)
+        self.local_window_width = int(self.local_width * meter_to_pixel_scale)            # local window width (unit: cell)
 
         # print("Occupancy map resolution: ", grid_width, "; occupancy map dimension: ", (self.occ_map_width, self.occ_map_height))
 

@@ -1,7 +1,6 @@
 from typing import List
 
 import numpy as np
-import pandas as pd
 
 from benchnpin.common.evaluation.metrics import euclid_dist, path_length
 
@@ -132,14 +131,36 @@ class PID:
 
 class DP:
     def __init__(self,
-                 dt: float, A: List, B: List, input_lims: List,
-                 Lfc: float, target_speed: float, PID_gains: List,
+                 dt: float, target_speed: float,
                  x: float, y: float, yaw: float,
                  cx: np.ndarray, cy: np.ndarray, ch: np.ndarray,
+                 A: List = None, B: List = None, input_lims: List = None,
+                 Lfc: float = None, PID_gains: List = None,
                  output_dir=None):
         self.dt = dt
-        self.A = np.asarray(A)  # x_{k+1} = Ax_k + Bu_k, discretized dynamics
-        self.B = np.asarray(B)
+
+        if A is None:
+            self.A = np.zeros((3, 3))
+        else:
+            self.A = np.asarray(A)  # x_{k+1} = Ax_k + Bu_k, discretized dynamics
+        
+        if B is None:
+            self.B = np.zeros(3)
+        else:
+            self.B = np.asarray(B)
+        
+        if input_lims is None:
+            input_lims = [0, 0, 0]
+
+        if PID_gains is None:
+            PID_gains = [[0, 0, 0],
+                        [0, 0, 0],
+                        [0, 0, 0]]
+        
+        if Lfc is None:
+            Lfc = 0.0
+        
+
         self.target_speed = target_speed
 
         self.time = 0
@@ -160,10 +181,6 @@ class DP:
         return self.target_course.advance(self.target_speed, self.dt)[0]
         # return self.target_course.search_target_index(self.state.x, self.state.y)[0]
 
-
-    def get_state_history(self):
-        data = self.state_storage.get_history()
-        return pd.DataFrame(data)
 
     def __call__(self, *pose):
         """

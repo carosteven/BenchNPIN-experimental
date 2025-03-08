@@ -3,12 +3,10 @@ from gymnasium import spaces
 import numpy as np
 import os
 
-import pickle
 import random
 import pymunk
 from pymunk import Vec2d
 from matplotlib import pyplot as plt
-import time
 
 # maze NAMO specific imports
 from benchnpin.common.cost_map import CostMap
@@ -55,11 +53,20 @@ class MazeNAMO(gym.Env):
         cfg_file = os.path.join(self.current_dir, 'config.yaml')
 
         cfg = DotDict.load_from_file(cfg_file)
+        self.cfg = cfg
+
+        # get correct maze version
+        if self.cfg.maze_version == 1:
+            self.cfg.env = self.cfg.env1
+        elif self.cfg.maze_version == 2:
+            self.cfg.env = self.cfg.env2
+        else:
+            raise Exception("Invalid Maze Version!")
+
         grid_size = 1/cfg.occ.m_to_pix_scale
-        self.occupancy = OccupancyGrid(grid_width=grid_size, grid_height= grid_size, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, 
+        self.occupancy = OccupancyGrid(grid_width=grid_size, grid_height= grid_size, map_width=cfg.env.width, map_height=cfg.env.length, 
                                        local_width= cfg.occ.local_width, local_height=cfg.occ.local_height,
                                        ship_body=None, meter_to_pixel_scale=cfg.occ.m_to_pix_scale)
-        self.cfg = cfg
 
         self.beta = 1.5         # amount to scale the collision reward
         self.k = 2        # amount to scale the distance reward
@@ -83,9 +90,6 @@ class MazeNAMO(gym.Env):
         self.max_linear_speed = 1.0
         self.min_linear_speed = 0.0
         self.max_yaw_rate_step = (np.pi/2) / 15        # rad/sec
-        # self.action_space = spaces.Box(low= np.array([-1, -1]), 
-        #                                high=np.array([1, 1]),
-        #                                dtype=np.float64)
         self.action_space = spaces.Box(low=-1, high=1, dtype=np.float64)
         
         # Define observation space
@@ -99,16 +103,14 @@ class MazeNAMO(gym.Env):
                 self.observation_space = spaces.Box(low=-10, high=30, shape=(8,), dtype=np.float64) # 8 for 3 obstacles and the robot
         
         else:
-            #high dimensional observation space comprises of the occupancy grid map with 5 channels
+            #high dimensional observation space comprises of the occupancy grid map with 4 channels
             #each channel represnets a local moving window where the agent is at the center
             #channel dimensions are (local_window_height, local_window_width) 
             #example if the local window is 10 meters by 10 meters, and the grid size is 0.1 meters, then the channel dimensions are (100, 100)
             #channel 1 - occupancy grid map with fixed obstacles
             #channel 2 - occupancy grid map with movable obstacles
             #channel 3 - occupancy grid map with robot footprint
-            #channel 4 - occupancy grid map with robot orientation
-            #channel 5 - distance map to the goal point
-            # self.observation_shape = (5, self.occupancy.local_window_height, self.occupancy.local_window_width)
+            #channel 4 - distance map to the goal point
             self.observation_shape = (4, self.occupancy.local_window_height, self.occupancy.local_window_width)
             self.observation_space = spaces.Box(low=0, high=255, shape=self.observation_shape, dtype=np.uint8)
 
@@ -117,13 +119,6 @@ class MazeNAMO(gym.Env):
 
         self.renderer = None
         self.con_fig, self.con_ax = plt.subplots(figsize=(10, 10))
-
-
-        if self.cfg.demo_mode:
-            self.angular_speed = 0.0
-            self.angular_speed_increment = 0.005
-            self.linear_speed = 0.0
-            self.linear_speed_increment = 0.02
 
         #robot and obstacles occupancy grid
         self.occupancy_plot = plt
@@ -134,11 +129,8 @@ class MazeNAMO(gym.Env):
 
         # initialize maze environment
         self.steps = self.cfg.sim.steps
-        self.t_max = self.cfg.sim.t_max if self.cfg.sim.t_max else np.inf
-        self.horizon = self.cfg.a_star.horizon
-        self.replan = self.cfg.a_star.replan
-        self.dt = self.cfg.controller.dt
-        self.target_speed = self.cfg.controller.target_speed
+        self.dt = self.cfg.dt
+        self.target_speed = self.cfg.target_speed
 
         # setup pymunk environment
         self.space = pymunk.Space()  # threaded=True causes some issues
@@ -213,14 +205,9 @@ class MazeNAMO(gym.Env):
         self.handler.post_solve = post_solve_handler
         # pre handler for robot-wall collision
         self.handler_robot_wall.pre_solve = pre_solve_handler_walls
-        if self.cfg.render.show:
-            if self.renderer is None:
-                # self.renderer = Renderer(self.space, env_width=self.cfg.env.width, env_height=self.cfg.env.length, render_scale=80, 
-                #         background_color=(200, 200, 200), caption="ASV Navigation", goal_point= (self.cfg.goal_x, self.cfg.goal_y))
-                self.renderer = Renderer(self.space, env_width=self.cfg.env.width, env_height=self.cfg.env.length, render_scale=80, 
-                        background_color=(200, 200, 200), caption="ASV Navigation", goal_region=((self.cfg.goal_x, self.cfg.goal_y), self.cfg.goal_radius))
-            else:
-                self.renderer.reset(new_space=self.space)
+
+        if self.renderer is not None:
+            self.renderer.reset(new_space=self.space)
         
     def init_maze_NAMO_env(self):
 
@@ -231,7 +218,6 @@ class MazeNAMO(gym.Env):
         
         # generate random start point, if specified and avoid maze walls
         if self.cfg.random_start:
-            #x_start = 1 + random.random() * (self.cfg.start_x_range - 1)    # [1, start_x_range]
             while True:
                 x_start = 1 + random.random() * (self.cfg.start_x_range - 1)
                 y_start = 1 + random.random() * (self.cfg.start_y_range - 1)
@@ -242,13 +228,12 @@ class MazeNAMO(gym.Env):
 
             self.start = (x_start, y_start,np.pi*3/2)
         else:
-            # self.start = (2, 2,np.pi*3/2)
-            # self.start = (11.25, 3.75, np.pi / 2)         # for 15x15, v1
+            
+            if self.cfg.maze_version == 1:
+                self.start = (11.25, 3.75, np.pi / 2)         # for 15x15, v1
 
-            self.start = (15, 15, 3 * np.pi / 2)         # for 15x15, v1
-
-        # if self.cfg.randomize_obstacles:
-        #     self.randomize_obstacles()
+            elif self.cfg.maze_version == 2:
+                self.start = (15, 15, 3 * np.pi / 2)         # for 15x15, v2
 
         self.obs_dicts = self.generate_obstacles()
         
@@ -256,7 +241,7 @@ class MazeNAMO(gym.Env):
         self.obs_dicts[:] = [ob for ob in self.obs_dicts if poly_area(ob['vertices']) != 0]
         self.obstacles = [ob['vertices'] for ob in self.obs_dicts]
 
-        self.goal = (self.cfg.goal_x, self.cfg.goal_y)
+        self.goal = (self.cfg.env.goal_x, self.cfg.env.goal_y)
         
         # initialize ship sim objects
         self.polygons = generate_sim_obs(self.space, self.obs_dicts, self.cfg.sim.obstacle_density, color=(204, 153, 102, 255))
@@ -282,10 +267,10 @@ class MazeNAMO(gym.Env):
             total_obs_required = self.cfg.num_obstacles
             self.num_box = self.cfg.num_obstacles
             obs_min_dist = self.cfg.min_obs_dist
-            min_x = self.cfg.min_obs_x
-            max_x = self.cfg.max_obs_x
-            min_y = self.cfg.min_obs_y
-            max_y = self.cfg.max_obs_y
+            min_x = 0
+            max_x = self.cfg.env.length
+            min_y = 0
+            max_y = self.cfg.env.length
 
             obs_count = 0
             while obs_count < total_obs_required:
@@ -367,7 +352,7 @@ class MazeNAMO(gym.Env):
     def construct_maze_walls(self):
         self.length = self.cfg.env.length
         self.width = self.cfg.env.width
-        self.maze_version = self.cfg.env.maze_version
+        self.maze_version = self.cfg.maze_version
         if self.maze_version == 1:
             self.maze_walls = [[(0,0),(self.width,0)] , [(0,0),(0,self.length)],
                     [(self.width,0),(self.width,self.length)], 
@@ -391,8 +376,8 @@ class MazeNAMO(gym.Env):
         for obs in self.obs_dicts:
             prev_centre = np.array(obs['centre'])
 
-            rand_x = 0.5 + random.random() * (self.cfg.max_obs_x - 0.5)
-            rand_y = 1 + random.random() * (self.cfg.max_obs_y - 1)
+            rand_x = 0.5 + random.random() * (self.cfg.env.length - 0.5)
+            rand_y = 1 + random.random() * (self.cfg.env.length - 1)
             new_centre = np.array([rand_x, rand_y])
 
             # translate vertices and reset center
@@ -403,68 +388,17 @@ class MazeNAMO(gym.Env):
         robot_pose = (self.robot_body.position.x, self.robot_body.position.y, self.robot_body.angle)
         robot_pixel_x = int(robot_pose[0] * self.cfg.occ.m_to_pix_scale) 
         robot_pixel_y = int(robot_pose[1] * self.cfg.occ.m_to_pix_scale)
-        # dist_value = 1/np.exp(self.global_distance_map[robot_pixel_y, robot_pixel_x] * self.k)
-        # return dist_value
         return self.global_distance_map[robot_pixel_y, robot_pixel_x]
 
     def step(self, action):
         """Executes one time step in the environment and returns the result."""
         self.t += 1
-        
-        if self.cfg.demo_mode:
 
-            if action == FORWARD:
-                self.linear_speed = 0.2
-            elif action == STOP_TURNING:
-                self.angular_speed = 0
-            elif action == BACKWARD:
-                self.linear_speed = -.01
-            elif action == LEFT:
-                self.angular_speed = 0.1
-            elif action == RIGHT:
-                self.angular_speed = -0.1
+        global_velocity = R(self.robot_body.angle) @ [self.target_speed, 0]           # fixed linear forward velocity
+        action = action * self.max_yaw_rate_step                        # scaling from [-1, 1] to [-max_yaw_rate_step, max_yaw_rate_step]
+        self.robot_body.angular_velocity = action
 
-            elif action == SMALL_LEFT:
-                self.angular_speed = 0.005
-            elif action == SMALL_RIGHT:
-                self.angular_speed = -0.005
-
-            elif action == STOP:
-                self.linear_speed = 0.0
-                self.angular_speed = 0.0
-
-            # check speed boundary
-           # if self.linear_speed <= 0:
-            #    self.linear_speed = 0
-            if self.linear_speed >= self.target_speed:
-                self.linear_speed = self.target_speed
-
-            # apply linear and angular speeds
-            global_velocity = R(self.robot_body.angle) @ [self.linear_speed, 0]
-
-            # apply velocity controller
-            self.robot_body.angular_velocity = self.angular_speed
-            self.robot_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
-
-        else:
-            #scale the action
-            # action[0] = (action[0] + self.max_linear_speed) / 2 #scaling from [-1, 1] to [0, 1] 
-            # action[0] = (action[0] + 1) * 0.8 / 2 + 0.2            #scaling from [-1, 1] to [0.2, 1] 
-            # action[1] = action[1] * self.max_yaw_rate_step #scaling from [-1, 1] to [-max_yaw_rate_step, max_yaw_rate_step]
-            #print("velocity: ", action[0], "angular velocity: ", action[1])
-
-            # apply linear velocity
-            # global_velocity = R(self.robot_body.angle) @ [action[0], 0]
-            
-
-            # apply velocity controller
-            # self.robot_body.angular_velocity = action[1]
-
-            global_velocity = R(self.robot_body.angle) @ [0.15, 0]           # fixed linear forward velocity 0.2 m/s
-            action = action * self.max_yaw_rate_step #scaling from [-1, 1] to [-max_yaw_rate_step, max_yaw_rate_step]
-            self.robot_body.angular_velocity = action
-
-            self.robot_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
+        self.robot_body.velocity = Vec2d(global_velocity[0], global_velocity[1])
 
         # move simulation forward
         boundary_constraint_violated = False
@@ -472,7 +406,7 @@ class MazeNAMO(gym.Env):
             self.space.step(self.dt / self.steps)
 
             # apply boundary constraints
-            if self.robot_body.position.x < 0 or self.robot_body.position.x > self.cfg.occ.map_width:
+            if self.robot_body.position.x < 0 or self.robot_body.position.x > self.cfg.env.width:
                 boundary_constraint_violated = True
         
         # get updated obstacles
@@ -493,28 +427,20 @@ class MazeNAMO(gym.Env):
             terminated = False
 
         # compute reward
-        #rewards -> distance_value_increment, collision_reward, terminal_reward
         if self.robot_body.position.x != self.goal[0] or self.robot_body.position.y != self.goal[1]:
             dist_value = self.get_distance_value(self.robot_body.position.x, self.robot_body.position.y)
 
             if self.prev_dist_value is None:
                 dist_increment_reward = 0
             else:
-                # dist_increment_reward = (dist_value - self.prev_dist_value)*self.k_increment
                 dist_increment_reward = (self.prev_dist_value - dist_value)*self.k_increment
-            #
             self.prev_dist_value = dist_value
-            #print("dist reward: ", dist_reward)
-            #print("distance value: ", self.get_distance_value(self.robot_body.position.x, self.robot_body.position.y))
         else:
             dist_value = self.get_distance_value(self.robot_body.position.x, self.robot_body.position.y)
             dist_increment_reward = 0
         collision_reward = -work
 
         reward = self.beta * collision_reward + dist_increment_reward
-        # print("increment reward: ", dist_increment_reward)
-        # reward = self.beta * collision_reward + dist_value
-        #print("reward: ", reward)
 
         # apply constraint penalty
         if boundary_constraint_violated or self.wall_collision:
@@ -542,8 +468,10 @@ class MazeNAMO(gym.Env):
         if self.low_dim_state:
             observation = self.generate_observation_low_dim(updated_obstacles=updated_obstacles)
         else:
-            start_time = time.time()
             observation = self.generate_observation()
+
+        if self.cfg.log_obs:
+            self.log_observation()
         
         return observation, reward, terminated, False, info
 
@@ -581,13 +509,6 @@ class MazeNAMO(gym.Env):
         
         robot_footprint_local , movable_obstacles_local, wall_local, distance_map_local = self.occupancy.ego_view_map_maze(robot_pose, 
                                                                 self.cfg.robot.vertices,self.obstacles, self.maze_walls, self.global_distance_map)
-        
-        #local orientation map
-        # robot_orientation_local = self.occupancy.ego_view_orientation_map(robot_pose,self.robot_head, self.robot_tail, vertical_shift=0.0)
-        
-        # Construct the observation
-        # observation = np.concatenate((np.array([robot_footprint_local]), np.array([robot_orientation_local]), 
-        #                               np.array([movable_obstacles_local]), np.array([wall_local]), np.array([distance_map_local])))  # (5, local H, local W)
         observation = np.concatenate((np.array([robot_footprint_local]), 
                                       np.array([movable_obstacles_local]), np.array([wall_local]), np.array([distance_map_local])))  # (5, local H, local W)
         #for resnet input
@@ -606,85 +527,77 @@ class MazeNAMO(gym.Env):
             return False
 
     
+    def log_observation(self):
+        robot_footprint, movable_obs, fixed_obs, distance_map = self.generate_observation()
+
+        directory = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
+        if directory:
+            os.makedirs(directory, exist_ok=True)  # Create directories if they don't exist
+
+        # visualize footprint
+        self.con_ax.clear()
+        occ_map_render = np.copy(robot_footprint)
+        occ_map_render = np.flip(occ_map_render, axis=0)
+        self.con_ax.imshow(occ_map_render, cmap='gray')
+        self.con_ax.axis('off')
+        save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
+        fp = os.path.join(save_fig_dir, str(self.t) + '_footprint.png')
+        self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
+
+        #visualize movable obstacles
+        self.con_ax.clear()
+        occ_map_render = np.copy(movable_obs)
+        occ_map_render = np.flip(occ_map_render, axis=0)
+        self.con_ax.imshow(occ_map_render, cmap='gray')
+        self.con_ax.axis('off')
+        save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
+        fp = os.path.join(save_fig_dir, str(self.t) + '_movable_obs.png')
+        self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
+        
+        #visualize fixed obstacles
+        self.con_ax.clear()
+        occ_map_render = np.copy(fixed_obs)
+        occ_map_render = np.flip(occ_map_render, axis=0)
+        self.con_ax.imshow(occ_map_render, cmap='gray')
+        self.con_ax.axis('off')
+        save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
+        fp = os.path.join(save_fig_dir, str(self.t) + '_fixed_obs.png')
+        self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
+
+        #visualize distance map
+        self.con_ax.clear()
+        occ_map_render = np.copy(self.global_distance_map)
+        occ_map_render = np.flip(occ_map_render, axis=0)
+        self.con_ax.imshow(occ_map_render, cmap='gray')
+        self.con_ax.axis('off')
+        save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
+        fp = os.path.join(save_fig_dir, str(self.t) + '_distance_map.png')
+        self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
+
+        #local distance map
+        self.con_ax.clear()
+        occ_map_render = np.copy(distance_map)
+        occ_map_render = np.flip(occ_map_render, axis=0)
+        self.con_ax.imshow(occ_map_render, cmap='gray')
+        self.con_ax.axis('off')
+        save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
+        fp = os.path.join(save_fig_dir, str(self.t) + '_local_distance_map.png')
+        self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
+
+    
     def render(self, mode='human', close=False):
         """Renders the environment."""
 
-        if self.t % self.cfg.anim.plot_steps == 0:
+        if self.renderer is None:
+            self.renderer = Renderer(self.space, env_width=self.cfg.env.width, env_height=self.cfg.env.length, render_scale=80, 
+                    background_color=(200, 200, 200), caption="Maze", goal_region=((self.cfg.env.goal_x, self.cfg.env.goal_y), self.cfg.goal_radius))
 
+        if self.cfg.render_snapshot:
             path = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx), str(self.t) + '.png')
             self.renderer.render(save=True, path=path)
-
-            # whether to also log occupancy observation
-            if self.cfg.render.log_obs and not self.low_dim_state:
-                #get an observation
-                # robot_footprint , orientation,  movable_obs, fixed_obs, distance_map = self.generate_observation()
-
-                robot_footprint, movable_obs, fixed_obs, distance_map = self.generate_observation()
-                # orientation = np.zeros_like(robot_footprint)
-
-                # visualize footprint
-                self.con_ax.clear()
-                occ_map_render = np.copy(robot_footprint)
-                occ_map_render = np.flip(occ_map_render, axis=0)
-                self.con_ax.imshow(occ_map_render, cmap='gray')
-                self.con_ax.axis('off')
-                save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
-                fp = os.path.join(save_fig_dir, str(self.t) + '_footprint.png')
-                self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
-
-                #visualize orientation map
-                # self.con_ax.clear()
-                # occ_map_render = np.copy(orientation)
-                # occ_map_render = np.flip(occ_map_render, axis=0)
-                # self.con_ax.imshow(occ_map_render, cmap='gray')
-                # self.con_ax.axis('off')
-                # save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
-                # fp = os.path.join(save_fig_dir, str(self.t) + '_orientation.png')
-                # self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
-
-                #visualize movable obstacles
-                self.con_ax.clear()
-                occ_map_render = np.copy(movable_obs)
-                occ_map_render = np.flip(occ_map_render, axis=0)
-                self.con_ax.imshow(occ_map_render, cmap='gray')
-                self.con_ax.axis('off')
-                save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
-                fp = os.path.join(save_fig_dir, str(self.t) + '_movable_obs.png')
-                self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
-                
-                #visualize fixed obstacles
-                self.con_ax.clear()
-                occ_map_render = np.copy(fixed_obs)
-                occ_map_render = np.flip(occ_map_render, axis=0)
-                self.con_ax.imshow(occ_map_render, cmap='gray')
-                self.con_ax.axis('off')
-                save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
-                fp = os.path.join(save_fig_dir, str(self.t) + '_fixed_obs.png')
-                self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
-
-                #visualize distance map
-                self.con_ax.clear()
-                occ_map_render = np.copy(self.global_distance_map)
-                occ_map_render = np.flip(occ_map_render, axis=0)
-                self.con_ax.imshow(occ_map_render, cmap='gray')
-                self.con_ax.axis('off')
-                save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
-                fp = os.path.join(save_fig_dir, str(self.t) + '_distance_map.png')
-                self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
-
-                #local distance map
-                self.con_ax.clear()
-                occ_map_render = np.copy(distance_map)
-                occ_map_render = np.flip(occ_map_render, axis=0)
-                self.con_ax.imshow(occ_map_render, cmap='gray')
-                self.con_ax.axis('off')
-                save_fig_dir = os.path.join(self.cfg.output_dir, 't' + str(self.episode_idx))
-                fp = os.path.join(save_fig_dir, str(self.t) + '_local_distance_map.png')
-                self.con_fig.savefig(fp, bbox_inches='tight', transparent=False, pad_inches=0)
-
-
         else:
             self.renderer.render(save=False)
+
 
     def close(self):
         """Optional: close any resources or cleanup if necessary."""
