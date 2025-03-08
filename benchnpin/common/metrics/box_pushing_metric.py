@@ -2,7 +2,7 @@ from benchnpin.common.metrics.base_metric import BaseMetric
 import numpy as np
 
 
-class BoxPushingMetric(BaseMetric):
+class BoxDeliveryMetric(BaseMetric):
     """
     Reference to paper "Interactive Gibson Benchmark: A Benchmark for Interactive Navigation in Cluttered Environments"
     Link: https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=8954627

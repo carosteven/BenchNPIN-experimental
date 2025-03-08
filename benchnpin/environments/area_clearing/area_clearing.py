@@ -8,7 +8,7 @@ import pymunk
 from pymunk import Vec2d
 from matplotlib import pyplot as plt
 
-# ship-ice related imports
+# Bench_NPIN related imports
 from benchnpin.common.controller.dp import DP
 from benchnpin.common.controller.position_controller import PositionController
 from benchnpin.common.cost_map import CostMap
