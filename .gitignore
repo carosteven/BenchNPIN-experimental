@@ -2,6 +2,20 @@ logs/
 
 bench_mano/ice_environments*
 
+benchnpin/baselines/area_clearing/sam/vector_logs/
+benchnpin/baselines/area_clearing/sam/output_logs/
+benchnpin/baselines/area_clearing/sam/checkpoint/
+benchnpin/baselines/box_delivery/SAM/vector_logs/
+benchnpin/baselines/box_delivery/SAM/output_logs/
+benchnpin/baselines/box_delivery/SAM/checkpoint/
+benchnpin/baselines/box_delivery/SAM/models/
+benchnpin/baselines/box_delivery/ppo/checkpoint/
+benchnpin/baselines/box_delivery/ppo/models/
+benchnpin/baselines/box_delivery/ppo/vector_logs/
+benchnpin/baselines/box_delivery/sac/checkpoint/
+benchnpin/baselines/box_delivery/sac/models/
+benchnpin/baselines/box_delivery/sac/vector_logs/
+
 /plots
 
 /model_checkpoints
@@ -16,3 +30,10 @@ venv/
 
 *.gtsp
 tour.txt
+
+events.out*
+
+*.pkl
+*.zip
+.DS_Store
+*.pt

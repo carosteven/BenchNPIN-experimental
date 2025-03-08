@@ -1,5 +1,6 @@
 from benchnpin.baselines.base_class import BasePolicy
 from benchnpin.baselines.feature_extractors import ResNet18
+from benchnpin.common.merics.maze_namo_metric import MazeNamoMetric
 from typing import List, Tuple
 import benchnpin.environments
 import gymnasium as gym
@@ -85,21 +86,23 @@ class MazeNAMOSAC(BasePolicy):
 
         env = gym.make('maze-NAMO-v0')
         env = env.unwrapped
+        metric = MazeNamoMetric(alg_name="SAC", robot_mass=env.cfg.robot.mass)
 
         for eps_idx in range(num_eps):
             print("SAC Progress: ", eps_idx, " / ", num_eps, " episodes")
             obs, info = env.reset()
+            metric.reset(info)
             done = truncated = False
             while True:
                 action, _ = self.model.predict(obs, deterministic=True)
                 obs, reward, done, truncated, info = env.step(action)
+                metric.update(info=info, reward=reward, eps_complete=(done or truncated))
                 if done or truncated:
                     break
         
         env.close()
-        # metric.plot_scores()
-        # return metric.efficiency_scores, metric.effort_scores, metric.rewards, "SAC"
-        return [], [], [], "SAC"
+        metric.plot_scores(save_fig_dir=env.cfg.output_dir)
+        return metric.efficiency_scores, metric.effort_scores, metric.rewards, "SAC"
 
 
     

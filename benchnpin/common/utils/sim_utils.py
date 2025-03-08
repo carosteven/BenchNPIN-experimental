@@ -8,13 +8,17 @@ from benchnpin.common.ship import Ship
 
 BLACK = (0, 0, 0, 255)
 RED = (255, 0, 0, 255)
-GREEN = (0, 255, 0, 255)
-BLUE = (0, 0, 255, 255)
+GREEN = (144, 238, 144, 255)
+BOX = (204, 153, 102, 255)
+AGENT = (100, 100, 100, 255)
+BOUNDARY = (140, 155, 155, 255)
 
 def get_color(name):
     return globals()[name.upper()]
 
-def create_agent(space, vertices: List, start_pos: Tuple[float, float, float], body_type: int, label: str, color=None):
+def create_agent(space, vertices: List, 
+                 start_pos: Tuple[float, float, float], body_type: int, label: str, 
+                 color=None, wheel_vertices_list=None, front_bumper_vertices=None):
 
         x, y, heading = start_pos
         # setup for pymunk
@@ -25,18 +29,48 @@ def create_agent(space, vertices: List, start_pos: Tuple[float, float, float], b
         centre_of_g = dummy_shape.center_of_gravity
         vs = [(x - centre_of_g[0], y - centre_of_g[1]) for x, y in vertices]
 
-        shape = pymunk.Poly(body, vs)#, radius=0.08)
-        shape.mass = 10.0
-        shape.elasticity = 0.01
-        shape.friction = 1.0
-        shape.label = label
+        agent_shape = pymunk.Poly(body, vs)#, radius=0.08)
+        agent_shape.mass = 10.0
+        agent_shape.elasticity = 0.01
+        agent_shape.friction = 1.0
+        agent_shape.label = label
         if color is not None:
-            shape.color = color
-        space.add(body, shape)
-        return shape
+            agent_shape.color = color
 
-def generate_sim_agent(space, agent: dict, body_type: int=pymunk.Body.DYNAMIC, label: str='agent'):
-    return create_agent(space, agent['vertices'], agent['start_pos'], body_type, label, color=agent['color'])
+        wheels = []
+        front_bumper = None
+
+        if wheel_vertices_list is not None:
+            for wheel_vertices in wheel_vertices_list:
+                wheel = pymunk.Poly(body, [tuple(item) for item in wheel_vertices], radius=0.02)
+                wheel.mass = 1
+                wheel.elasticity = 0.01
+                wheel.label = 'wheel'
+                if color is not None:
+                    wheel.color = (0, 0, 0, 255)
+                wheels.append(wheel)
+
+        if front_bumper_vertices is not None:
+            front_bumper = pymunk.Poly(body, [tuple(item) for item in front_bumper_vertices], radius=0.02)
+            front_bumper.mass = 1
+            front_bumper.elasticity = 0.01
+            front_bumper.label = 'front_bumper'
+            if color is not None:
+                front_bumper.color = (76, 59, 77, 255)
+
+        if front_bumper is not None:
+            space.add(body, agent_shape, *wheels, front_bumper)
+        elif wheel_vertices_list is not None:
+            space.add(body, agent_shape, *wheels)
+        else:
+            space.add(body, agent_shape)
+
+        return agent_shape
+
+def generate_sim_agent(space, agent: dict, body_type: int=pymunk.Body.DYNAMIC, 
+                       label: str='agent', wheel_vertices_list: List=None, front_bumper_vertices: List=None):
+    return create_agent(space, agent['vertices'], agent['start_pos'], body_type, label, color=agent['color'],
+                        wheel_vertices_list=wheel_vertices_list, front_bumper_vertices=front_bumper_vertices)
 
 def create_static(space, boundary, color=None):
     body = pymunk.Body(body_type=pymunk.Body.STATIC)
@@ -111,6 +145,7 @@ def create_polygon(space, vertices, x, y, density, heading=0, label='poly', idx=
     shape.elasticity = 0.01
     shape.friction = 1.0
     shape.label = label
+    shape.idx = idx
     if color is not None:
         shape.color = color
     space.add(body, shape)

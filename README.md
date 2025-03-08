@@ -12,11 +12,16 @@ cd BenchNPIN
 pip install -r requirements.txt
 ```
 
-2. Install Gym environment
+3. Install Gym environment
 ```bash
 pip install -e .
 ```
 
+4. Install shortest path module
+```bash
+cd benchnpin/common/spfa
+python setup.py install
+```
 
 ### Running a simple environment
 After following the installation steps, run
@@ -31,11 +36,11 @@ python tests/ship_ice_nav.py
 ```
 This script runs the lattice planner for ship ice navigation
 
-### Running a simple box pushing teleoperation pipeline
+### Running a simple box delivery teleoperation pipeline
 ```bash
-python tests/pushing_data_collection.py
+python tests/box_delivery_data_collection.py
 ```
-This script runs a simple demonstration data collection pipeline on the box pushing environment.
+This script runs a simple demonstration data collection pipeline on the box delivery environment.
 
 
 ### Train and evaluate baselines for autonomous ship navigation
