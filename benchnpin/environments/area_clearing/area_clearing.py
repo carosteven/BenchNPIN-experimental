@@ -46,10 +46,7 @@ NONMOVEMENT_PENALTY = 0 #-0.25
 # TIME_PENALTY = -0.01
 TIME_PENALTY = 0
 
-# LOCAL_MAP_PIXEL_WIDTH = 224
-# LOCAL_MAP_WIDTH = 12 #  meters # TODO: Make this an env parameter - Use for clear_env_small
-# LOCAL_MAP_WIDTH = 24 #  meters
-# LOCAL_MAP_PIXELS_PER_METER = LOCAL_MAP_PIXEL_WIDTH / LOCAL_MAP_WIDTH
+
 DISTANCE_SCALE_MAX = 0.5
 
 OBSTACLE_SEG_INDEX = 0
@@ -111,55 +108,7 @@ class AreaClearingEnv(gym.Env):
 
         # environment
         self.local_map_pixel_width = self.env_cfg.local_map_pixel_width
-        self.local_map_width = self.env_cfg.local_map_width
-        self.local_map_pixels_per_meter = self.local_map_pixel_width / self.local_map_width
-
-        # observation
-        self.num_channels = 4
-        self.observation = None
-        self.global_overhead_map = None
-        self.small_obstacle_map = None
-        self.configuration_space = None
-        self.configuration_space_thin = None
-        self.closest_cspace_indices = None
-        self.goal_point_global_map = None
-
-        # robot state channel
-        self.agent_info = self.cfg.agent
-        self.robot_radius = ((self.agent_info.length**2 + self.agent_info.width**2)**0.5 / 2) * 1.2
-        robot_pixel_width = int(2 * self.robot_radius * self.local_map_pixels_per_meter)
-        self.robot_state_channel = np.zeros((self.local_map_pixel_width, self.local_map_pixel_width), dtype=np.float32)
-        start = int(np.floor(self.local_map_pixel_width / 2 - robot_pixel_width / 2))
-        for i in range(start, start + robot_pixel_width):
-            for j in range(start, start + robot_pixel_width):
-                # Circular robot mask
-                if (((i + 0.5) - self.local_map_pixel_width / 2)**2 + ((j + 0.5) - self.local_map_pixel_width / 2)**2)**0.5 < robot_pixel_width / 2:
-                    self.robot_state_channel[i, j] = 1
-
-        self.target_speed = self.cfg.controller.target_speed
-
-        # Define action space
-        max_yaw_rate_step = (np.pi/2) / 15        # rad/sec
-        print("max yaw rate per step: ", max_yaw_rate_step)
-        
-        if self.cfg.agent.action_type == 'velocity':
-            self.action_space = spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float32)
-        elif self.cfg.agent.action_type == 'position':
-            self.action_space = spaces.Box(low=0, high=self.local_map_pixel_width * self.local_map_pixel_width, shape=(1,), dtype=np.int32)
-        elif self.cfg.agent.action_type == 'heading':
-            self.action_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
-
-        self.max_yaw_rate_step = max_yaw_rate_step
-
-        # Define observation space
-        self.low_dim_state = self.cfg.low_dim_state
-        if self.low_dim_state:
-            self.fixed_trial_idx = self.cfg.fixed_trial_idx
-            self.observation_space = spaces.Box(low=-10, high=30, shape=(self.cfg.num_obstacles * 2,), dtype=np.float32)
-        else:
-            # self.observation_shape = (self.num_channels, self.local_map_pixel_width, self.local_map_pixel_width)
-            self.observation_shape = (self.local_map_pixel_width, self.local_map_pixel_width, self.num_channels)
-            self.observation_space = spaces.Box(low=0, high=255, shape=self.observation_shape, dtype=np.uint8)
+        self._configure_state_and_observation_channels()
 
         self.yaw_lim = (0, np.pi)       # lower and upper limit of ship yaw  
 
@@ -209,6 +158,61 @@ class AreaClearingEnv(gym.Env):
         self.boundary_goals, self.goal_points = self._compute_boundary_goals()
 
         self.position_controller = None
+
+    def _configure_state_and_observation_channels(self):
+        # observation
+        self.num_channels = 4
+        self.observation = None
+        self.global_overhead_map = None
+        self.small_obstacle_map = None
+        self.configuration_space = None
+        self.configuration_space_thin = None
+        self.closest_cspace_indices = None
+        self.goal_point_global_map = None
+
+        self.local_map_width = self.env_cfg.local_map_width
+        self.local_map_pixels_per_meter = self.local_map_pixel_width / self.local_map_width
+
+        # robot state channel
+        self.agent_info = self.cfg.agent
+        self.robot_radius = ((self.agent_info.length**2 + self.agent_info.width**2)**0.5 / 2) * 1.2
+        robot_pixel_width = int(2 * self.robot_radius * self.local_map_pixels_per_meter)
+        self.robot_state_channel = np.zeros((self.local_map_pixel_width, self.local_map_pixel_width), dtype=np.float32)
+        start = int(np.floor(self.local_map_pixel_width / 2 - robot_pixel_width / 2))
+        for i in range(start, start + robot_pixel_width):
+            for j in range(start, start + robot_pixel_width):
+                # Circular robot mask
+                if (((i + 0.5) - self.local_map_pixel_width / 2)**2 + ((j + 0.5) - self.local_map_pixel_width / 2)**2)**0.5 < robot_pixel_width / 2:
+                    self.robot_state_channel[i, j] = 1
+
+        self.target_speed = self.cfg.controller.target_speed
+
+        # Define action space
+        max_yaw_rate_step = (np.pi/2) / 15        # rad/sec
+        print("max yaw rate per step: ", max_yaw_rate_step)
+        
+        if self.cfg.agent.action_type == 'velocity':
+            self.action_space = spaces.Box(low=-1, high=1, shape=(2,), dtype=np.float32)
+        elif self.cfg.agent.action_type == 'position':
+            self.action_space = spaces.Box(low=0, high=self.local_map_pixel_width * self.local_map_pixel_width, shape=(1,), dtype=np.int32)
+        elif self.cfg.agent.action_type == 'heading':
+            self.action_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
+
+        self.max_yaw_rate_step = max_yaw_rate_step
+
+        # Define observation space
+        self.low_dim_state = self.cfg.low_dim_state
+        if self.low_dim_state:
+            self.fixed_trial_idx = self.cfg.fixed_trial_idx
+            self.observation_space = spaces.Box(low=-10, high=30, shape=(self.cfg.num_obstacles * 2,), dtype=np.float32)
+        else:
+            # self.observation_shape = (self.num_channels, self.local_map_pixel_width, self.local_map_pixel_width)
+            self.observation_shape = (self.local_map_pixel_width, self.local_map_pixel_width, self.num_channels)
+            self.observation_space = spaces.Box(low=0, high=255, shape=self.observation_shape, dtype=np.uint8)
+
+    def configure_env_for_SAM(self):
+        self.local_map_pixel_width = self.env_cfg.sam_local_map_pixel_width
+        self._configure_state_and_observation_channels()
 
     def _compute_boundary_goals(self, interpolated_points=10):
         if self.boundary_vertices is None:
@@ -338,8 +342,8 @@ class AreaClearingEnv(gym.Env):
 
         if self.cfg.render.show:
             if self.renderer is None:
-                self.renderer = Renderer(self.space, env_width=self.map_width + 2, env_height=self.map_height + 2, render_scale=20, 
-                        background_color=(234, 234, 234), caption="Area Clearing", 
+                self.renderer = Renderer(self.space, env_width=self.map_width + 2, env_height=self.map_height + 2, render_scale=30, 
+                        background_color=(245, 245, 245), caption="Area Clearing", 
                         centered=True,
                         clearance_boundary=self.boundary_vertices
                         )
@@ -530,7 +534,9 @@ class AreaClearingEnv(gym.Env):
 
         ### DEBUG: Used for paper image
         if PAPER_RENDER_MODE:
-            obstacles = [[1.063661985378661, 1.6179951647752544], [0.828027030103013, -2.367158808926069], [3.1821729623802204, -0.4006169916647311], [-2.4851040478952173, -1.6834657290847765], [2.7372134329372644, -3.6831299721809874]]
+            # obstacles = [[-3.5600568686136285, 2.882322061363647], [3.085977294836458, -3.901414500035961], [2.3334627567988138, 0.970017516489869], [2.6886525139225848, -0.8535647519508682], [-0.5116988994890237, -1.6805530789668408]]
+            obstacles = [[3.868918186024633, 0.007132285722410536], [-3.7256488581466343, 3.422107836362504], [-0.8080131385400522, 0.18811131906768175]]
+
         
         # convert to obs dict
         obs_dict = []
@@ -601,6 +607,9 @@ class AreaClearingEnv(gym.Env):
         # initial pose
         robot_initial_position, robot_initial_heading = self.agent.body.position, restrict_heading_range(self.agent.body.angle)
         robot_initial_position = list(robot_initial_position)  
+
+        robot_distance = 0
+        robot_turn_angle = 0
 
         self.dp = None
 

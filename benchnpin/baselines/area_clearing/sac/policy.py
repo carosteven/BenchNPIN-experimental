@@ -9,6 +9,7 @@ from stable_baselines3.common.callbacks import CheckpointCallback
 import os
 import numpy as np
 
+from benchnpin.common.metrics.task_driven_metric import TaskDrivenMetric
 
 class AreaClearingSAC(BasePolicy):
 
@@ -93,23 +94,29 @@ class AreaClearingSAC(BasePolicy):
 
         env = gym.make('area-clearing-v0')
         env = env.unwrapped
+        metric = TaskDrivenMetric(alg_name="SAC", robot_mass=env.cfg.agent.mass)
 
         rewards_list = []
         for eps_idx in range(num_eps):
-            print("Progress: ", eps_idx, " / ", num_eps, " episodes")
+            print("SAC Progress: ", eps_idx, " / ", num_eps, " episodes")
             obs, info = env.reset()
+            metric.reset(info)
             done = truncated = False
             eps_reward = 0.0
             while True:
                 action, _ = self.model.predict(obs, deterministic=True)
                 obs, reward, done, truncated, info = env.step(action)
+                metric.update(info=info, reward=reward, eps_complete=(done or truncated))
+                
                 eps_reward += reward
                 if done or truncated:
                     rewards_list.append(eps_reward)
                     break
         
         env.close()
-        return rewards_list
+        metric.plot_scores(save_fig_dir=env.cfg.output_dir)
+
+        return metric.success_rates, metric.efficiency_scores, metric.effort_scores, metric.rewards, "SAC"
 
 
     

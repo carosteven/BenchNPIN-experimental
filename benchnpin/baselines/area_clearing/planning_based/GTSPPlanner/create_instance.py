@@ -114,7 +114,7 @@ class GTSPFileGenerator:
                         # Megnath: This is happening for some reason. Need to figure out how many nodes are affected. Until then...
                         weight = SELF_WEIGHT
                         missed_transitions += 1
-                        raise ValueError('Missed Transition')
+                        print('Missed transition')
                     row.append(weight)
             edge_weight_matrix.append(row)
 

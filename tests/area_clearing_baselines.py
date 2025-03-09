@@ -10,12 +10,15 @@ from benchnpin.baselines.area_clearing.sac.policy import AreaClearingSAC
 from benchnpin.baselines.area_clearing.planning_based.policy import PlanningBasedPolicy
 from benchnpin.baselines.area_clearing.td3.policy import AreaClearingTD3
 from benchnpin.baselines.area_clearing.sam.policy import AreaClearingSAM
+
 from benchnpin.common.metrics.base_metric import BaseMetric
 
 from benchnpin.common.utils.utils import DotDict
 from os.path import dirname
 
 import os
+
+import pickle
 
 def main(user_config, job_id):
     cfg = DotDict.load_from_file(f'{dirname(dirname(__file__))}/benchnpin/environments/area_clearing/config.yaml')
@@ -69,6 +72,13 @@ def main(user_config, job_id):
                 benchmark_results.append(sac_policy.evaluate(num_eps=num_eps, model_eps=model_eps))
 
     BaseMetric.plot_algs_scores(benchmark_results, save_fig_dir='./', plot_success=True)
+
+    # save eval results to disk
+    pickle_dict = {
+        'benchmark_results': benchmark_results
+    }
+    with open('ac_gtsp_benchmark_results.pkl', 'wb') as f:
+        pickle.dump(pickle_dict, f)
 
 
 if __name__ == '__main__':

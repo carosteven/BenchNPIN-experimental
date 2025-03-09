@@ -180,7 +180,8 @@ def collect_demos():
             'timeouts': timeouts, 
             'efficiency_scores': metric.efficiency_scores[0],
             'effort_scores': metric.effort_scores[0],
-            'rewards': metric.rewards[0]
+            'rewards': metric.rewards[0],
+            'success_rate': metric.success_rates[0]
         }
 
     print("Total Demonstration Data ======== \n")
@@ -195,7 +196,7 @@ def collect_demos():
     with open('area_clearing_metric_data.pkl', 'wb') as f:
         pickle.dump(pickle_dict, f)
 
-    print(metric.efficiency_scores, metric.effort_scores, metric.rewards)
+    print(metric.success_rates, metric.efficiency_scores, metric.effort_scores, metric.rewards)
 
     
 if __name__ == "__main__":

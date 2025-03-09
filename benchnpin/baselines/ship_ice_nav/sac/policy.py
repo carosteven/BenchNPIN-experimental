@@ -86,7 +86,7 @@ class ShipIceSAC(BasePolicy):
             model_checkpoint = self.model_name + '_' + model_eps + '_steps'
             self.model = SAC.load(os.path.join(self.model_path, model_checkpoint))
 
-        env = gym.make('ship-ice-v0')
+        env = gym.make('ship-ice-v0', config_dict={'egocentric_obs': True})
         env = env.unwrapped
         metric = ShipIceMetric(alg_name="SAC", ship_mass=env.cfg.ship.mass, goal=env.goal)
 

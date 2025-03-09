@@ -5,7 +5,6 @@ Uncomment the code blocks to train/evaluate each baseline algorithms
 import argparse
 from benchnpin.baselines.ship_ice_nav.ppo.policy import ShipIcePPO
 from benchnpin.baselines.ship_ice_nav.sac.policy import ShipIceSAC
-from benchnpin.baselines.ship_ice_nav.td3.policy import ShipIceTD3
 from benchnpin.baselines.ship_ice_nav.planning_based.policy import PlanningBasedPolicy
 from benchnpin.common.metrics.base_metric import BaseMetric
 from benchnpin.common.utils.utils import DotDict
@@ -52,6 +51,16 @@ def main(user_config, job_id):
                 # ================================ SAC Policy =================================
                 sac_policy = ShipIceSAC(cfg=cfg)
                 benchmark_results.append(sac_policy.evaluate(num_eps=num_eps, model_eps=model_eps))
+
+            elif policy_type == 'lattice':
+                # ================================ Lattice Planning Policy =================================
+                lattice_planning_policy = PlanningBasedPolicy(planner_type='lattice')
+                benchmark_results.append(lattice_planning_policy.evaluate(num_eps=num_eps))
+
+            elif policy_type == 'predictive':
+                # ================================ Predictive Planning Policy =================================
+                predictive_planning_policy = PlanningBasedPolicy(planner_type='predictive')
+                benchmark_results.append(predictive_planning_policy.evaluate(num_eps=num_eps))
         
         BaseMetric.plot_algs_scores(benchmark_results, save_fig_dir='./')
 

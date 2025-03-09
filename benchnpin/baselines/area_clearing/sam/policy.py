@@ -233,6 +233,8 @@ class AreaClearingSAM(BasePolicy):
             env = gym.make('area-clearing-v0')
         env = env.unwrapped
 
+        env.configure_env_for_SAM()
+
         # policy
         policy = DenseActionSpacePolicy(env.action_space.high, env.num_channels, self.final_exploration,
                                          train=True, checkpoint_path=checkpoint_path, resume_training=resume_training)
@@ -375,11 +377,13 @@ class AreaClearingSAM(BasePolicy):
             env = gym.make('area-clearing-v0')
         env = env.unwrapped
 
+        env.configure_env_for_SAM()
+
         old_action_type = env.cfg.agent.action_type
         old_t_max = env.cfg.sim.t_max
 
         env.cfg.agent.action_type = 'position'
-        env.cfg.sim.t_max = 100
+        env.cfg.sim.t_max = 50
 
         metric = TaskDrivenMetric(alg_name="SAM", robot_mass=env.cfg.agent.mass)
 
@@ -395,7 +399,7 @@ class AreaClearingSAM(BasePolicy):
 
         rewards_list = []
         for eps_idx in range(num_eps):
-            print("Progress: ", eps_idx, " / ", num_eps, " episodes")
+            print("SAM Progress: ", eps_idx, " / ", num_eps, " episodes")
             obs, info = env.reset()
             metric.reset(info)
             done = truncated = False
