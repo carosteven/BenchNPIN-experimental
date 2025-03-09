@@ -19,7 +19,7 @@ class ClickAgent:
         self.fig.canvas.mpl_connect('button_press_event', self.mouse_callback)
         self.fig.canvas.mpl_connect('key_press_event', self.key_callback)
         self.key_pressed = None
-        self.map_scale = 96
+        self.map_scale = env.local_map_pixel_width
         plt.ion()
         plt.show()
 
@@ -56,7 +56,7 @@ class ClickAgent:
                     break
 
             if self.selected_action is not None:
-                action = self.selected_action[0] * self.map_scale + self.selected_action[1] # 300 is current resolution
+                action = self.selected_action[0] * self.map_scale + self.selected_action[1]
                 state, reward, done, _, info = self.env.step(action)
                 last_reward = reward
                 # last_ministeps = info['ministeps']
@@ -74,8 +74,9 @@ class ClickAgent:
         plt.close()
 
 def main():
-    cfg_file = f'{dirname(__file__)}/config_sam.yaml'
-    env = gym.make('box-delivery-v0', cfg_file=cfg_file)
+    # cfg_file = f'{dirname(__file__)}/config_sam.yaml'
+    env = gym.make('box-delivery-v0')
+    env = env.unwrapped
     agent = ClickAgent(env)
     agent.run()
     env.close()

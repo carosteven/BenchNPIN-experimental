@@ -34,18 +34,20 @@ class ShipIceEnv(gym.Env):
     """Custom Environment that follows gym interface"""
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
 
-    def __init__(self):
+    def __init__(self, cfg=None):
         super(ShipIceEnv, self).__init__()
 
         # get current directory of this script
         self.current_dir = os.path.dirname(__file__)
 
         # construct absolute path to the env_config folder
-        cfg_file = os.path.join(self.current_dir, 'config.yaml')
+        if cfg is None:
+            cfg_path = os.path.join(self.current_dir, 'config.yaml')
+            cfg = DotDict.load_from_file(cfg_path)
 
-        cfg = cfg = DotDict.load_from_file(cfg_file)
-        self.occupancy = OccupancyGrid(grid_width=cfg.occ.grid_size, grid_height=cfg.occ.grid_size, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, local_width=6, local_height=6, ship_body=None, meter_to_pixel_scale=cfg.occ.m_to_pix_scale)
         self.cfg = cfg
+        
+        self.occupancy = OccupancyGrid(grid_width=cfg.occ.grid_size, grid_height=cfg.occ.grid_size, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, local_width=6, local_height=6, ship_body=None, meter_to_pixel_scale=cfg.occ.m_to_pix_scale)
         self.local_window_v_shift = 2
 
         self.beta = 30         # amount to scale the collision reward

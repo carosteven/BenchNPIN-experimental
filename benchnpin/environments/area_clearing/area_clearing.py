@@ -83,19 +83,20 @@ class AreaClearingEnv(gym.Env):
     """Custom Environment that follows gym interface"""
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
 
-    def __init__(self):
+    def __init__(self, cfg = None, **kwargs):
         super(AreaClearingEnv, self).__init__()
 
         # get current directory of this script
         self.current_dir = os.path.dirname(__file__)
 
         # construct absolute path to the env_config folder
-        cfg_file = os.path.join(self.current_dir, 'config.yaml')
+        if cfg is None:
+            cfg_path = os.path.join(self.current_dir, 'config.yaml')
+            cfg = DotDict.load_from_file(cfg_path)
 
-        cfg = DotDict.load_from_file(cfg_file)
         self.cfg = cfg
 
-        env_cfg_file_path = os.path.join(self.current_dir, 'envs/' + cfg.env + '.yaml')
+        env_cfg_file_path = os.path.join(self.current_dir, 'envs/' + self.cfg.env + '.yaml')
 
         if not os.path.exists(env_cfg_file_path):
             raise FileNotFoundError(f"Environment config file {env_cfg_file_path} not found")

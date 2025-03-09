@@ -196,30 +196,9 @@ class AreaClearingSAM(BasePolicy):
         return train_info
 
 
-    def train(self, **kwargs) -> None:
-        default_params = {
-            'batch_size': 32,
-            'checkpoint_freq': 10000,
-            'exploration_timesteps': 6000,
-            'final_exploration': 0.01,
-            'gamma': 0.99,
-            'grad_norm_clipping': 10,
-            'job_id': None,
-            'job_id_to_resume': None,
-            'learning_rate': 0.01,
-            'learning_starts': 1000,
-            'n_epochs': 10,
-            'n_steps': 256,
-            'replay_buffer_size': 10000,
-            'resume_training': False,
-            'target_update_freq': 1000,
-            'total_timesteps': 60000,
-            'use_double_dqn': True,
-            'verbose': 2,
-            'weight_decay': 0.0001,
-        }
-
-        params = {**default_params, **kwargs}
+    def train(self, job_id) -> None:
+        job_id = job_id
+        params = self.cfg['train']
         self.batch_size = params['batch_size']
         self.checkpoint_freq = params['checkpoint_freq']
         self.final_exploration = params['final_exploration']
@@ -227,19 +206,17 @@ class AreaClearingSAM(BasePolicy):
         self.grad_norm_clipping = params['grad_norm_clipping']
         self.learning_rate = params['learning_rate']
         self.replay_buffer_size = params['replay_buffer_size']
-        self.use_double_dqn = params['use_double_dqn']
         self.weight_decay = params['weight_decay']
 
         checkpoint_freq = params['checkpoint_freq']
         exploration_timesteps = params['exploration_timesteps']
-        job_id = params['job_id']
         job_id_to_resume = params['job_id_to_resume']
         learning_starts = params['learning_starts']
         resume_training = params['resume_training']
         target_update_freq = params['target_update_freq']
         total_timesteps = params['total_timesteps']
 
-        checkpoint_path = os.path.join(os.path.dirname(__file__), f'checkpoint/{params["job_id"]}/checkpoint-{self.model_name}.pt')
+        checkpoint_path = os.path.join(os.path.dirname(__file__), f'checkpoint/{job_id}/checkpoint-{self.model_name}.pt')
 
         log_dir = os.path.join(os.path.dirname(__file__), 'output_logs/')
         if not os.path.exists(log_dir):

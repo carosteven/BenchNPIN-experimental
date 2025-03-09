@@ -223,7 +223,7 @@ class BoxDeliverySAM(BasePolicy):
         logging.info(f"Job ID: {job_id}")
 
         # create environment
-        env = gym.make('box-delivery-v0', config=self.cfg)
+        env = gym.make('box-delivery-v0', cfg=self.cfg)
         env = env.unwrapped
 
         # policy
@@ -361,14 +361,10 @@ class BoxDeliverySAM(BasePolicy):
 
 
 
-    def evaluate(self, obstacle_config: str, num_eps: int, model_eps: str ='latest'):
+    def evaluate(self, num_eps: int, model_eps: str ='latest'):
 
         env = gym.make('box-delivery-v0', cfg=self.cfg)
         env = env.unwrapped
-
-        env.cfg.env.obstacle_config = obstacle_config
-        env.cfg.env.room_width = 5 if obstacle_config.split('_')[0] == 'small' else 10
-        env.cfg.cubes.num_cubes = 10 if obstacle_config.split('_')[0] == 'small' else 20
 
         if model_eps == 'latest':
             self.model = DenseActionSpacePolicy(env.action_space.high, env.num_channels, 0.0,

@@ -9,23 +9,19 @@ from benchnpin.baselines.box_delivery.sac.policy import BoxDeliverySAC
 from benchnpin.common.metrics.base_metric import BaseMetric
 from benchnpin.common.utils.utils import DotDict
 from os.path import dirname
-import json
 
 def main(user_config, job_id):
     cfg = DotDict.load_from_file(f'{dirname(dirname(__file__))}/benchnpin/environments/box_delivery/config.yaml')
     # Update the base configuration with the user provided configuration
-    for key in user_config:
-        if key in cfg:
-            for sub_key in user_config[key]:
-                cfg[key][sub_key] = user_config[key][sub_key]
+    for cfg_type in user_config:
+        if cfg_type in cfg:
+            if type(user_config[cfg_type]) is dict:
+                for param in user_config[cfg_type]:
+                    cfg[cfg_type][param] = user_config[cfg_type][param]
+            else:
+                cfg[cfg_type] = user_config[cfg_type]
 
     if cfg.train.train_mode:
-        for cfg_key in ['train', 'env', 'agent', 'rewards']:
-            info = getattr(cfg, cfg_key).items()
-            print(f'\n{cfg_key.upper()} CONFIGURATION')
-            for key, value in info:
-                print(f'{key}: {value}')
-
         if cfg.train.resume_training:
             model_name = cfg.train.job_id_to_resume
         else:
@@ -49,59 +45,31 @@ def main(user_config, job_id):
     if cfg.evaluate.eval_mode:
         benchmark_results = []
         num_eps = cfg.evaluate.num_eps
-        if cfg.train.job_type == 'sam':
-            # ========================= Spatial Action Map Policy =========================
-            for model_name, obstacle_config in zip(cfg.evaluate.models, cfg.evaluate.obs_configs):
-                sam_policy = BoxDeliverySAM(model_name=model_name, cfg=cfg)
-                benchmark_results.append(sam_policy.evaluate(obstacle_config=obstacle_config, num_eps=num_eps))
+        for policy_type, action_type, model_name, obs_config in zip(cfg.evaluate.policy_types, cfg.evaluate.action_types, cfg.evaluate.models, cfg.evaluate.obs_configs):
+            cfg.agent.action_type = action_type
+            cfg.train.job_type = policy_type
+            cfg.env.obstacle_config = obs_config
 
-        elif cfg.train.job_type == 'ppo':
-            # ================================ PPO Policy =================================    
-            for model_name in cfg.evaluate.models:
+            if policy_type == 'sam':
+                # ========================= Spatial Action Map Policy =========================
+                sam_policy = BoxDeliverySAM(model_name=model_name, cfg=cfg)
+                benchmark_results.append(sam_policy.evaluate(num_eps=num_eps))
+
+            elif policy_type == 'ppo':
+                # ================================ PPO Policy =================================    
                 ppo_policy = BoxDeliveryPPO(model_name=model_name, cfg=cfg)
                 benchmark_results.append(ppo_policy.evaluate(num_eps=num_eps))
 
-        elif cfg.train.job_type == 'sac':
-            # ================================ SAC Policy =================================
-            for model_name in cfg.evaluate.models:
+            elif policy_type == 'sac':
+                # ================================ SAC Policy =================================
                 sac_policy = BoxDeliverySAC(model_name=model_name, cfg=cfg)
                 benchmark_results.append(sac_policy.evaluate(num_eps=num_eps))
         
-        # Save benchmark results to a JSON file
-        results_to_save = [
-            {
-            "efficiency_scores": result[0],
-            "effort_scores": result[1],
-            "rewards": result[2],
-            "algorithm": result[3],
-            "success": result[4]
-            }
-            for result in benchmark_results
-        ]
-
-        with open(f'benchmark_results_{benchmark_results[0][3]}.json', 'w') as f:
-            json.dump(results_to_save, f, indent=4)
-
-        # Read benchmark results back from the JSON file
-        with open(f'benchmark_results_{benchmark_results[0][3]}.json', 'r') as f:
-            benchmark_results = json.load(f)
-            
-        # Convert benchmark results back to a list of tuples
-        benchmark_results = [
-            (
-            result["efficiency_scores"],
-            result["effort_scores"],
-            result["rewards"],
-            result["algorithm"],
-            result["success"]
-            )
-            for result in benchmark_results
-        ]
         BaseMetric.plot_algs_scores(benchmark_results, save_fig_dir='./', plot_success=True)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='Train and evaluate baselines for box pushing navigation'
+        description='Train and evaluate baselines for box pushing task'
     )
 
     parser.add_argument(
@@ -121,37 +89,31 @@ if __name__ == '__main__':
     job_id = parser.parse_args().job_id
 
     if parser.parse_args().config_file is not None:
-        cfg = DotDict.load_from_file(parser.parse_args().config_file)
+        config = DotDict.load_from_file(parser.parse_args().config_file)
 
 
     else:
         # High level configuration for the box delivery task
         config={
-                'boxes': {
-                    'num_boxes': 10,
+                'render': {
+                    'show': True,           # if true show animation plots
+                    'show_obs': False,       # if true show observation
                 },
                 'agent': {
                     'action_type': 'position', # 'position', 'heading', 'velocity'
-                    'step_size': 2.0, # distance travelled per step in heading control
+                },
+                'boxes': {
+                    'num_boxes_small': 10,
+                    'num_boxes_large': 20,
                 },
                 'env': {
                     'obstacle_config': 'small_empty', # options are small_empty, small_columns, large_columns, large_divider
-                    'room_length': 10,
-                    'room_width': 5, # 5 for small, 10 for large
-                    'local_map_pixel_width': 96, # 96 is all you need for SAM, but if using a vanilla ResNet, we recommend 224
                 },
                 'misc': {
-                    'inactivity_cutoff': 100, # number of steps to run before terminating an episode
                     'seed': 42,
                 },
-                'rewards': {
-                    'partial_rewards_scale': 0.2, # scales distance boxes are pushed to/from goal for reward
-                    'goal_reward': 1.0,
-                    'collision_penalty': 0.25,
-                    'non_movement_penalty': 0.25, # only appllies to position control ()
-                },
                 'train': {
-                    'train_mode': True,
+                    'train_mode': False,
                     'job_type': 'sam', # 'sam', 'ppo', 'sac'
                     'job_name': 'SAM',
                     'resume_training': False,
@@ -159,10 +121,10 @@ if __name__ == '__main__':
                 },
                 'evaluate': {
                     'eval_mode': True,
-                    'num_eps': 5,
-                    'models': [None], # list of model names to evaluate
-                    'obs_configs': [None], # list of obstacle configurations to evaluate
-                    # TODO implement obstacle configurations for PPO and SAC
+                    'num_eps': 1,
+                    'policy_types': ['ppo', 'sac', 'sam'], # list of policy types to evaluate
+                    'action_types': ['heading', 'heading', 'position'], # list of action types to evaluate
+                    'models': ['ppo_small_empty', 'sac_small_empty', 'sam_small_empty'], # list of model names to evaluate
                 }
             }
 

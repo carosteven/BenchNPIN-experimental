@@ -2,41 +2,118 @@
 An example script for training and evaluating baselines for the maze NAMO task
 Uncomment the code blocks to train/evaluate each baseline algorithms
 """
-import numpy as np
+import argparse
+import pickle
 from benchnpin.baselines.maze_NAMO.ppo.policy import MazeNAMOPPO
 from benchnpin.baselines.maze_NAMO.sac.policy import MazeNAMOSAC
 from benchnpin.common.metrics.base_metric import BaseMetric
-import pickle
+from benchnpin.common.utils.utils import DotDict
+from os.path import dirname
+
+def main(user_config, job_id):
+    cfg = DotDict.load_from_file(f'{dirname(dirname(__file__))}/benchnpin/environments/maze_NAMO/config.yaml')
+    # Update the base configuration with the user provided configuration
+    for cfg_type in user_config:
+        if cfg_type in cfg:
+            if type(user_config[cfg_type]) is dict:
+                for param in user_config[cfg_type]:
+                    cfg[cfg_type][param] = user_config[cfg_type][param]
+            else:
+                cfg[cfg_type] = user_config[cfg_type]
+
+    if cfg.train.train_mode:
+
+        model_name = cfg.train.job_name
+
+        if cfg.train.job_type == 'ppo':
+            # ================================ PPO Policy =================================    
+            ppo_policy = MazeNAMOPPO(model_name=model_name, cfg=cfg)
+            ppo_policy.train(total_timesteps=cfg.train.total_timesteps, checkpoint_freq=cfg.train.checkpoint_freq)
+
+        elif cfg.train.job_type == 'sac':
+            # ================================ SAC Policy =================================
+            sac_policy = MazeNAMOSAC(model_name=model_name, cfg=cfg)
+            sac_policy.train(total_timesteps=cfg.train.total_timesteps, checkpoint_freq=cfg.train.checkpoint_freq)
+
+    if cfg.evaluate.eval_mode:
+        benchmark_results = []
+        num_eps = cfg.evaluate.num_eps
+        for policy_type, model_eps, maze_version in zip(cfg.evaluate.policy_types, cfg.evaluate.model_eps, cfg.evaluate.maze_versions):
+            cfg.train.job_type = policy_type
+            cfg.env.maze_version = maze_version
+
+            if policy_type == 'ppo':
+                # ================================ PPO Policy =================================    
+                ppo_policy = MazeNAMOPPO(cfg=cfg)
+                benchmark_results.append(ppo_policy.evaluate(num_eps=num_eps, model_eps=model_eps))
+
+            elif policy_type == 'sac':
+                # ================================ SAC Policy =================================
+                sac_policy = MazeNAMOSAC(cfg=cfg)
+                benchmark_results.append(sac_policy.evaluate(num_eps=num_eps, model_eps=model_eps))
+        
+        BaseMetric.plot_algs_scores(benchmark_results, save_fig_dir='./')
+
+        # save eval results to disk
+        pickle_dict = {
+            'benchmark_results': benchmark_results
+        }
+        with open('shipIce_benchmark_results.pkl', 'wb') as f:
+                pickle.dump(pickle_dict, f)
 
 
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        description='Train and evaluate baselines for maze navigation'
+    )
 
-""" ============================== Policy Training ========================================"""
-# ppo_policy = MazeNAMOPPO()
-# ppo_policy.train(total_timesteps=int(15e5), checkpoint_freq=10000)
+    parser.add_argument(
+        '--config_file',
+        type=str,
+        help='path to the config file',
+        default=None
+    )
 
-""" ============================== Policy Benchmark ========================================"""
-benchmark_results = []
-num_eps = 200
+    parser.add_argument(
+        '--job_id',
+        type=str,
+        help='slurm job id',
+        default=None
+    )
 
-ppo_policy = MazeNAMOPPO()
-# benchmark_results.append(ppo_policy.evaluate(num_eps=num_eps, model_eps='880000'))
-benchmark_results.append(ppo_policy.evaluate(num_eps=num_eps, model_eps='1030000'))
-# benchmark_results.append(ppo_policy.evaluate(num_eps=num_eps, model_eps='1290000'))
-# benchmark_results.append(ppo_policy.evaluate(num_eps=num_eps, model_eps='1300000'))
+    job_id = parser.parse_args().job_id
 
-sac_policy = MazeNAMOSAC()
-# benchmark_results.append(sac_policy.evaluate(num_eps=num_eps, model_eps='60000'))
-# benchmark_results.append(sac_policy.evaluate(num_eps=num_eps, model_eps='80000'))
-# benchmark_results.append(sac_policy.evaluate(num_eps=num_eps, model_eps='100000'))
-# benchmark_results.append(sac_policy.evaluate(num_eps=num_eps, model_eps='120000'))
-benchmark_results.append(sac_policy.evaluate(num_eps=num_eps, model_eps='140000'))
-
-BaseMetric.plot_algs_scores(benchmark_results, save_fig_dir='./')
+    if parser.parse_args().config_file is not None:
+        config = DotDict.load_from_file(parser.parse_args().config_file)
 
 
-# save eval results to disk
-pickle_dict = {
-    'benchmark_results': benchmark_results
-}
-with open('maze_benchmark_results.pkl', 'wb') as f:
-        pickle.dump(pickle_dict, f)
+    else:
+        # High level configuration for the box delivery task
+        config={
+                'num_obstacles': 5,
+                'seed': 1,
+                'render': {
+                    'show': True,           # if true show animation plots
+                    'show_obs': False,       # if true show observation
+                },
+                'env': {
+                    'maze_version': 1, # options are 1, 2
+                },
+                'train': {
+                    'train_mode': False,
+                    'job_type': 'ppo', # 'ppo', 'sac'
+                    'job_name': 'maze_ppo',
+                    'total_timesteps': int(15e5),
+                    'checkpoint_freq': 10000,
+                },
+                'evaluate': {
+                    'eval_mode': True,
+                    'num_eps': 1,
+                    'policy_types': [], # list of policy types to evaluate
+                    'models_eps': [], # list of model eps to evaluate
+                    'maze_versions': [], # list of maze versions to evaluate
+                }
+            }
+
+    main(config, job_id)
+

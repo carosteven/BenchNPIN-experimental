@@ -122,3 +122,18 @@ controller:
     - [ 5, 0, 5 ]
     - [ 10, 0, 20 ]
     - [ 10, 0, 20 ]
+
+train:
+  train_mode: false
+  job_type: ppo # options are ppo, sac
+  job_name: 'maze_ppo'
+  total_timesteps: 15e5
+  checkpoint_freq: 10000
+
+evaluate:
+  eval_mode: true
+  num_eps: 1
+  policy_types: []  # list of policy types to evaluate
+  action_types: []  # list of action types to evaluate
+  models: []        # list of model names to evaluate
+  

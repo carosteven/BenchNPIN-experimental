@@ -11,7 +11,7 @@ from benchnpin.common.metrics.task_driven_metric import TaskDrivenMetric
 
 class AreaClearingPPO(BasePolicy):
 
-    def __init__(self, model_name='ppo_model', model_path=None) -> None:
+    def __init__(self, model_name='ppo_model', model_path=None, cfg=None) -> None:
         super().__init__()
 
         if model_path is None:
@@ -22,6 +22,7 @@ class AreaClearingPPO(BasePolicy):
         self.model_name = model_name
         self.model = None
 
+        self.cfg = cfg
 
     def train(self, policy_kwargs=dict(features_extractor_class=ResNet18,
                                         features_extractor_kwargs=dict(features_dim=512),
@@ -36,7 +37,7 @@ class AreaClearingPPO(BasePolicy):
             checkpoint_freq=10000,
             from_model_eps=None) -> None:
 
-        env = gym.make('area-clearing-v0')
+        env = gym.make('area-clearing-v0', cfg=self.cfg)
         env = env.unwrapped
 
         # Check the environment

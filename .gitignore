@@ -24,6 +24,8 @@ __pycache__/
 
 venv/
 
+configs/
+
 *egg-info
 
 venv/

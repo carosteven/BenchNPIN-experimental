@@ -65,7 +65,7 @@ class BoxDeliveryEnv(gym.Env):
     """Custom Environment that follows gym interface"""
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
 
-    def __init__(self, cfg = None, **kwargs):
+    def __init__(self, cfg: dict = None):
         super(BoxDeliveryEnv, self).__init__()
 
         # get current directory of this script
@@ -77,12 +77,20 @@ class BoxDeliveryEnv(gym.Env):
             cfg = DotDict.load_from_file(cfg_path)
 
         self.cfg = cfg
-
         # environment
-        self.local_map_pixel_width = self.cfg.env.local_map_pixel_width
+        self.local_map_pixel_width = self.cfg.env.local_map_pixel_width if self.cfg.train.job_type != 'sam' else self.cfg.env.local_map_pixel_width_sam
         self.local_map_width = self.cfg.env.local_map_width
         self.local_map_pixels_per_meter = self.local_map_pixel_width / self.local_map_width
-
+        self.room_length = self.cfg.env.room_length
+        self.wall_thickness = self.cfg.env.wall_thickness
+        env_size = self.cfg.env.obstacle_config.split('_')[0]
+        if env_size == 'small':
+            self.num_boxes = self.cfg.boxes.num_boxes_small
+            self.room_width = self.cfg.env.room_width_small
+        else:
+            self.num_boxes = self.cfg.boxes.num_boxes_large
+            self.room_width = self.cfg.env.room_width_large
+        
         # state
         self.num_channels = 4
         self.observation = None
@@ -114,14 +122,18 @@ class BoxDeliveryEnv(gym.Env):
                     self.robot_state_channel[i, j] = 1
         
         # rewards
-        self.partial_rewards_scale = cfg.rewards.partial_rewards_scale
-        self.goal_reward = cfg.rewards.goal_reward
-        self.collision_penalty = cfg.rewards.collision_penalty
-        self.non_movement_penalty = cfg.rewards.non_movement_penalty
+        if self.cfg.train.job_type == 'sam':
+            rewards = self.cfg.rewards_sam
+        else:
+            rewards = self.cfg.rewards
+        self.partial_rewards_scale = rewards.partial_rewards_scale
+        self.goal_reward = rewards.goal_reward
+        self.collision_penalty = rewards.collision_penalty
+        self.non_movement_penalty = rewards.non_movement_penalty
 
         # misc
         self.ministep_size = self.cfg.misc.ministep_size
-        self.inactivity_cutoff = self.cfg.misc.inactivity_cutoff
+        self.inactivity_cutoff = self.cfg.misc.inactivity_cutoff if self.cfg.train.job_type != 'sam' else self.cfg.misc.inactivity_cutoff_sam
         self.random_seed = self.cfg.misc.random_seed
 
         self.random_state = np.random.RandomState(self.random_seed)
@@ -162,13 +174,14 @@ class BoxDeliveryEnv(gym.Env):
             self.linear_speed = 0.0
             self.linear_speed_increment = 0.02
 
-        if self.cfg.render.show_obs:
+        if self.cfg.render.show_obs or self.cfg.render.show:
             # show state
             num_plots = self.num_channels
             self.state_plot = plt
             self.state_fig, self.state_ax = self.state_plot.subplots(1, num_plots, figsize=(4 * num_plots, 6))
             self.colorbars = [None] * num_plots
-            self.state_plot.ion()  # Interactive mode on        
+            if self.cfg.render.show_obs:
+                self.state_plot.ion()  # Interactive mode on        
 
     def init_box_delivery_sim(self):
 
@@ -182,10 +195,6 @@ class BoxDeliveryEnv(gym.Env):
         self.space.iterations = self.cfg.sim.iterations
         self.space.gravity = self.cfg.sim.gravity
         self.space.damping = self.cfg.sim.damping
-
-        self.room_length = self.cfg.env.room_length
-        self.room_width = self.cfg.env.room_width
-        self.wall_thickness = self.cfg.env.wall_thickness
 
         self.total_work = [0, []]
 
@@ -216,7 +225,7 @@ class BoxDeliveryEnv(gym.Env):
             if self.renderer is None:
                 self.renderer = Renderer(self.space, env_width=self.room_length + self.wall_thickness / 2,
                                          env_height=self.room_width + self.wall_thickness / 2,
-                                         render_scale=30, background_color=(234, 234, 234), caption='Box Pushing', centered=True)
+                                         render_scale=30, background_color=(234, 234, 234), caption='Box Delivery', centered=True)
             else:
                 self.renderer.reset(new_space=self.space)
 
@@ -494,49 +503,40 @@ class BoxDeliveryEnv(gym.Env):
         box_size = self.cfg.boxes.box_size / 2
         boxes = []          # a list storing non-overlapping box centers
 
-        if self.cfg.boxes.randomize_boxes:
-            total_boxes_required = self.cfg.boxes.num_boxes
-            self.num_box = self.cfg.boxes.num_boxes
-            cube_min_dist = self.cfg.boxes.min_box_dist
-            min_x = -self.room_length / 2 + box_size
-            max_x = self.room_length / 2 - box_size
-            min_y = -self.room_width / 2 + box_size
-            max_y = self.room_width / 2 - box_size
+        total_boxes_required = self.num_boxes
+        cube_min_dist = self.cfg.boxes.min_box_dist
+        min_x = -self.room_length / 2 + box_size
+        max_x = self.room_length / 2 - box_size
+        min_y = -self.room_width / 2 + box_size
+        max_y = self.room_width / 2 - box_size
 
-            cube_count = 0
-            while cube_count < total_boxes_required:
-                center_x = self.random_state.uniform(min_x, max_x)
-                center_y = self.random_state.uniform(min_y, max_y)
-                heading = self.random_state.uniform(0, 2 * np.pi)
+        cube_count = 0
+        while cube_count < total_boxes_required:
+            center_x = self.random_state.uniform(min_x, max_x)
+            center_y = self.random_state.uniform(min_y, max_y)
+            heading = self.random_state.uniform(0, 2 * np.pi)
 
-                # loop through previous boxes to check for overlap
-                overlapped = False
-                for obstacle in self.boundary_dicts:
-                    if obstacle['type'] == 'corner' or obstacle['type'] == 'wall':
-                        continue
-                    elif obstacle['type'] == 'divider':
-                        # just check y distance
-                        if abs(center_y - obstacle['position'][1]) <= (cube_min_dist / 2 + obstacle['width'] / 2) * 1.2:
-                            overlapped = True
-                            break
-                    elif ((center_x - obstacle['position'][0])**2 + (center_y - obstacle['position'][1])**2)**(0.5) <= (cube_min_dist / 2 + obstacle['width'] / 2) * 1.2:
+            # loop through previous boxes to check for overlap
+            overlapped = False
+            for obstacle in self.boundary_dicts:
+                if obstacle['type'] == 'corner' or obstacle['type'] == 'wall':
+                    continue
+                elif obstacle['type'] == 'divider':
+                    # just check y distance
+                    if abs(center_y - obstacle['position'][1]) <= (cube_min_dist / 2 + obstacle['width'] / 2) * 1.2:
                         overlapped = True
                         break
-                for prev_cube_x, pre_cube_y, _ in boxes:
-                    if ((center_x - prev_cube_x)**2 + (center_y - pre_cube_y)**2)**(0.5) <= cube_min_dist:
-                        overlapped = True
-                        break
-                
-                if not overlapped:
-                    boxes.append([center_x, center_y, heading])
-                    cube_count += 1
-        
-        else:
-            boxes.append([3, 2, 0])
-            boxes.append([2.5, 2, 0])
-            boxes.append([2, 2, 0])
-            boxes.append([3, 3, 0])
-            self.num_box = 4
+                elif ((center_x - obstacle['position'][0])**2 + (center_y - obstacle['position'][1])**2)**(0.5) <= (cube_min_dist / 2 + obstacle['width'] / 2) * 1.2:
+                    overlapped = True
+                    break
+            for prev_cube_x, pre_cube_y, _ in boxes:
+                if ((center_x - prev_cube_x)**2 + (center_y - pre_cube_y)**2)**(0.5) <= cube_min_dist:
+                    overlapped = True
+                    break
+            
+            if not overlapped:
+                boxes.append([center_x, center_y, heading])
+                cube_count += 1
         
         # convert to boxes dict
         boxes_dict = []
@@ -781,7 +781,7 @@ class BoxDeliveryEnv(gym.Env):
         
         # check if episode is done
         terminated = False
-        if self.robot_cumulative_cubes == self.num_box:
+        if self.robot_cumulative_cubes == self.num_boxes:
             terminated = True
         
         truncated = False

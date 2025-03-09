@@ -1,5 +1,5 @@
 #############################################################################
-# config for loading ship-ice simulation #
+# config for loading maze simulation #
 #############################################################################
 ### GLOBAL PARAMS
 output_dir: "logs/" # 'output/trial0'
@@ -171,4 +171,17 @@ env:
   #maze versions 1 and 2 are available
   maze_version: 1
 
+train:
+  train_mode: false
+  job_type: ppo # options are ppo, sac
+  job_name: 'maze_ppo'
+  total_timesteps: 15e5
+  checkpoint_freq: 10000
+
+evaluate:
+  eval_mode: true
+  num_eps: 1
+  policy_types: []  # list of policy types to evaluate
+  action_types: []  # list of action types to evaluate
+  models: []        # list of model names to evaluate
   

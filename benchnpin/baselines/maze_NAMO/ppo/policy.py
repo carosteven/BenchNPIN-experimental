@@ -1,6 +1,6 @@
 from benchnpin.baselines.base_class import BasePolicy
 from benchnpin.baselines.feature_extractors import ResNet18
-from benchnpin.common.merics.maze_namo_metric import MazeNamoMetric
+from benchnpin.common.metrics.maze_namo_metric import MazeNamoMetric
 from typing import List, Tuple
 import benchnpin.environments
 import gymnasium as gym
@@ -11,7 +11,7 @@ import os
 
 
 class MazeNAMOPPO(BasePolicy):
-    def __init__(self, model_name='ppo_model', model_path=None) -> None:
+    def __init__(self, model_name='ppo_model', model_path=None, cfg=None) -> None:
         super().__init__()
 
         if model_path is None:
@@ -21,6 +21,8 @@ class MazeNAMOPPO(BasePolicy):
 
         self.model_name = model_name
         self.model = None
+
+        self.cfg = cfg
 
     def train(self, policy_kwargs=dict(features_extractor_class=ResNet18,
                                     features_extractor_kwargs=dict(features_dim=512),
@@ -34,7 +36,7 @@ class MazeNAMOPPO(BasePolicy):
                                     total_timesteps=int(2e5), 
                                     checkpoint_freq=10000) -> None:
 
-        env = gym.make('maze-NAMO-v0')
+        env = gym.make('maze-NAMO-v0', cfg=self.cfg)
         env = env.unwrapped
 
         self.model = PPO(
