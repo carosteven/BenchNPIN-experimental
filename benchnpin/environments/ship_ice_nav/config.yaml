@@ -10,9 +10,6 @@ fixed_trial_idx: 4
 random_start: false
 start_x_range: 7
 
-# true for RL baselines, false for predictive planner
-egocentric_obs: false
-
 ship:
   mass: 1  # mass of the NRC ship in kg
   padding: 0.25  # adds padding to ship footprint
@@ -60,6 +57,6 @@ occ:
 ##################################################
 
 output_dir: "logs/"
-egocentric_obs: true
+egocentric_obs: true  # true for RL baselines, false for predictive planner
 concentration: 0.1    # options are 0.1, 0.2, 0.3, 0.4, 0.5
 goal_y: 9
