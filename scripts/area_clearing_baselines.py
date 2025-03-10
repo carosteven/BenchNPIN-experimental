@@ -3,12 +3,10 @@ An example script for training and evaluating baselines for ship ice navigation
 Uncomment the code blocks to train/evaluate each baseline algorithms
 """
 import argparse
-import argparse
 
 from benchnpin.baselines.area_clearing.ppo.policy import AreaClearingPPO
 from benchnpin.baselines.area_clearing.sac.policy import AreaClearingSAC
 from benchnpin.baselines.area_clearing.planning_based.policy import PlanningBasedPolicy
-from benchnpin.baselines.area_clearing.td3.policy import AreaClearingTD3
 from benchnpin.baselines.area_clearing.sam.policy import AreaClearingSAM
 
 from benchnpin.common.metrics.base_metric import BaseMetric
@@ -20,16 +18,7 @@ import os
 
 import pickle
 
-def main(user_config, job_id):
-    cfg = DotDict.load_from_file(f'{dirname(dirname(__file__))}/benchnpin/environments/area_clearing/config.yaml')
-    # Update the base configuration with the user provided configuration
-    for cfg_type in user_config:
-        if cfg_type in cfg:
-            if type(user_config[cfg_type]) is dict:
-                for param in user_config[cfg_type]:
-                    cfg[cfg_type][param] = user_config[cfg_type][param]
-            else:
-                cfg[cfg_type] = user_config[cfg_type]
+def main(cfg, job_id):
 
     if cfg.train.train_mode:
         if cfg.train.resume_training:
@@ -55,21 +44,21 @@ def main(user_config, job_id):
     if cfg.evaluate.eval_mode:
         benchmark_results = []
         num_eps = cfg.evaluate.num_eps
-        for policy_type, model_eps, obs_config in zip(cfg.evaluate.policy_types, cfg.evaluate.models_eps, cfg.evaluate.obs_configs):
+        for policy_type, model_name, model_path in zip(cfg.evaluate.policy_types, cfg.evaluate.model_names, cfg.evaluate.model_paths):
             if policy_type == 'sam':
                 # ========================= Spatial Action Map Policy =========================
-                sam_policy = AreaClearingSAM(model_name=model_name, cfg=cfg)
+                sam_policy = AreaClearingSAM(model_name=model_name, model_path=model_path, cfg=cfg)
                 benchmark_results.append(sam_policy.evaluate(num_eps=num_eps))
 
             elif policy_type == 'ppo':
                 # ================================ PPO Policy =================================    
-                ppo_policy = AreaClearingPPO(model_name=model_name, cfg=cfg)
-                benchmark_results.append(ppo_policy.evaluate(num_eps=num_eps, model_eps=model_eps))
+                ppo_policy = AreaClearingPPO(model_name=model_name, model_path=model_path, cfg=cfg)
+                benchmark_results.append(ppo_policy.evaluate(num_eps=num_eps))
 
             elif policy_type == 'sac':
                 # ================================ SAC Policy =================================
-                sac_policy = AreaClearingSAC(model_name=model_name, cfg=cfg)
-                benchmark_results.append(sac_policy.evaluate(num_eps=num_eps, model_eps=model_eps))
+                sac_policy = AreaClearingSAC(model_name=model_name, model_path=model_path, cfg=cfg)
+                benchmark_results.append(sac_policy.evaluate(num_eps=num_eps))
 
     BaseMetric.plot_algs_scores(benchmark_results, save_fig_dir='./', plot_success=True)
 
@@ -105,33 +94,38 @@ if __name__ == '__main__':
     if parser.parse_args().config_file is not None:
         cfg = DotDict.load_from_file(parser.parse_args().config_file)
 
-
     else:
         # High level configuration for the box delivery task
-        config={
+        cfg={
             'env': 'clear_env', # 'clear_env_small', 'clear_env', walled_env', 'walled_env_with_columns'
-            'num_obstacles': 5,
+            'num_obstacles': 10,
             'render': {
-                'log_obs': False, # log occupancy observations
+                'log_obs': True, # log occupancy observations
                 'show': True, # show the environment
             },
             'agent': {
-                'action_type': 'heading', # 'position', 'heading', 'velocity'
+                # Options: 'position', 'heading', 'velocity'
+                # 'action_type': 'heading', # Use for PPO and SAC
+                'action_type': 'position', # Use for SAM
+                # action_type: 'velocity', # Use for GTSP
             },
             'train': {
-                'train_mode': True,
+                'train_mode': False,
                 'job_type': 'sam', # 'sam', 'ppo', 'sac'
                 'job_name': 'SAM',
                 'from_model_eps': None,
             },
             'evaluate': {
-                'eval_mode': False,
+                'eval_mode': True,
                 'num_eps': 2,
-                'policy_types': [None], # list of policy types to evaluate
-                'models_eps': [None], # list of model names to evaluate
+                'policy_types': ['sam'], # list of policy types to evaluate
+                'model_names': ['clear_env_sam'], # list of model names to evaluate
+                'model_paths': ['models/area_clearing'], # list of model names to evaluate
                 'obs_configs': [None], # list of obstacle configurations to evaluate
             }
         }
 
-    main(config, job_id)
+        cfg = DotDict.to_dot_dict(cfg)
+
+    main(cfg, job_id)
     

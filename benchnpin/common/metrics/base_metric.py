@@ -105,7 +105,7 @@ class BaseMetric(ABC):
 
 
     @staticmethod
-    def plot_algs_scores(benchmark_results: List[Tuple[List[float], List[float], List[float], str]], save_fig_dir: str, plot_success=False) -> None:
+    def plot_algs_scores(benchmark_results, save_fig_dir: str, plot_success=False) -> None:
         """
         :param benchmark_results: a list of evaluation tuples, where each tuple is computed from policy.evaluate()
         """
@@ -117,7 +117,7 @@ class BaseMetric(ABC):
         alg_names = []
         success_data = []
         if plot_success:
-            for alg_efficiency, alg_effort, alg_reward, alg_name, alg_success in benchmark_results:
+            for alg_efficiency, alg_effort, alg_reward, alg_success, alg_name in benchmark_results:
                 efficiency_data.append(alg_efficiency)
                 effort_data.append(alg_effort)
                 reward_data.append(alg_reward)

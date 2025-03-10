@@ -7,13 +7,6 @@ output_dir: "logs/" # 'output/trial0'
 plot:
   show: false       # true will show planner plots
 
-# env: 'clear_env_small'
-env: 'clear_env'
-# env: 'walled_env'
-# env: 'walled_env_with_columns'
-
-# obstacles information
-num_obstacles: 10
 obstacle_size: 0.5
 min_obs_dist: 1.5       # minimum obstacle distance during random initialization
 
@@ -43,9 +36,6 @@ agent:
   padding: 0.25  # adds padding to ship footprint
   length: 1.38  # length of the NRC ship in meters
   width: 2.4
-  # action_type: 'position' # options are 'velocity', 'heading', 'position'
-  action_type: 'heading' # Use for PPO and SAC
-  # action_type: 'velocity' # Use for GTSP
   movement_step_size: 1.5 # If action type is heading, this is the distance to move in that heading
   footprint_vertices: [ # Used for the observation classes
               [0.69, -1.2],
@@ -101,9 +91,6 @@ agent:
   ]
 
 ### SIMULATION PARAMS
-render:
-  log_obs: false       # whether to log occupancy observation
-  show: false                # if true show animation plots
 sim:
   # t_max: 1000  # max number of iterations - Use for GTSP
   t_max: 200
@@ -150,9 +137,6 @@ controller:
     - [ 10, 0, 20 ]
 
 train:
-  train_mode: false
-  job_type: 'sam'
-  job_name: 'ac'
   batch_size: 32
   checkpoint_freq: 6000 # 20000 for SAC, PPO
   exploration_timesteps: 6000
@@ -172,8 +156,3 @@ train:
   use_double_dqn: true
   verbose: 2
   weight_decay: 0.0001
-
-evaluate:
-  eval_mode: true
-  num_eps: 20
-  model: clear_env

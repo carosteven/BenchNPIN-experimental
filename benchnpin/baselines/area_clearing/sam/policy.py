@@ -85,7 +85,7 @@ class ReplayBuffer:
         return len(self.buffer)
     
 class DenseActionSpacePolicy:
-    def __init__(self, action_space, num_input_channels, final_exploration, train=False, checkpoint_path='', resume_training=False, evaluate=False, job_id_to_resume=None, random_seed=None, model_name='sam_model'):
+    def __init__(self, action_space, num_input_channels, final_exploration, train=False, checkpoint_path='', resume_training=False, evaluate=False, job_id_to_resume=None, random_seed=None, model_name='sam_model', model_path=None):
         self.action_space = action_space
         self.num_input_channels = num_input_channels
         self.final_exploration = final_exploration
@@ -100,7 +100,10 @@ class DenseActionSpacePolicy:
             if resume_training:
                 model_path = os.path.join(os.path.dirname(__file__), f'checkpoint/{job_id_to_resume}/model-{model_name}.pt')
             elif evaluate:
-                model_path = os.path.join(os.path.dirname(__file__), f'models/{model_name}.pt')
+                if model_path is not None:
+                    model_path = model_path + f'/{model_name}.pt'
+                else:
+                    model_path = os.path.join(os.path.dirname(__file__), f'models/{model_name}.pt')
             else:
                 checkpoint_dir = os.path.dirname(checkpoint_path)
                 model_path = f'{checkpoint_dir}/model-{self.model_name}.pt'
@@ -155,7 +158,6 @@ class AreaClearingSAM(BasePolicy):
         self.model = None
 
         self.cfg = cfg
-
 
 
     def update_policy(self, policy_net, target_net, optimizer, batch, transform_func):
@@ -227,8 +229,8 @@ class AreaClearingSAM(BasePolicy):
 
         # create environment
         if self.cfg is not None:
-            # env = gym.make('area-clearing-v0', cfg_file=self.cfg)
-            env = gym.make('area-clearing-v0')
+            env = gym.make('area-clearing-v0', cfg=self.cfg)
+            # env = gym.make('area-clearing-v0')
         else:
             env = gym.make('area-clearing-v0')
         env = env.unwrapped
@@ -369,10 +371,11 @@ class AreaClearingSAM(BasePolicy):
         env.close()
 
 
-
     def evaluate(self, num_eps: int, model_eps: str ='latest'):
+        # create environment
         if self.cfg is not None:
-            env = gym.make('area-clearing-v0')
+            env = gym.make('area-clearing-v0', cfg=self.cfg)
+            # env = gym.make('area-clearing-v0')
         else:
             env = gym.make('area-clearing-v0')
         env = env.unwrapped
@@ -387,15 +390,11 @@ class AreaClearingSAM(BasePolicy):
 
         metric = TaskDrivenMetric(alg_name="SAM", robot_mass=env.cfg.agent.mass)
 
-        checkpoint_dir = os.path.join(os.path.dirname(__file__), f'checkpoint/')
-        model_path = f'{checkpoint_dir}/{self.model_name}.pt'
-
         if model_eps == 'latest':
             self.model = DenseActionSpacePolicy(env.action_space.high, env.num_channels, 0.0,
-                                                train=False, evaluate=True, model_name=self.model_name)
+                                                train=False, evaluate=True, model_name=self.model_name, model_path=self.model_path)
         else:
             model_checkpoint = self.model_name + '_' + model_eps + '_steps'
-            # self.model = PPO.load(os.path.join(self.model_path, model_checkpoint))
 
         rewards_list = []
         for eps_idx in range(num_eps):
@@ -408,7 +407,8 @@ class AreaClearingSAM(BasePolicy):
                 action, _ = self.model.step(obs)
                 obs, reward, done, truncated, info = env.step(action)
                 metric.update(info=info, reward=reward, eps_complete=(done or truncated))
-                
+                if(self.cfg.render.show):
+                    env.render()
                 if done or truncated:
                     break
         
