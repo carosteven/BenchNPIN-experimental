@@ -18,7 +18,7 @@ fixed_trial_idx: 1
 render:
   log_obs: false        # whether to log occupancy observation
   show: true            # if true show animation plots
-  show_obs: false       # if true show occupancy observation
+  show_obs: true       # if true show occupancy observation
   frequency: 20         # frequency of rendering
 sim:
   t_max: 2000  # max number of iterations in simulation loop (originally 5000)
@@ -41,24 +41,6 @@ controller:
   dt: 0.2  # the agent dynamics model was discretized with this dt (originally 0.02)
   # target speed
   target_speed: 0.3  # m/s
-
-  # States: [r, u, v] : yaw rate (deg/s), surge velocity (m/s), sway velocity (m/s)
-  A:
-    - [ 0., 0., 0. ]
-    - [ 0., 0., 0. ]
-    - [ 0., 0., 0. ]
-  # Input matrix: differential fore/aft (rps), side tunnel (rps), main prop (rps) (Assume pure motions)
-  B: [ 0., 0., 0. ]
-  # Input limits
-  # To calculate yaw rate given min turn radius r and surge velocity v
-  # 360 / ((2 pi r) / v)
-  input_lims: [0., 0., 0.]
-  # look ahead distance
-  Lfc: 0.
-  PID_gains:  # gains for 3 PIDs
-    - [ 0, 0, 0 ]
-    - [ 0, 0, 0 ]
-    - [ 0, 0, 0 ]
 
 boxes:
   num_boxes_small: 10

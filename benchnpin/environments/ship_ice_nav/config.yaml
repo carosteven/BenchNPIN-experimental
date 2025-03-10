@@ -64,7 +64,7 @@ goal_y: 9
 train:
   train_mode: false
   job_type: ppo # options are ppo, sac
-  job_name: 'maze_ppo'
+  job_name: 'shipice_ppo'
   total_timesteps: 15e5
   checkpoint_freq: 10000
 

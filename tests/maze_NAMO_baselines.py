@@ -89,31 +89,28 @@ if __name__ == '__main__':
 
     else:
         # High level configuration for the box delivery task
-        config={
-                'num_obstacles': 5,
-                'seed': 1,
-                'render': {
-                    'show': True,           # if true show animation plots
-                    'show_obs': False,       # if true show observation
-                },
-                'env': {
-                    'maze_version': 1, # options are 1, 2
-                },
-                'train': {
-                    'train_mode': False,
-                    'job_type': 'ppo', # 'ppo', 'sac'
-                    'job_name': 'maze_ppo',
-                    'total_timesteps': int(15e5),
-                    'checkpoint_freq': 10000,
-                },
-                'evaluate': {
-                    'eval_mode': True,
-                    'num_eps': 1,
-                    'policy_types': [], # list of policy types to evaluate
-                    'models_eps': [], # list of model eps to evaluate
-                    'maze_versions': [], # list of maze versions to evaluate
-                }
-            }
+        config = {
+            'output_dir': "logs/",  # 'output/trial0'
+            'obstacles': {
+            'num_obstacles': 5,
+            'obstacle_size': 0.5,
+            'maze_version': 1, # options are 1, 2
+            },
+            'train': {
+                'train_mode': False,
+                'job_type': 'ppo', # 'ppo', 'sac'
+                'job_name': 'maze_ppo',
+                'total_timesteps': int(15e5),
+                'checkpoint_freq': 10000,
+            },
+            'evaluate': {
+                'eval_mode': True,
+                'num_eps': 1,
+                'policy_types': [], # list of policy types to evaluate
+                'models_eps': [], # list of model eps to evaluate
+                'maze_versions': [], # list of maze versions to evaluate
+            },
+        }
 
     main(config, job_id)
 

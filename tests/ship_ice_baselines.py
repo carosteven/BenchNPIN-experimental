@@ -98,29 +98,26 @@ if __name__ == '__main__':
 
     else:
         # High level configuration for the box delivery task
-        config={
-                'seed': 1,
-                'egocentric_obs': False,
-                'planner': 'predictive', # options are 'skeleton', 'straight', or 'lattice'
-                'render': {
-                    'show': True,           # if true show animation plots
-                    'show_obs': False,       # if true show observation
-                },
-                'train': {
-                    'train_mode': False,
-                    'job_type': 'ppo', # 'ppo', 'sac'
-                    'job_name': 'shipice_ppo',
-                    'total_timesteps': int(15e5),
-                    'checkpoint_freq': 10000,
-                },
-                'evaluate': {
-                    'eval_mode': True,
-                    'num_eps': 1,
-                    'policy_types': [], # list of policy types to evaluate
-                    'action_types': [], # list of action types to evaluate
-                    'models': [], # list of model names to evaluate
-                }
-            }
+        config = {
+            'output_dir': 'logs/',
+            'egocentric_obs': False,
+            'concentration': 0.1,  # options are 0.1, 0.2, 0.3, 0.4, 0.5
+            'goal_y': 9,
+            'train': {
+                'train_mode': False,
+                'job_type': 'ppo', # 'ppo', 'sac'
+                'job_name': 'shipice_ppo',
+                'total_timesteps': int(15e5),
+                'checkpoint_freq': 10000,
+            },
+            'evaluate': {
+                'eval_mode': True,
+                'num_eps': 1,
+                'policy_types': [], # list of policy types to evaluate
+                'action_types': [], # list of action types to evaluate
+                'models': [], # list of model names to evaluate
+            },
+        }
 
     main(config, job_id)
 

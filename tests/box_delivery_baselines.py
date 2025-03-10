@@ -95,37 +95,34 @@ if __name__ == '__main__':
     else:
         # High level configuration for the box delivery task
         config={
-                'render': {
-                    'show': True,           # if true show animation plots
-                    'show_obs': False,       # if true show observation
-                },
-                'agent': {
-                    'action_type': 'position', # 'position', 'heading', 'velocity'
-                },
-                'boxes': {
-                    'num_boxes_small': 10,
-                    'num_boxes_large': 20,
-                },
-                'env': {
-                    'obstacle_config': 'small_empty', # options are small_empty, small_columns, large_columns, large_divider
-                },
-                'misc': {
-                    'seed': 42,
-                },
-                'train': {
-                    'train_mode': False,
-                    'job_type': 'sam', # 'sam', 'ppo', 'sac'
-                    'job_name': 'SAM',
-                    'resume_training': False,
-                    'job_id_to_resume': None,
-                },
-                'evaluate': {
-                    'eval_mode': True,
-                    'num_eps': 1,
-                    'policy_types': ['ppo', 'sac', 'sam'], # list of policy types to evaluate
-                    'action_types': ['heading', 'heading', 'position'], # list of action types to evaluate
-                    'models': ['ppo_small_empty', 'sac_small_empty', 'sam_small_empty'], # list of model names to evaluate
-                }
+            'render': {
+                'show': True,           # if true show animation plots
+                'show_obs': False,       # if true show observation
+            },
+            'agent': {
+                'action_type': 'position', # 'position', 'heading', 'velocity'
+            },
+            'boxes': {
+                'num_boxes_small': 10,
+                'num_boxes_large': 20,
+            },
+            'env': {
+                'obstacle_config': 'small_empty', # options are small_empty, small_columns, large_columns, large_divider
+            },
+            'train': {
+                'train_mode': False,
+                'job_type': 'sam', # 'sam', 'ppo', 'sac'
+                'job_name': 'SAM',
+                'resume_training': False,
+                'job_id_to_resume': None,
+            },
+            'evaluate': {
+                'eval_mode': True,
+                'num_eps': 1,
+                'policy_types': ['ppo', 'sac', 'sam'], # list of policy types to evaluate
+                'action_types': ['heading', 'heading', 'position'], # list of action types to evaluate
+                'models': ['ppo_small_empty', 'sac_small_empty', 'sam_small_empty'], # list of model names to evaluate
             }
+        }
 
     main(config, job_id)

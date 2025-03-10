@@ -109,30 +109,29 @@ if __name__ == '__main__':
     else:
         # High level configuration for the box delivery task
         config={
-                'env': 'clear_env', # 'clear_env_small', 'clear_env', walled_env', 'walled_env_with_columns'
-                'num_obstacles': 5,
-                'seed': 1,
-                'render': {
-                    'log_obs': False, # log occupancy observations
-                    'show': True, # show the environment
-                },
-                'agent': {
-                    'action_type': 'heading', # 'position', 'heading', 'velocity'
-                },
-                'train': {
-                    'train_mode': True,
-                    'job_type': 'sam', # 'sam', 'ppo', 'sac'
-                    'job_name': 'SAM',
-                    'from_model_eps': None,
-                },
-                'evaluate': {
-                    'eval_mode': False,
-                    'num_eps': 2,
-                    'policy_types': [None], # list of policy types to evaluate
-                    'models_eps': [None], # list of model names to evaluate
-                    'obs_configs': [None], # list of obstacle configurations to evaluate
-                }
+            'env': 'clear_env', # 'clear_env_small', 'clear_env', walled_env', 'walled_env_with_columns'
+            'num_obstacles': 5,
+            'render': {
+                'log_obs': False, # log occupancy observations
+                'show': True, # show the environment
+            },
+            'agent': {
+                'action_type': 'heading', # 'position', 'heading', 'velocity'
+            },
+            'train': {
+                'train_mode': True,
+                'job_type': 'sam', # 'sam', 'ppo', 'sac'
+                'job_name': 'SAM',
+                'from_model_eps': None,
+            },
+            'evaluate': {
+                'eval_mode': False,
+                'num_eps': 2,
+                'policy_types': [None], # list of policy types to evaluate
+                'models_eps': [None], # list of model names to evaluate
+                'obs_configs': [None], # list of obstacle configurations to evaluate
             }
+        }
 
     main(config, job_id)
     
