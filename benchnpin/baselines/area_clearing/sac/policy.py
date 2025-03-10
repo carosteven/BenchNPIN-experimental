@@ -92,7 +92,7 @@ class AreaClearingSAC(BasePolicy):
             model_checkpoint = self.model_name + '_' + model_eps + '_steps'
             self.model = SAC.load(os.path.join(self.model_path, model_checkpoint))
 
-        env = gym.make('area-clearing-v0')
+        env = gym.make('area-clearing-v0', cfg=self.cfg)
         env = env.unwrapped
         metric = TaskDrivenMetric(alg_name="SAC", robot_mass=env.cfg.agent.mass)
 

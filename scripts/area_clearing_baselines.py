@@ -44,7 +44,8 @@ def main(cfg, job_id):
     if cfg.evaluate.eval_mode:
         benchmark_results = []
         num_eps = cfg.evaluate.num_eps
-        for policy_type, model_name, model_path in zip(cfg.evaluate.policy_types, cfg.evaluate.model_names, cfg.evaluate.model_paths):
+        model_path = cfg.evaluate.model_path
+        for policy_type, model_name in zip(cfg.evaluate.policy_types, cfg.evaluate.model_names):
             if policy_type == 'sam':
                 # ========================= Spatial Action Map Policy =========================
                 sam_policy = AreaClearingSAM(model_name=model_name, model_path=model_path, cfg=cfg)
@@ -100,13 +101,13 @@ if __name__ == '__main__':
             'env': 'clear_env', # 'clear_env_small', 'clear_env', walled_env', 'walled_env_with_columns'
             'num_obstacles': 10,
             'render': {
-                'log_obs': True, # log occupancy observations
+                'log_obs': False, # log occupancy observations
                 'show': True, # show the environment
             },
             'agent': {
                 # Options: 'position', 'heading', 'velocity'
-                # 'action_type': 'heading', # Use for PPO and SAC
-                'action_type': 'position', # Use for SAM
+                'action_type': 'heading', # Use for PPO and SAC
+                # 'action_type': 'position', # Used by default for SAM
                 # action_type: 'velocity', # Use for GTSP
             },
             'train': {
@@ -118,9 +119,9 @@ if __name__ == '__main__':
             'evaluate': {
                 'eval_mode': True,
                 'num_eps': 2,
-                'policy_types': ['sam'], # list of policy types to evaluate
-                'model_names': ['clear_env_sam'], # list of model names to evaluate
-                'model_paths': ['models/area_clearing'], # list of model names to evaluate
+                'policy_types': ['sam', 'ppo', 'sac'], # list of policy types to evaluate
+                'model_names': ['clear_env_sam', 'ppo_model', 'sac_model'], # list of model names to evaluate
+                'model_path': 'models/area_clearing', # list of model names to evaluate
                 'obs_configs': [None], # list of obstacle configurations to evaluate
             }
         }
