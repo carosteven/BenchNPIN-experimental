@@ -80,7 +80,7 @@ build_submodule("benchnpin/common/spfa/setup.py")
 
 setup(
     name="benchnpin",
-    version="0.1.0",
+    version="0.1.2",
     license="MIT",
     description= "Benchmarking Non-prehensile Interactive Navigation",
     long_description=long_description,

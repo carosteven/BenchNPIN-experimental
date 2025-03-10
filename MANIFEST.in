@@ -1,4 +1,6 @@
 recursive-include benchnpin *.yaml
+recursive-include benchnpin/environments/ship_ice_nav/* .pkl
 include benchnpin/common/spfa/*.so
 include benchnpin/common/spfa/* .pyd
 recursive-include benchnpin/common/spfa *
+global-exclude *.zip
