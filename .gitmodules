@@ -1,3 +1,6 @@
-[submodule "Utils/GLNS.jl"]
-	path = Utils/GLNS.jl
-	url = git@github.com:megalphian/GLNS.jl.git
+[submodule "deps/spfa"]
+	path = deps/spfa
+	url = https://github.com/IvanIZ/spfa.git
+[submodule "deps/GLNS.jl"]
+	path = deps/GLNS.jl
+	url = https://github.com/megalphian/GLNS.jl.git
