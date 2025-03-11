@@ -11,16 +11,7 @@ from benchnpin.common.utils.utils import DotDict
 from os.path import dirname
 import pickle
 
-def main(user_config, job_id):
-    cfg = DotDict.load_from_file(f'{dirname(dirname(__file__))}/benchnpin/environments/maze_NAMO/config.yaml')
-    # Update the base configuration with the user provided configuration
-    for cfg_type in user_config:
-        if cfg_type in cfg:
-            if type(user_config[cfg_type]) is dict:
-                for param in user_config[cfg_type]:
-                    cfg[cfg_type][param] = user_config[cfg_type][param]
-            else:
-                cfg[cfg_type] = user_config[cfg_type]
+def main(cfg, job_id):
 
     if cfg.train.train_mode:
 
@@ -93,12 +84,12 @@ if __name__ == '__main__':
     job_id = parser.parse_args().job_id
 
     if parser.parse_args().config_file is not None:
-        config = DotDict.load_from_file(parser.parse_args().config_file)
+        cfg = DotDict.load_from_file(parser.parse_args().config_file)
 
 
     else:
         # High level configuration for the box delivery task
-        config = {
+        cfg = {
             'output_dir': 'logs/',
             'egocentric_obs': False,
             'concentration': 0.1,  # options are 0.1, 0.2, 0.3, 0.4, 0.5
@@ -119,5 +110,7 @@ if __name__ == '__main__':
             },
         }
 
-    main(config, job_id)
+        cfg = DotDict.to_dot_dict(cfg)
+
+    main(cfg, job_id)
 

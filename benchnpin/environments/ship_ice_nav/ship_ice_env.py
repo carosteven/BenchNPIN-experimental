@@ -41,11 +41,19 @@ class ShipIceEnv(gym.Env):
         self.current_dir = os.path.dirname(__file__)
 
         # construct absolute path to the env_config folder
-        if cfg is None:
-            cfg_path = os.path.join(self.current_dir, 'config.yaml')
-            cfg = DotDict.load_from_file(cfg_path)
+        base_cfg_path = os.path.join(self.current_dir, 'config.yaml')
+        self.cfg = DotDict.load_from_file(base_cfg_path)
 
-        self.cfg = cfg
+        if cfg is not None:
+            # Update the base configuration with the user provided configuration
+            for cfg_type in cfg:
+                if type(cfg[cfg_type]) is DotDict:
+                    if cfg_type not in self.cfg:
+                        self.cfg[cfg_type] = DotDict()
+                    for param in cfg[cfg_type]:
+                        self.cfg[cfg_type][param] = cfg[cfg_type][param]
+                else:
+                    self.cfg[cfg_type] = cfg[cfg_type]
         
         self.local_window_v_shift = 2
 

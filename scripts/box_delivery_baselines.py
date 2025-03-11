@@ -10,16 +10,7 @@ from benchnpin.common.metrics.base_metric import BaseMetric
 from benchnpin.common.utils.utils import DotDict
 from os.path import dirname
 
-def main(user_config, job_id):
-    cfg = DotDict.load_from_file(f'{dirname(dirname(__file__))}/benchnpin/environments/box_delivery/config.yaml')
-    # Update the base configuration with the user provided configuration
-    for cfg_type in user_config:
-        if cfg_type in cfg:
-            if type(user_config[cfg_type]) is dict:
-                for param in user_config[cfg_type]:
-                    cfg[cfg_type][param] = user_config[cfg_type][param]
-            else:
-                cfg[cfg_type] = user_config[cfg_type]
+def main(cfg, job_id):
 
     if cfg.train.train_mode:
         if cfg.train.resume_training:
@@ -89,12 +80,12 @@ if __name__ == '__main__':
     job_id = parser.parse_args().job_id
 
     if parser.parse_args().config_file is not None:
-        config = DotDict.load_from_file(parser.parse_args().config_file)
+        cfg = DotDict.load_from_file(parser.parse_args().config_file)
 
 
     else:
         # High level configuration for the box delivery task
-        config={
+        cfg={
             'render': {
                 'show': True,           # if true show animation plots
                 'show_obs': False,       # if true show observation
@@ -124,5 +115,7 @@ if __name__ == '__main__':
                 'models': ['ppo_small_empty', 'sac_small_empty', 'sam_small_empty'], # list of model names to evaluate
             }
         }
+        
+        cfg = DotDict.to_dot_dict(cfg)
 
-    main(config, job_id)
+    main(cfg, job_id)
