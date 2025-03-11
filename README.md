@@ -64,9 +64,20 @@ This envronment consists of a set of movable boxes and a _clearance_ area. The t
 
 ## Installation
 
-```
+### Install from `pip`
+
+```bash
 pip install benchnpin
 ```
+
+`pip install` above is sufficient to run _Ship-Ice_ and _Maze_ environments. To run _Box-Delivery_ and _Area-Clearing_, please install shortest path module as follows
+
+```bash
+git clone https://github.com/IvanIZ/spfa.git
+cd spfa
+python setup.py install
+```
+
 
 ### Build from Source
 
@@ -91,18 +102,51 @@ python setup.py install
 
 ## Usage
 
+
+### Creating an environment
+
 ```python
+import benchnpin.environments
 import gymnasium as gym
 
 env = gym.make('ship-ice-v0')
 observation, info = env.reset()
 
-terminated, truncated = False
+terminated = truncated = False
 while not (terminated or truncated):
 
     action = your_policy(observation)
     observation, reward, terminated, truncated, info = env.step(action)
     env.render()
+```
+
+
+### Creating a custom policy from policy template
+```python
+from benchnpin.baselines.base_class import BasePolicy
+
+class CustomPolicy(BasePolicy):
+
+    def __init__(self) -> None:
+        super().__init__()
+
+        # initialize costum policy here
+        ...
+
+    
+    def train(self):
+        # train the custom policy here, if needed
+        ...
+
+
+    def act(self, observation, **kwargs):
+        # define how custom policy acts in the environment
+        ...
+
+    
+    def evaluate(self, num_eps: int, model_eps: str ='latest'):
+        # define how custom policy is evaluated here
+        ...
 ```
 
 
