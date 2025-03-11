@@ -1,3 +1,0 @@
-[submodule "Utils/GLNS.jl"]
-	path = Utils/GLNS.jl
-	url = git@github.com:megalphian/GLNS.jl.git
