@@ -61,6 +61,11 @@ def main(cfg, job_id):
                 sac_policy = AreaClearingSAC(model_name=model_name, model_path=model_path, cfg=cfg)
                 benchmark_results.append(sac_policy.evaluate(num_eps=num_eps))
 
+            elif policy_type == 'planning_based':
+                # ========================== Planning Based Policy =============================
+                planning_based_policy = PlanningBasedPolicy(cfg.glns_executable_path, cfg=cfg)
+                benchmark_results.append(planning_based_policy.evaluate(num_eps=num_eps))
+
     BaseMetric.plot_algs_scores(benchmark_results, save_fig_dir='./', plot_success=True)
 
     # save eval results to disk
@@ -119,11 +124,12 @@ if __name__ == '__main__':
             'evaluate': {
                 'eval_mode': True,
                 'num_eps': 2,
-                'policy_types': ['sam', 'ppo', 'sac'], # list of policy types to evaluate
-                'model_names': ['clear_env_sam', 'ppo_model', 'sac_model'], # list of model names to evaluate
+                'policy_types': ['planning_based','sam', 'ppo', 'sac'], # list of policy types to evaluate
+                'model_names': ['', 'clear_env_sam', 'ppo_model', 'sac_model'], # list of model names to evaluate
                 'model_path': 'models/area_clearing', # list of model names to evaluate
                 'obs_configs': [None], # list of obstacle configurations to evaluate
-            }
+            },
+            'glns_executable_path': 'deps/GLNS.jl/GLNScmd.jl',
         }
 
         cfg = DotDict.to_dot_dict(cfg)

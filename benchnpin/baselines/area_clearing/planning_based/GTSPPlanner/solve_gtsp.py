@@ -8,8 +8,9 @@ debug = False
 
 class GTSPSolver:
 
-    def __init__(self):
+    def __init__(self, glns_executable_path):
         self.gtsp_nodeset = None
+        self.glns_executable_path = glns_executable_path
 
     def solve_GTSP_Problem(self, obs_to_push, obs_pushing_paths, transition_graph_lookup, robot_pose = None, time_limit = None):    
 
@@ -32,24 +33,21 @@ class GTSPSolver:
 
         return output_tuple, time_found
     
-    @staticmethod
-    def find_classic_tour(gtsp_prop):
-        gtsp_command = 'Utils/GLNS.jl/GLNScmd.jl ' + gtsp_prop.file_name + '.gtsp -output=tour.txt'
+    def find_classic_tour(self, gtsp_prop):
+        gtsp_command = self.glns_executable_path + ' ' + gtsp_prop.file_name + '.gtsp -output=tour.txt'
         return GTSPSolver.run_GTSP_command(gtsp_command)
 
-    @staticmethod
-    def find_tour_with_time_limit(gtsp_prop, time_limit=1000):
+    def find_tour_with_time_limit(self, gtsp_prop, time_limit=1000):
         # Time limit unit - s
-        gtsp_command = 'Utils/GLNS.jl/GLNScmd.jl ' + gtsp_prop.file_name + '.gtsp -output=tour.txt -max_time=' + str(time_limit) + ' -trials=1000'
+        gtsp_command = self.glns_executable_path + ' ' + gtsp_prop.file_name + '.gtsp -output=tour.txt -max_time=' + str(time_limit) + ' -trials=1000'
         return GTSPSolver.run_GTSP_command(gtsp_command)
     
-    @staticmethod
-    def find_tour_with_seed(gtsp_prop, seed_tour):
+    def find_tour_with_seed(self, gtsp_prop, seed_tour):
         with open(gtsp_prop.init_tour_file_name, 'w') as file:
             for node_id in seed_tour:
                 file.write('%s, ' % node_id)
         
-        gtsp_command = 'Utils/GLNS.jl/GLNScmd.jl ' + gtsp_prop.file_name + '.gtsp --init_tour_file=' + gtsp_prop.init_tour_file_name + ' -output=tour.txt'
+        gtsp_command = self.glns_executable_path + ' ' + gtsp_prop.file_name + '.gtsp --init_tour_file=' + gtsp_prop.init_tour_file_name + ' -output=tour.txt'
         return GTSPSolver.run_GTSP_command(gtsp_command)
 
 

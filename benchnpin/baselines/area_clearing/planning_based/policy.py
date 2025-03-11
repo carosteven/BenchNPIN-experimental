@@ -49,18 +49,20 @@ class PlanningBasedPolicy(BasePolicy):
     This policy first plans a path using a ship planner and outputs actions to track the planned path.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, glns_executable_path, cfg=None) -> None:
         super().__init__()
 
         # get current directory of this script
         self.current_dir = os.path.dirname(__file__)
         # construct absolute path to the env_config folder
-        cfg_file = os.path.join(self.current_dir, 'config.yaml')
-        self.cfg = DotDict.load_from_file(cfg_file)
+        gtsp_cfg_file = os.path.join(self.current_dir, 'gtsp_config.yaml')
+        self.gtsp_cfg = DotDict.load_from_file(gtsp_cfg_file)
+
+        self.cfg = cfg
 
         self.path = None
-        self.dt = self.cfg.controller.dt
-        self.velocity = self.cfg.controller.target_speed
+        self.dt = self.gtsp_cfg.controller.dt
+        self.velocity = self.gtsp_cfg.controller.target_speed
 
         self.boundary_vertices = None
         self.walls = None
@@ -70,6 +72,8 @@ class PlanningBasedPolicy(BasePolicy):
         self.boundary_goals = None
 
         self.current_point_id = 0
+
+        self.glns_executable_path = glns_executable_path
 
 
     def update_boundary_and_obstacles(self, boundary, walls, static_obstacles):
@@ -137,7 +141,7 @@ class PlanningBasedPolicy(BasePolicy):
 
         transition_graph = TransitionGraphLookup.compute_transition_graph(agent_pos, obstacles_to_push, all_pushing_paths)
 
-        gtsp_solver = GTSPSolver()
+        gtsp_solver = GTSPSolver(self.glns_executable_path)
         output_tuple, time_found = gtsp_solver.solve_GTSP_Problem(obstacles_to_push, all_pushing_paths, transition_graph, agent_pos)
         final_nodes, transition_paths, transition_cost, transition_length, total_angle, transition_costs = output_tuple
 
@@ -170,7 +174,7 @@ class PlanningBasedPolicy(BasePolicy):
             cy = self.path.T[1]
             ch = self.path.T[2]
             self.dp = DP(x=agent_pos[0], y=agent_pos[1], yaw=agent_pos[2],
-                    cx=cx, cy=cy, ch=ch, **self.cfg.controller)
+                    cx=cx, cy=cy, ch=ch, **self.gtsp_cfg.controller)
             self.dp_state = self.dp.state
         
             self.current_point_id = 1
@@ -197,7 +201,7 @@ class PlanningBasedPolicy(BasePolicy):
 
 
     def evaluate(self, num_eps: int, model_eps: str ='latest') -> list:
-        env = gym.make('area-clearing-v0')
+        env = gym.make('area-clearing-v0', cfg=self.cfg)
         env = env.unwrapped
 
         old_action_type = env.cfg.agent.action_type
