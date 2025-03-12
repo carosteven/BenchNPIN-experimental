@@ -30,27 +30,29 @@ def main(cfg, job_id):
     if cfg.evaluate.eval_mode:
         benchmark_results = []
         num_eps = cfg.evaluate.num_eps
-        for policy_type, model_eps in zip(cfg.evaluate.policy_types, cfg.evaluate.model_eps):
+        model_path = cfg.evaluate.model_path
+        for policy_type, observation_type, model_name in zip(cfg.evaluate.policy_types, cfg.evaluate.observation_types, cfg.evaluate.model_names):
             cfg.train.job_type = policy_type
+            cfg.egocentric_obs = observation_type
 
             if policy_type == 'ppo':
                 # ================================ PPO Policy =================================    
-                ppo_policy = ShipIcePPO(cfg=cfg)
-                benchmark_results.append(ppo_policy.evaluate(num_eps=num_eps, model_eps=model_eps))
+                ppo_policy = ShipIcePPO(model_name=model_name, model_path=model_path, cfg=cfg)
+                benchmark_results.append(ppo_policy.evaluate(num_eps=num_eps))
 
             elif policy_type == 'sac':
                 # ================================ SAC Policy =================================
-                sac_policy = ShipIceSAC(cfg=cfg)
-                benchmark_results.append(sac_policy.evaluate(num_eps=num_eps, model_eps=model_eps))
+                sac_policy = ShipIceSAC(model_name=model_name, model_path=model_path, cfg=cfg)
+                benchmark_results.append(sac_policy.evaluate(num_eps=num_eps))
 
             elif policy_type == 'lattice':
                 # ================================ Lattice Planning Policy =================================
-                lattice_planning_policy = PlanningBasedPolicy(planner_type='lattice')
+                lattice_planning_policy = PlanningBasedPolicy(planner_type='lattice', cfg=cfg)
                 benchmark_results.append(lattice_planning_policy.evaluate(num_eps=num_eps))
 
             elif policy_type == 'predictive':
                 # ================================ Predictive Planning Policy =================================
-                predictive_planning_policy = PlanningBasedPolicy(planner_type='predictive')
+                predictive_planning_policy = PlanningBasedPolicy(planner_type='predictive', cfg=cfg)
                 benchmark_results.append(predictive_planning_policy.evaluate(num_eps=num_eps))
         
         BaseMetric.plot_algs_scores(benchmark_results, save_fig_dir='./')
@@ -104,9 +106,10 @@ if __name__ == '__main__':
             'evaluate': {
                 'eval_mode': True,
                 'num_eps': 1,
-                'policy_types': [], # list of policy types to evaluate
-                'action_types': [], # list of action types to evaluate
-                'models': [], # list of model names to evaluate
+                'policy_types': ['ppo', 'sac', 'lattice', 'predictive'],    # list of policy types to evaluate
+                'observation_types': [True, True, False, False],               # RL policies use egocentric observations
+                'model_names': ['ppo_model', 'sac_model', '', ''],          # list of model names to evaluate
+                'model_path': './models/ship_ice', # path to the models
             },
         }
 

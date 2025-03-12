@@ -15,7 +15,7 @@ class PlanningBasedPolicy(BasePolicy):
     This policy first plans a path using a ship planner and outputs actions to track the planned path.
     """
 
-    def __init__(self, planner_type) -> None:
+    def __init__(self, planner_type, cfg=None) -> None:
         super().__init__()
 
         if planner_type not in ['predictive', 'lattice']:
@@ -25,6 +25,8 @@ class PlanningBasedPolicy(BasePolicy):
         self.lattice_planner = LatticePlanner()
         self.predictive_planner = PredictivePlanner()
         self.path = None
+
+        self.cfg = cfg
 
     
     def plan_path(self, ship_pos, goal, observation, conc, obstacles=None):
@@ -69,7 +71,7 @@ class PlanningBasedPolicy(BasePolicy):
 
 
     def evaluate(self, num_eps: int, model_eps: str ='latest') -> Tuple[List[float], List[float], List[float], str]:
-        env = gym.make('ship-ice-v0', config_dict={'egocentric_obs': False})
+        env = gym.make('ship-ice-v0', cfg=self.cfg)
         env = env.unwrapped
 
         if self.planner_type == 'lattice':

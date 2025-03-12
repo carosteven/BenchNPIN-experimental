@@ -78,7 +78,7 @@ class ShipIcePPO(BasePolicy):
             model_checkpoint = self.model_name + '_' + model_eps + '_steps'
             self.model = PPO.load(os.path.join(self.model_path, model_checkpoint))
 
-        env = gym.make('ship-ice-v0', config_dict={'egocentric_obs': True})
+        env = gym.make('ship-ice-v0', cfg=self.cfg)
         env = env.unwrapped
         metric = ShipIceMetric(alg_name="PPO", ship_mass=env.cfg.ship.mass, goal=env.goal)
 
