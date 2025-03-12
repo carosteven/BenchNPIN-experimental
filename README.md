@@ -82,6 +82,9 @@ python setup.py install
 ### Build from source
 
 1. Clone the project
+```bash
+git clone https://github.com/IvanIZ/BenchNPIN.git
+```
 
 2. Install dependencies.
 ```bash
