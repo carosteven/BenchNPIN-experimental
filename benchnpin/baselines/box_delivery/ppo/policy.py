@@ -105,7 +105,7 @@ class BoxDeliveryPPO(BasePolicy):
         
         env.close()
         metric.plot_scores(save_fig_dir=env.cfg.output_dir)
-        return metric.efficiency_scores, metric.effort_scores, metric.rewards, f"PPO_{self.model_name}", metric.success_rates
+        return metric.success_rates, metric.efficiency_scores, metric.effort_scores, metric.rewards, f"PPO_{self.model_name}"
 
 
     

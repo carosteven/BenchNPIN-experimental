@@ -36,26 +36,27 @@ def main(cfg, job_id):
     if cfg.evaluate.eval_mode:
         benchmark_results = []
         num_eps = cfg.evaluate.num_eps
-        for policy_type, action_type, model_name, obs_config in zip(cfg.evaluate.policy_types, cfg.evaluate.action_types, cfg.evaluate.models, cfg.evaluate.obs_configs):
+        model_path = cfg.evaluate.model_path
+        for policy_type, action_type, model_name, obs_config in zip(cfg.evaluate.policy_types, cfg.evaluate.action_types, cfg.evaluate.model_names, cfg.evaluate.obs_configs):
             cfg.agent.action_type = action_type
             cfg.train.job_type = policy_type
             cfg.env.obstacle_config = obs_config
 
             if policy_type == 'sam':
                 # ========================= Spatial Action Map Policy =========================
-                sam_policy = BoxDeliverySAM(model_name=model_name, cfg=cfg)
+                sam_policy = BoxDeliverySAM(model_name=model_name, model_path=model_path, cfg=cfg)
                 benchmark_results.append(sam_policy.evaluate(num_eps=num_eps))
 
             elif policy_type == 'ppo':
                 # ================================ PPO Policy =================================    
-                ppo_policy = BoxDeliveryPPO(model_name=model_name, cfg=cfg)
+                ppo_policy = BoxDeliveryPPO(model_name=model_name, model_path=model_path, cfg=cfg)
                 benchmark_results.append(ppo_policy.evaluate(num_eps=num_eps))
 
             elif policy_type == 'sac':
                 # ================================ SAC Policy =================================
-                sac_policy = BoxDeliverySAC(model_name=model_name, cfg=cfg)
+                sac_policy = BoxDeliverySAC(model_name=model_name, model_path=model_path, cfg=cfg)
                 benchmark_results.append(sac_policy.evaluate(num_eps=num_eps))
-        
+
         BaseMetric.plot_algs_scores(benchmark_results, save_fig_dir='./', plot_success=True)
 
 if __name__ == '__main__':
@@ -112,7 +113,9 @@ if __name__ == '__main__':
                 'num_eps': 1,
                 'policy_types': ['ppo', 'sac', 'sam'], # list of policy types to evaluate
                 'action_types': ['heading', 'heading', 'position'], # list of action types to evaluate
-                'models': ['ppo_small_empty', 'sac_small_empty', 'sam_small_empty'], # list of model names to evaluate
+                'model_names': ['ppo_small_empty', 'sac_small_empty', 'sam_small_empty'], # list of model names to evaluate
+                'model_path': 'models/box_delivery', # path to the models
+                'obs_configs': ['small_empty', 'small_empty', 'small_empty'], # list of observation configurations
             }
         }
         

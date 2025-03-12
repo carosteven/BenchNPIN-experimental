@@ -126,7 +126,7 @@ if __name__ == '__main__':
                 'num_eps': 2,
                 'policy_types': ['planning_based','sam', 'ppo', 'sac'], # list of policy types to evaluate
                 'model_names': ['', 'clear_env_sam', 'ppo_model', 'sac_model'], # list of model names to evaluate
-                'model_path': 'models/area_clearing', # list of model names to evaluate
+                'model_path': 'models/area_clearing', # path to the models
                 'obs_configs': [None], # list of obstacle configurations to evaluate
             },
             'glns_executable_path': 'deps/GLNS.jl/GLNScmd.jl',
