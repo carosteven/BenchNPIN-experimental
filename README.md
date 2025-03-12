@@ -79,7 +79,7 @@ python setup.py install
 ```
 
 
-### Build from Source
+### Build from source
 
 1. Clone the project
 
@@ -103,7 +103,7 @@ python setup.py install
 ## Usage
 
 
-### Creating an environment
+### Running an interactive navigation environment
 
 ```python
 import benchnpin.environments
@@ -121,7 +121,7 @@ while not (terminated or truncated):
 ```
 
 
-### Creating a custom policy from policy template
+### Creating a custom policy from the policy template
 ```python
 from benchnpin.baselines.base_class import BasePolicy
 
@@ -147,6 +147,30 @@ class CustomPolicy(BasePolicy):
     def evaluate(self, num_eps: int, model_eps: str ='latest'):
         # define how custom policy is evaluated here
         ...
+```
+
+
+### Running benchmarks on policies
+```python
+from benchnpin.common.metrics.base_metric import BaseMetric
+import CustomPolicy1      # some custom policies
+import CustomPolicy2
+import CustomPolicy3
+
+# initialize policies to be evaluated
+policy1 = CustomPolicy1()
+policy2 = CustomPolicy2()
+policy3 = CustomPolicy3()
+
+# run evaluations
+num_eps = 200    # number of episodes to evaluate each policy
+benchmark_results = []
+benchmark_results.append(policy1.evaluate(num_eps=num_eps))
+benchmark_results.append(policy2.evaluate(num_eps=num_eps))
+benchmark_results.append(policy3.evaluate(num_eps=num_eps))
+
+# plot efficiency and effort scores
+BaseMetric.plot_algs_scores(benchmark_results, save_fig_dir='./')
 ```
 
 
