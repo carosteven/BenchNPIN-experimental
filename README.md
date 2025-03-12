@@ -96,7 +96,8 @@ pip install -e .
 
 4. Install shortest path module
 ```bash
-cd benchnpin/common/spfa
+git clone https://github.com/IvanIZ/spfa.git
+cd spfa
 python setup.py install
 ```
 
