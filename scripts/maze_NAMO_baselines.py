@@ -29,19 +29,20 @@ def main(cfg, job_id):
     if cfg.evaluate.eval_mode:
         benchmark_results = []
         num_eps = cfg.evaluate.num_eps
-        for policy_type, model_eps, maze_version in zip(cfg.evaluate.policy_types, cfg.evaluate.model_eps, cfg.evaluate.maze_versions):
+        model_path = cfg.evaluate.model_path
+        for policy_type, model_name in zip(cfg.evaluate.policy_types, cfg.evaluate.model_names):
             cfg.train.job_type = policy_type
-            cfg.env.maze_version = maze_version
+            cfg.maze_version = cfg.evaluate.maze_version
 
             if policy_type == 'ppo':
                 # ================================ PPO Policy =================================    
-                ppo_policy = MazeNAMOPPO(cfg=cfg)
-                benchmark_results.append(ppo_policy.evaluate(num_eps=num_eps, model_eps=model_eps))
+                ppo_policy = MazeNAMOPPO(model_name=model_name, model_path=model_path, cfg=cfg)
+                benchmark_results.append(ppo_policy.evaluate(num_eps=num_eps))
 
             elif policy_type == 'sac':
                 # ================================ SAC Policy =================================
-                sac_policy = MazeNAMOSAC(cfg=cfg)
-                benchmark_results.append(sac_policy.evaluate(num_eps=num_eps, model_eps=model_eps))
+                sac_policy = MazeNAMOSAC(model_name=model_name, model_path=model_path, cfg=cfg)
+                benchmark_results.append(sac_policy.evaluate(num_eps=num_eps))
         
         BaseMetric.plot_algs_scores(benchmark_results, save_fig_dir='./')
 
@@ -97,9 +98,10 @@ if __name__ == '__main__':
             'evaluate': {
                 'eval_mode': True,
                 'num_eps': 1,
-                'policy_types': [], # list of policy types to evaluate
-                'models_eps': [], # list of model eps to evaluate
-                'maze_versions': [], # list of maze versions to evaluate
+                'policy_types': ['ppo', 'sac'], # list of policy types to evaluate
+                'model_names': ['ppo_model', 'sac_model'], # list of model names to evaluate
+                'model_path': 'models/maze', # path to the models
+                'maze_version': 1, # list of maze versions to evaluate
             },
         }
 
