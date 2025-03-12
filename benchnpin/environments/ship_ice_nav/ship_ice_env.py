@@ -89,12 +89,12 @@ class ShipIceEnv(gym.Env):
         else:
 
             if self.cfg.egocentric_obs:
-                grid_size = 1/cfg.occ.m_to_pix_scale
-                self.occupancy = OccupancyGrid(grid_width=grid_size, grid_height=grid_size, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, local_width=6, local_height=6, ship_body=None, meter_to_pixel_scale=cfg.occ.m_to_pix_scale)
+                grid_size = 1 / self.cfg.occ.m_to_pix_scale
+                self.occupancy = OccupancyGrid(grid_width=grid_size, grid_height=grid_size, map_width=self.cfg.occ.map_width, map_height=self.cfg.occ.map_height, local_width=6, local_height=6, ship_body=None, meter_to_pixel_scale=self.cfg.occ.m_to_pix_scale)
                 obs_shape = (4, self.occupancy.local_window_height, self.occupancy.local_window_width)
             
             else:
-                self.occupancy = OccupancyGrid(grid_width=0.2, grid_height=0.2, map_width=cfg.occ.map_width, map_height=cfg.occ.map_height, local_width=6, local_height=6, ship_body=None, meter_to_pixel_scale=cfg.occ.m_to_pix_scale)
+                self.occupancy = OccupancyGrid(grid_width=0.2, grid_height=0.2, map_width=self.cfg.occ.map_width, map_height=self.cfg.occ.map_height, local_width=6, local_height=6, ship_body=None, meter_to_pixel_scale=self.cfg.occ.m_to_pix_scale)
                 obs_shape = (2, self.occupancy.occ_map_height, self.occupancy.occ_map_width)
             self.observation_space = spaces.Box(low=0, high=255, shape=obs_shape, dtype=np.uint8)
 

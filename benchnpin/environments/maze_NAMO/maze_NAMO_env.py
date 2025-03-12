@@ -72,10 +72,10 @@ class MazeNAMO(gym.Env):
         else:
             raise Exception("Invalid Maze Version!")
 
-        grid_size = 1/cfg.occ.m_to_pix_scale
-        self.occupancy = OccupancyGrid(grid_width=grid_size, grid_height= grid_size, map_width=cfg.env.width, map_height=cfg.env.length, 
-                                       local_width= cfg.occ.local_width, local_height=cfg.occ.local_height,
-                                       ship_body=None, meter_to_pixel_scale=cfg.occ.m_to_pix_scale)
+        grid_size = 1 / self.cfg.occ.m_to_pix_scale
+        self.occupancy = OccupancyGrid(grid_width=grid_size, grid_height= grid_size, map_width=self.cfg.env.width, map_height=self.cfg.env.length, 
+                                       local_width=self.cfg.occ.local_width, local_height=self.cfg.occ.local_height,
+                                       ship_body=None, meter_to_pixel_scale=self.cfg.occ.m_to_pix_scale)
 
         self.beta = 1.5         # amount to scale the collision reward
         self.k = 2        # amount to scale the distance reward
@@ -242,7 +242,7 @@ class MazeNAMO(gym.Env):
                 self.start = (11.25, 3.75, np.pi / 2)         # for 15x15, v1
 
             elif self.cfg.maze_version == 2:
-                self.start = (15, 15, 3 * np.pi / 2)         # for 15x15, v2
+                self.start = (16.66, 16.66, 3 * np.pi / 2)         # for 15x15, v2
 
         self.obs_dicts = self.generate_obstacles()
         
