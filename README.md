@@ -124,6 +124,8 @@ while not (terminated or truncated):
     env.render()
 ```
 
+To configure the parameters for each environment, please refer to the configuration examples for [Maze](./scripts/configure_maze.py),  [Ship-Ice](./scripts/configure_ship_ice.py), [Box-Delivery](./scripts/configure_box_delivery.py), and [Area-Clearing](./scripts/configure_area_clearing.py).
+
 
 ### Creating a custom policy from the policy template
 ```python
