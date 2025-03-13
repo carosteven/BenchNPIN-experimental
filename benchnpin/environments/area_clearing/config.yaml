@@ -3,10 +3,13 @@
 #############################################################################
 ### GLOBAL PARAMS
 output_dir: "logs/" # 'output/trial0'
-
 plot:
   show: false       # true will show planner plots
-
+env: 'clear_env' # 'clear_env_small', 'clear_env', walled_env', 'walled_env_with_columns'
+num_obstacles: 10
+render: 
+  log_obs: False # log occupancy observations
+  show: True # show the environment
 obstacle_size: 0.5
 min_obs_dist: 1.5       # minimum obstacle distance during random initialization
 
@@ -32,6 +35,12 @@ prim:
   step_size: 0.1   # step size for sampling points on the path
   turning_radius: 2.0  # turning radius of the ship in lattice units
 agent:
+  
+  # Options: 'position', 'heading', 'velocity'
+  action_type: 'heading' # Use for PPO and SAC
+  # 'action_type': 'position', # Used by default for SAM
+  # action_type: 'velocity', # Use for GTSP
+
   mass: 1  # mass of the NRC ship in kg
   padding: 0.25  # adds padding to ship footprint
   length: 1.38  # length of the NRC ship in meters
