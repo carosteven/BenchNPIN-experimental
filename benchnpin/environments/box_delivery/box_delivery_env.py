@@ -177,11 +177,11 @@ class BoxDeliveryEnv(gym.Env):
         self.plot = None
         self.renderer = None
 
-        if self.cfg.teleop_mode:
-            self.angular_speed = 0.0
-            self.angular_speed_increment = 0.005
-            self.linear_speed = 0.0
-            self.linear_speed_increment = 0.02
+        # used for teleoperation
+        self.angular_speed = 0.0
+        self.angular_speed_increment = 0.005
+        self.linear_speed = 0.0
+        self.linear_speed_increment = 0.02
 
         if self.cfg.render.show_obs or self.cfg.render.show:
             # show state

@@ -16,8 +16,12 @@ import pickle
 from pynput import keyboard
 from os.path import dirname
 
-cfg_file = f'{dirname(dirname(__file__))}/benchnpin/environments/box_delivery/config_ppo.yaml'
-env = gym.make('box-delivery-v0', cfg_file=cfg_file)
+env = gym.make('box-delivery-v0')
+env = env.unwrapped
+env.cfg.teleop_mode = True
+env.cfg.inactivity_cutoff_sam = 10000 # set to a large number to avoid inactivity cutoff
+env.cfg.inactivity_cutoff = 10000 # set to a large number to avoid inactivity cutoff
+env.reset()
 
 observations = []
 actions = []                # this is actually the states (i.e. 3 dof pose)
