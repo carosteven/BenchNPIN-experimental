@@ -67,10 +67,10 @@ This envronment consists of a set of movable boxes and a _clearance_ area. The t
 ### Install from `pip`
 
 ```bash
-pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ benchnpin
+pip install benchnpin
 ```
 
-NOTE: we are currently using TestPyPI, and will release the official PyPI library soon. Please stay tuned! The `pip install` above is sufficient to run _Ship-Ice_ and _Maze_ environments. To run _Box-Delivery_ and _Area-Clearing_, please install shortest path module as follows
+The `pip install` above is sufficient to run _Ship-Ice_ and _Maze_ environments. To run _Box-Delivery_ and _Area-Clearing_, please install shortest path module as follows
 
 ```bash
 git clone https://github.com/IvanIZ/spfa.git
