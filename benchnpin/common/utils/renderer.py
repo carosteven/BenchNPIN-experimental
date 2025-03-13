@@ -125,11 +125,12 @@ class Renderer():
         """
         Display the goal line for ship ice navigation
         """
+        goal_line = self.to_pygame([self.goal_line, self.goal_line])[1]
         pygame.draw.line(
             self.window,
             (255, 255, 255),  # Line color (white)
-            (0, self.goal_line),                # Start point (x1, y1)
-            (self.pygame_w, self.goal_line),    # End point (x2, y2)
+            (0, goal_line),                # Start point (x1, y1)
+            (self.pygame_w, goal_line),    # End point (x2, y2)
             6               # Line width
         )
 
