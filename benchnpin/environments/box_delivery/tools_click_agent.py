@@ -74,9 +74,9 @@ class ClickAgent:
         plt.close()
 
 def main():
-    # cfg_file = f'{dirname(__file__)}/config_sam.yaml'
     env = gym.make('box-delivery-v0')
     env = env.unwrapped
+    env.cfg.render.show_obs = True # Show observations
     agent = ClickAgent(env)
     agent.run()
     env.close()
