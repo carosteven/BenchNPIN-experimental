@@ -108,6 +108,8 @@ output_dir: "logs/"   # 'output/trial0'
 num_obstacles: 5
 obstacle_size: 0.5
 
+render_scale: 80      # scale renderer window to fit screen size
+
 maze_version: 1   # maze versions 1 and 2 are available
 train:
   train_mode: false

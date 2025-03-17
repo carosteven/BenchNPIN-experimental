@@ -598,7 +598,7 @@ class MazeNAMO(gym.Env):
         """Renders the environment."""
 
         if self.renderer is None:
-            self.renderer = Renderer(self.space, env_width=self.cfg.env.width, env_height=self.cfg.env.length, render_scale=80, 
+            self.renderer = Renderer(self.space, env_width=self.cfg.env.width, env_height=self.cfg.env.length, render_scale=self.cfg.render_scale, 
                     background_color=(200, 200, 200), caption="Maze", goal_region=((self.cfg.env.goal_x, self.cfg.env.goal_y), self.cfg.goal_radius))
 
         if self.cfg.render_snapshot:

@@ -120,6 +120,8 @@ anim:
 seed: 1
 #ice_current: [0, -1]       # option to add ice current to simulation
 
+render_scale: 30      # scale renderer window to fit screen size
+
 ### SHIP MODEL AND CONTROLLER PARAMS
 controller:
   dt: 0.2  # the ship dynamics model was discretized with this dt (originally 0.02)

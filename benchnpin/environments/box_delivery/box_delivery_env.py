@@ -234,7 +234,7 @@ class BoxDeliveryEnv(gym.Env):
             if self.renderer is None:
                 self.renderer = Renderer(self.space, env_width=self.room_length + self.wall_thickness / 2,
                                          env_height=self.room_width + self.wall_thickness / 2,
-                                         render_scale=30, background_color=(234, 234, 234), caption='Box Delivery', centered=True)
+                                         render_scale=self.cfg.render_scale, background_color=(234, 234, 234), caption='Box Delivery', centered=True)
             else:
                 self.renderer.reset(new_space=self.space)
 

@@ -350,7 +350,7 @@ class AreaClearingEnv(gym.Env):
 
         if self.cfg.render.show:
             if self.renderer is None:
-                self.renderer = Renderer(self.space, env_width=self.map_width + 2, env_height=self.map_height + 2, render_scale=30, 
+                self.renderer = Renderer(self.space, env_width=self.map_width + 2, env_height=self.map_height + 2, render_scale=self.cfg.render_scale, 
                         background_color=(245, 245, 245), caption="Area Clearing", 
                         centered=True,
                         clearance_boundary=self.boundary_vertices

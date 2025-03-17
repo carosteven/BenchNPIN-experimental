@@ -22,6 +22,7 @@ cfg = {
     'env': {
         'obstacle_config': 'small_empty', # options are small_empty, small_columns, large_columns, large_divider
     },
+    "render_scale": 50,         # Scalar applied to rendering window to fit the screen. Reducing this value makes rendering window smaller
 }
 ############### ^^^^^^^ Configurable Parameters for Box-Delivery ^^^^^^^ ####################
 

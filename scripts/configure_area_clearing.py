@@ -10,7 +10,8 @@ cfg = {
     "output_dir": "logs/",      # Specify directory for loggings
     "env": 'clear_env',         # Area structures. Options: 'clear_env_small', 'clear_env', walled_env', 'walled_env_with_columns'
     "num_obstacles": 15,        # Number of randomly positioned boxes to be removed
-    "obstacle_size": 0.5        # Size of each box
+    "obstacle_size": 0.5,       # Size of each box
+    "render_scale": 40,         # Scalar applied to rendering window to fit the screen. Reducing this value makes rendering window smaller
 }
 ############### ^^^^^^^ Configurable Parameters for Area-Clearing ^^^^^^^ ####################
 

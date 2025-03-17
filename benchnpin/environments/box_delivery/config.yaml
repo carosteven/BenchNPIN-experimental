@@ -10,6 +10,8 @@ plot:
 
 teleop_mode: false     # when using teleoperation mode, control both forward and angular speed
 
+render_scale: 30      # scale renderer window to fit screen size
+
 # parameters for low-dim environment
 low_dim_state: false
 fixed_trial_idx: 1
