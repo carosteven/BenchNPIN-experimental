@@ -93,7 +93,7 @@ class AreaClearingEnv(gym.Env):
         if cfg is not None:
             # Update the base configuration with the user provided configuration
             for cfg_type in cfg:
-                if type(cfg[cfg_type]) is DotDict:
+                if type(cfg[cfg_type]) is DotDict or type(cfg[cfg_type]) is dict:
                     if cfg_type not in self.cfg:
                         self.cfg[cfg_type] = DotDict()
                     for param in cfg[cfg_type]:

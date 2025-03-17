@@ -17,7 +17,7 @@ fixed_trial_idx: 1
 ### SIMULATION PARAMS
 render:
   log_obs: false        # whether to log occupancy observation
-  show: true            # if true show animation plots
+  show: true            # if true display the environment
   show_obs: false       # if true show occupancy observation
   frequency: 20         # frequency of rendering
 sim:

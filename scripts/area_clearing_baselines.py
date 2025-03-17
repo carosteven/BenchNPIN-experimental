@@ -101,7 +101,7 @@ if __name__ == '__main__':
         cfg = DotDict.load_from_file(parser.parse_args().config_file)
 
     else:
-        # High level configuration for the box delivery task
+        # High level configuration for the area clearing task
         cfg={
             'env': 'clear_env', # 'clear_env_small', 'clear_env', walled_env', 'walled_env_with_columns'
             'num_obstacles': 10,
