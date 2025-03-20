@@ -75,7 +75,7 @@ The `pip install` above is sufficient to run _Ship-Ice_ and _Maze_ environments.
 ```bash
 git clone https://github.com/IvanIZ/spfa.git
 cd spfa
-python setup.py install
+pip install -e .
 ```
 
 
@@ -101,7 +101,7 @@ pip install -e .
 ```bash
 git clone https://github.com/IvanIZ/spfa.git
 cd spfa
-python setup.py install
+pip install -e .
 ```
 
 ## Usage
