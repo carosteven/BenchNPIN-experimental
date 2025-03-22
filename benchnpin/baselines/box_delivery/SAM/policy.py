@@ -382,21 +382,34 @@ class BoxDeliverySAM(BasePolicy):
         metric = TaskDrivenMetric(alg_name="SAM", robot_mass=env.cfg.agent.mass)
 
         rewards_list = []
+        eps_steps = []
+        eps_distance = []
         for eps_idx in range(num_eps):
             print("Progress: ", eps_idx, " / ", num_eps, " episodes")
             obs, info = env.reset()
             metric.reset(info)
             done = truncated = False
             eps_reward = 0.0
+            ep_steps = 0
             while True:
+                ep_steps += 1
                 action, _ = self.model.predict(obs)
                 obs, reward, done, truncated, info = env.step(action)
                 metric.update(info=info, reward=reward, eps_complete=(done or truncated))
                 if done or truncated:
                     break
+            eps_steps.append(ep_steps)
+            eps_distance.append(info['cumulative_distance'])
         
         env.close()
         metric.plot_scores(save_fig_dir=env.cfg.output_dir)
+        avg_eps_steps = sum(eps_steps) / len(eps_steps)
+        std_dev_eps_steps = (sum((x - avg_eps_steps) ** 2 for x in eps_steps) / len(eps_steps)) ** 0.5
+
+        avg_eps_distance = sum(eps_distance) / len(eps_distance)
+        std_dev_eps_distance = (sum((x - avg_eps_distance) ** 2 for x in eps_distance) / len(eps_distance)) ** 0.5
+        print(f"Average eps_steps: {avg_eps_steps}, Std Dev: {std_dev_eps_steps}")
+        print(f"Average eps_distance: {avg_eps_distance}, Std Dev: {std_dev_eps_distance}")
         return metric.success_rates, metric.efficiency_scores, metric.effort_scores, metric.rewards, f"SAM_{self.model_name}"
 
 
