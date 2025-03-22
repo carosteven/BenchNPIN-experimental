@@ -744,12 +744,17 @@ class BoxDeliveryEnv(gym.Env):
         # partial reward for moving boxes towards receptacle
         boxes_distance = 0
         to_remove = []
+        max_dist_moved = 0
+        sign_max_dist_moved = 0
         for box in self.boxes:
             dist_moved = initial_box_distances[box.idx] - final_box_distances[box.idx]
+            if abs(dist_moved) > max_dist_moved:
+                max_dist_moved = abs(dist_moved)
+                sign_max_dist_moved = np.sign(dist_moved)
             boxes_distance += abs(dist_moved)
             if self.cfg.train.use_correct_direction_reward and dist_moved > 0:
                 dist_moved *= self.cfg.rewards.correct_direction_reward_scale
-            robot_reward += self.partial_rewards_scale * dist_moved
+            # robot_reward += self.partial_rewards_scale * dist_moved
 
             # reward for boxes in receptacle
             # to_remove = []
@@ -761,10 +766,20 @@ class BoxDeliveryEnv(gym.Env):
                 self.inactivity_counter = 0
                 robot_boxes += 1
                 robot_reward += self.goal_reward
+        robot_reward += self.partial_rewards_scale * sign_max_dist_moved * max_dist_moved
         for box in to_remove:
             self.space.remove(box.body, box)
             self.boxes.remove(box)
 
+        # terminal reward
+        if self.robot_cumulative_boxes == self.num_boxes:
+            terminal_reward = 10
+            robot_reward += terminal_reward
+        
+        # step penalty
+        step_penalty = 0.05
+        robot_reward -= step_penalty
+        
         # penalty for hitting obstacles
         if self.robot_hit_obstacle:
             robot_reward -= self.collision_penalty
@@ -774,7 +789,7 @@ class BoxDeliveryEnv(gym.Env):
         robot_turn_angle = self.heading_difference(robot_initial_heading, robot_heading)
         if robot_distance < NONMOVEMENT_DIST_THRESHOLD and abs(robot_turn_angle) < NONMOVEMENT_TURN_THRESHOLD:
             robot_reward -= self.non_movement_penalty
-        
+
         ############################################################################################################
         # Compute stats
         self.robot_cumulative_distance += robot_distance
