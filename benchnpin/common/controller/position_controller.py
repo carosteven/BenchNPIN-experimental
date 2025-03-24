@@ -55,7 +55,12 @@ class PositionController:
 
     def get_waypoints_to_spatial_action(self, robot_initial_position, robot_initial_heading, spatial_action):
         ################################ Position Control ################################
-        robot_action = np.unravel_index(spatial_action, (self.local_map_pixel_width, self.local_map_pixel_width))
+        if self.cfg.ablation.half_action_space:
+            center_offset = self.local_map_pixel_width // 2
+            robot_action = np.unravel_index(spatial_action, (center_offset, center_offset))
+            robot_action = (robot_action[0] + center_offset // 2, robot_action[1] + center_offset // 2)
+        else:
+            robot_action = np.unravel_index(spatial_action, (self.local_map_pixel_width, self.local_map_pixel_width))
 
         # compute target position for front of robot:
         # computes distance from front of robot (not center), which is used to find the

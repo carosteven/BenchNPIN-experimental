@@ -102,18 +102,18 @@ if __name__ == '__main__':
                 'obstacle_config': 'small_empty', # options are small_empty, small_columns, large_columns, large_divider
             },
             'train': {
-                'train_mode': False,
+                'train_mode': True,
                 'job_type': 'sam', # 'sam', 'ppo', 'sac'
-                'job_name': 'SAM',
+                'job_name': 'half_action',
                 'resume_training': False,
                 'job_id_to_resume': None,
             },
             'evaluate': {
-                'eval_mode': True,
+                'eval_mode': False,
                 'num_eps': 20,
                 'policy_types': ['sam', 'sam', 'sam', 'sam'], # list of policy types to evaluate
                 'action_types': ['position', 'position', 'position', 'position'], # list of action types to evaluate
-                'model_names': ['sam_small_empty', 'terminal', 'step', 'sam_small_empty_maxreward'], # list of model names to evaluate
+                'model_names': ['term_step', 'terminal', 'step', 'sam_small_empty_maxreward'], # list of model names to evaluate
                 'model_path': 'models/box_delivery', # path to the models
                 'obs_configs': ['small_empty', 'small_empty', 'small_empty', 'small_empty'], # list of observation configurations
             }
@@ -122,10 +122,3 @@ if __name__ == '__main__':
         cfg = DotDict.to_dot_dict(cfg)
 
     main(cfg, job_id)
-# Base:         Average eps_steps: 93.15, Std Dev: 65.02174636227484
-# MaxReward:    Average eps_steps: 137.2, Std Dev: 44.332380942151076
-#               Average eps_distance: 190.85795582536346, Std Dev: 49.49257707458772
-# Terminal:     Average eps_steps: 68.95, Std Dev: 23.324825830003533
-#               Average eps_distance: 138.39263123838788, Std Dev: 44.28204947116699
-# Step:         Average eps_steps: 77.2, Std Dev: 25.315212817592506
-#               Average eps_distance: 146.76103952392168, Std Dev: 42.43491216315516

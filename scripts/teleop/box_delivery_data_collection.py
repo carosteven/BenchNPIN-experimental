@@ -18,7 +18,7 @@ from os.path import dirname
 
 env = gym.make('box-delivery-v0')
 env = env.unwrapped
-env.cfg.teleop_mode = True
+# env.cfg.teleop_mode = True
 env.cfg.inactivity_cutoff_sam = 10000 # set to a large number to avoid inactivity cutoff
 env.cfg.inactivity_cutoff = 10000 # set to a large number to avoid inactivity cutoff
 env.reset()
@@ -97,8 +97,10 @@ def collect_demos():
             while listener.running:  # While the listener is active
                 global command
                 print("command: ", command, "; step: ", t, \
-                    "; num completed: ", info['cumulative_cubes'],  end="\r")
-                observation, reward, terminated, truncated, info = env.step(command)
+                    "; num completed: ", info['cumulative_boxes'],  end="\r")
+                # observation, reward, terminated, truncated, info = env.step(command)
+                observation, reward, terminated, truncated, info = env.step(48*24)
+                input()
 
                 # command = OTHER
                 if t % 5 == 0:

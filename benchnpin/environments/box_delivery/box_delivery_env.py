@@ -158,7 +158,10 @@ class BoxDeliveryEnv(gym.Env):
         elif self.cfg.agent.action_type == 'heading':
             self.action_space = spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
         elif self.cfg.agent.action_type == 'position':
-            self.action_space = spaces.Box(low=0, high=self.local_map_pixel_width * self.local_map_pixel_width, dtype=np.float32)
+            if self.cfg.ablation.half_action_space:
+                self.action_space = spaces.Box(low=0, high=self.local_map_pixel_width // 2 * self.local_map_pixel_width // 2, dtype=np.float32)
+            else:
+                self.action_space = spaces.Box(low=0, high=self.local_map_pixel_width * self.local_map_pixel_width, dtype=np.float32)
 
         # Define observation space
         self.show_observation = False
@@ -283,7 +286,6 @@ class BoxDeliveryEnv(gym.Env):
         for _ in range(1000):
             self.space.step(self.dt / self.steps)
         self.prev_boxes = CostMap.get_obs_from_poly(self.boxes)
-
         self.position_controller = PositionController(self.cfg, self.robot_radius, self.room_width, self.room_length, 
                                                       self.configuration_space, self.configuration_space_thin, self.closest_cspace_indices,
                                                       self.local_map_pixel_width, self.local_map_width, self.local_map_pixels_per_meter, 
@@ -754,7 +756,8 @@ class BoxDeliveryEnv(gym.Env):
             boxes_distance += abs(dist_moved)
             if self.cfg.train.use_correct_direction_reward and dist_moved > 0:
                 dist_moved *= self.cfg.rewards.correct_direction_reward_scale
-            # robot_reward += self.partial_rewards_scale * dist_moved
+            if not self.cfg.ablation.max_distance_reward:
+                robot_reward += self.partial_rewards_scale * dist_moved
 
             # reward for boxes in receptacle
             # to_remove = []
@@ -766,19 +769,18 @@ class BoxDeliveryEnv(gym.Env):
                 self.inactivity_counter = 0
                 robot_boxes += 1
                 robot_reward += self.goal_reward
-        robot_reward += self.partial_rewards_scale * sign_max_dist_moved * max_dist_moved
+        if self.cfg.ablation.max_distance_reward:
+            robot_reward += self.partial_rewards_scale * sign_max_dist_moved * max_dist_moved
         for box in to_remove:
             self.space.remove(box.body, box)
             self.boxes.remove(box)
 
         # terminal reward
         if self.robot_cumulative_boxes == self.num_boxes:
-            terminal_reward = 10
-            robot_reward += terminal_reward
+            robot_reward += self.cfg.ablation.terminal_reward
         
         # step penalty
-        step_penalty = 0.05
-        robot_reward -= step_penalty
+        robot_reward -= self.cfg.ablation.step_penalty
         
         # penalty for hitting obstacles
         if self.robot_hit_obstacle:
