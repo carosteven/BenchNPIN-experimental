@@ -215,7 +215,8 @@ class DenseActionSpaceDQN(nn.Module):
         self.conv1 = nn.Conv2d(512, 128, kernel_size=1, stride=1)
         self.conv2 = nn.Conv2d(128, 32, kernel_size=1, stride=1)
         self.conv3 = nn.Conv2d(32, num_output_channels, kernel_size=1, stride=1)
-        self.conv4 = nn.Conv2d(num_output_channels, num_output_channels, kernel_size=3, stride=2, padding=1)
+        if self.half_action_space:
+            self.conv4 = nn.Conv2d(num_output_channels, num_output_channels, kernel_size=3, stride=2, padding=1)
     
     def forward(self, x):
         x = self.resnet18.features(x)
