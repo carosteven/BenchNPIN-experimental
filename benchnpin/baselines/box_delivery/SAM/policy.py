@@ -147,7 +147,7 @@ class DenseActionSpacePolicy:
 
 class BoxDeliverySAM(BasePolicy):
 
-    def __init__(self, cfg, model_name='sam_model', model_path=None) -> None:
+    def __init__(self, cfg, model_name='sam_model', model_path=None, job_id=None) -> None:
         super().__init__()
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -162,6 +162,14 @@ class BoxDeliverySAM(BasePolicy):
 
         self.cfg = cfg
 
+        self.job_id = job_id
+
+        # Check if preemption occurred and if so, use the config file from current run
+        checkpoint_path = os.path.join(os.path.dirname(__file__), f'checkpoint/{self.job_id}/checkpoint-{self.model_name}.pt')
+        if os.path.exists(checkpoint_path):
+            checkpoint_dir = os.path.dirname(checkpoint_path)
+            config_path = f'{checkpoint_dir}/config.yaml'
+            self.cfg = DotDict.load_from_file(config_path)
 
 
     def update_policy(self, policy_net, target_net, optimizer, batch, transform_func):
@@ -200,13 +208,12 @@ class BoxDeliverySAM(BasePolicy):
         return train_info
 
 
-    def train(self, job_id) -> None:
+    def train(self) -> None:
         # create environment
         env = gym.make('box-delivery-v0', cfg=self.cfg)
         env = env.unwrapped
         self.cfg = env.cfg # update cfg with env-specific config
 
-        job_id = job_id
         params = self.cfg['train']
         self.batch_size = params['batch_size']
         self.checkpoint_freq = params['checkpoint_freq']
@@ -225,14 +232,14 @@ class BoxDeliverySAM(BasePolicy):
         target_update_freq = params['target_update_freq']
         total_timesteps = params['total_timesteps']
 
-        checkpoint_path = os.path.join(os.path.dirname(__file__), f'checkpoint/{job_id}/checkpoint-{self.model_name}.pt')
+        checkpoint_path = os.path.join(os.path.dirname(__file__), f'checkpoint/{self.job_id}/checkpoint-{self.model_name}.pt')
 
         log_dir = os.path.join(os.path.dirname(__file__), 'output_logs/')
         if not os.path.exists(log_dir):
             os.mkdir(log_dir)
         logging.basicConfig(filename=os.path.join(log_dir, f'{self.model_name}.log'), level=logging.DEBUG)
         logging.info("starting training...")
-        logging.info(f"Job ID: {job_id}")
+        logging.info(f"Job ID: {self.job_id}")
 
         # policy
         policy = DenseActionSpacePolicy(env.action_space.high, env.num_channels, self.final_exploration,
@@ -268,7 +275,7 @@ class BoxDeliverySAM(BasePolicy):
         target_net.eval()
 
         # logging
-        train_summary_writer = SummaryWriter(log_dir=os.path.join(log_dir, f'{job_id}'))
+        train_summary_writer = SummaryWriter(log_dir=os.path.join(log_dir, f'{self.job_id}'))
         meters = Meters()
 
         state, _ = env.reset()
@@ -340,6 +347,9 @@ class BoxDeliverySAM(BasePolicy):
                 model_path = f'{checkpoint_dir}/model-{self.model_name+str(timestep+1)}.pt'
                 if not os.path.exists(checkpoint_dir):
                     os.makedirs(checkpoint_dir)
+                    # Save the configuration file
+                    config_path = f'{checkpoint_dir}/config.yaml'
+                    DotDict.save_to_file(self.cfg, config_path)
                 # temp_model_path = f'{checkpoint_dir}/model-temp.pt'
                 model = {
                     'timestep': timestep + 1,
@@ -373,6 +383,7 @@ class BoxDeliverySAM(BasePolicy):
 
         env = gym.make('box-delivery-v0', cfg=self.cfg)
         env = env.unwrapped
+        self.cfg = env.cfg # update cfg with env-specific config
 
         if model_eps == 'latest':
             self.model = DenseActionSpacePolicy(env.action_space.high, env.num_channels, 0.0,

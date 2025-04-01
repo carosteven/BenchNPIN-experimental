@@ -20,8 +20,8 @@ def main(cfg, job_id):
 
         if cfg.train.job_type == 'sam':
             # ========================= Spatial Action Map Policy =========================
-            sam_policy = BoxDeliverySAM(model_name=model_name, cfg=cfg)
-            sam_policy.train(job_id)
+            sam_policy = BoxDeliverySAM(model_name=model_name, cfg=cfg, job_id=job_id)
+            sam_policy.train()
 
         elif cfg.train.job_type == 'ppo':
             # ================================ PPO Policy =================================    
