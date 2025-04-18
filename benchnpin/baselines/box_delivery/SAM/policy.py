@@ -95,6 +95,7 @@ class DenseActionSpacePolicy:
         self.half_action_space = half_action_space
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device('mps' if torch.backends.mps.is_available() else self.device)
         self.policy_net = self.build_network()
         self.transform = transforms.ToTensor()
 
@@ -151,6 +152,7 @@ class BoxDeliverySAM(BasePolicy):
         super().__init__()
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device('mps' if torch.backends.mps.is_available() else self.device)
 
         if model_path is None:
             self.model_path = os.path.join(os.path.dirname(__file__), 'models/')
@@ -398,6 +400,7 @@ class BoxDeliverySAM(BasePolicy):
         rewards_list = []
         eps_steps = []
         eps_distance = []
+        eps_avg_box_distance = []
         for eps_idx in range(num_eps):
             print("Progress: ", eps_idx, " / ", num_eps, " episodes")
             obs, info = env.reset()
@@ -414,6 +417,7 @@ class BoxDeliverySAM(BasePolicy):
                     break
             eps_steps.append(ep_steps)
             eps_distance.append(info['cumulative_distance'])
+            eps_avg_box_distance.append(sum(env.box_distances.values()) / len(env.box_distances))
         
         env.close()
         metric.plot_scores(save_fig_dir=env.cfg.output_dir)
@@ -422,8 +426,13 @@ class BoxDeliverySAM(BasePolicy):
 
         avg_eps_distance = sum(eps_distance) / len(eps_distance)
         std_dev_eps_distance = (sum((x - avg_eps_distance) ** 2 for x in eps_distance) / len(eps_distance)) ** 0.5
-        print(f"Average eps_steps: {avg_eps_steps}, Std Dev: {std_dev_eps_steps}")
-        print(f"Average eps_distance: {avg_eps_distance}, Std Dev: {std_dev_eps_distance}")
+        avg_eps_avg_box_distance = sum(eps_avg_box_distance) / len(eps_avg_box_distance)
+        std_dev_eps_avg_box_distance = (sum((x - avg_eps_avg_box_distance) ** 2 for x in eps_avg_box_distance) / len(eps_avg_box_distance)) ** 0.5
+        avg_success_rate = sum(metric.success_rates) / len(metric.success_rates)
+        print(f"Average eps_steps: {avg_eps_steps:.2f} \\pm {std_dev_eps_steps:.2f}")
+        print(f"Average eps_distance: {avg_eps_distance:.2f} \\pm {std_dev_eps_distance:.2f}")
+        print(f"Average eps_avg_box_distance: {avg_eps_avg_box_distance:.2f} \\pm {std_dev_eps_avg_box_distance:.2f}")
+        print(f"Average success rate: {avg_success_rate}")
         return metric.success_rates, metric.efficiency_scores, metric.effort_scores, metric.rewards, f"SAM_{self.model_name}"
 
 

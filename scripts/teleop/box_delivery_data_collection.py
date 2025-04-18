@@ -16,11 +16,15 @@ import pickle
 from pynput import keyboard
 from os.path import dirname
 
-env = gym.make('box-delivery-v0')
+cfg = {
+    'teleop_mode': True,
+    'misc': {
+        'inactivity_cutoff_sam': 10000,  # set to a large number to avoid inactivity cutoff
+        'inactivity_cutoff': 10000,  # set to a large number to avoid inactivity cutoff
+    }
+}
+env = gym.make('box-delivery-v0', cfg=cfg)
 env = env.unwrapped
-# env.cfg.teleop_mode = True
-env.cfg.inactivity_cutoff_sam = 10000 # set to a large number to avoid inactivity cutoff
-env.cfg.inactivity_cutoff = 10000 # set to a large number to avoid inactivity cutoff
 env.reset()
 
 observations = []
@@ -80,7 +84,6 @@ def record_transition(observation, state, reward, terminal, timeout):
 
 
 def collect_demos():
-
     path_length = 0
     step_size = 0.1
 
@@ -99,8 +102,7 @@ def collect_demos():
                 print("command: ", command, "; step: ", t, \
                     "; num completed: ", info['cumulative_boxes'],  end="\r")
                 # observation, reward, terminated, truncated, info = env.step(command)
-                observation, reward, terminated, truncated, info = env.step(48*24)
-                input()
+                observation, reward, terminated, truncated, info = env.step(command)
 
                 # command = OTHER
                 if t % 5 == 0:

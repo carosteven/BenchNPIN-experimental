@@ -153,3 +153,5 @@ ablation:
   terminal_reward: 0
   step_penalty: 0
   max_distance_reward: false
+  box_dist_penalty: false
+  box_dist_penalty_scale: 0.1

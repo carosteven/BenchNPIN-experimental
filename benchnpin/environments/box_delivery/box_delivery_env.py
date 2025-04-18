@@ -190,7 +190,10 @@ class BoxDeliveryEnv(gym.Env):
             self.state_fig, self.state_ax = self.state_plot.subplots(1, num_plots, figsize=(4 * num_plots, 6))
             self.colorbars = [None] * num_plots
             if self.cfg.render.show_obs:
-                self.state_plot.ion()  # Interactive mode on        
+                self.state_plot.ion()  # Interactive mode on     
+
+        # ablation
+        self.box_distances = {}   
 
     def init_box_delivery_sim(self):
 
@@ -595,6 +598,7 @@ class BoxDeliveryEnv(gym.Env):
 
         # get updated boxes
         updated_boxes = CostMap.get_obs_from_poly(self.boxes)
+        self.box_distances = {box.idx: 0 for box in self.boxes}
 
         # reset stats
         self.inactivity_counter = 0
@@ -634,7 +638,6 @@ class BoxDeliveryEnv(gym.Env):
 
     def step(self, action):
         """Executes one time step in the environment and returns the result."""
-        # print("Action: ", action)
         self.t += 1
         self.dp = None
 
@@ -754,6 +757,7 @@ class BoxDeliveryEnv(gym.Env):
                 max_dist_moved = abs(dist_moved)
                 sign_max_dist_moved = np.sign(dist_moved)
             boxes_distance += abs(dist_moved)
+            self.box_distances[box.idx] += abs(dist_moved)
             if self.cfg.train.use_correct_direction_reward and dist_moved > 0:
                 dist_moved *= self.cfg.rewards.correct_direction_reward_scale
             if not self.cfg.ablation.max_distance_reward:
@@ -768,7 +772,11 @@ class BoxDeliveryEnv(gym.Env):
                 self.box_clearance_statuses[box.idx] = True
                 self.inactivity_counter = 0
                 robot_boxes += 1
-                robot_reward += self.goal_reward
+                if self.cfg.ablation.box_dist_penalty:
+                    robot_reward += np.max(self.goal_reward - self.box_distances[box.idx] * self.cfg.ablation.box_dist_penalty_scale, self.goal_reward/8)
+                else:
+                    robot_reward += self.goal_reward
+
         if self.cfg.ablation.max_distance_reward:
             robot_reward += self.partial_rewards_scale * sign_max_dist_moved * max_dist_moved
         for box in to_remove:

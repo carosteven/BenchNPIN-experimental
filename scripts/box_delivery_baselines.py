@@ -88,7 +88,7 @@ if __name__ == '__main__':
         # High level configuration for the box delivery task
         cfg={
             'render': {
-                'show': True,           # if true display the environment
+                'show': False,           # if true display the environment
                 'show_obs': False,       # if true show observation
             },
             'agent': {
@@ -104,7 +104,7 @@ if __name__ == '__main__':
             'train': {
                 'train_mode': True,
                 'job_type': 'sam', # 'sam', 'ppo', 'sac'
-                'job_name': 'half_action',
+                'job_name': 'dp_base_se',
                 'resume_training': False,
                 'job_id_to_resume': None,
             },
@@ -113,9 +113,20 @@ if __name__ == '__main__':
                 'num_eps': 20,
                 'policy_types': ['sam', 'sam', 'sam', 'sam'], # list of policy types to evaluate
                 'action_types': ['position', 'position', 'position', 'position'], # list of action types to evaluate
-                'model_names': ['term_step', 'terminal', 'step', 'sam_small_empty_maxreward'], # list of model names to evaluate
+                'model_names': ['ha_term2', 'ha_term'], # list of model names to evaluate
                 'model_path': 'models/box_delivery', # path to the models
-                'obs_configs': ['small_empty', 'small_empty', 'small_empty', 'small_empty'], # list of observation configurations
+                'obs_configs': ['small_columns', 'small_columns', 'small_empty', 'small_empty'], # list of observation configurations
+            },
+            'rewards_sam': {
+                'goal_reward': 2.0,
+            },
+            'ablation': {
+                'half_action_space': False,
+                'terminal_reward': 10,
+                'step_penalty': 0,
+                'max_distance_reward': False,
+                'box_dist_penalty': True,
+                'box_dist_penalty_scale': 0.35,
             }
         }
         
