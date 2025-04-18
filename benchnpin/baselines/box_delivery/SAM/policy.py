@@ -9,6 +9,7 @@ import os
 import sys
 import time
 from datetime import datetime
+import yaml
 
 import torch
 import torch.optim as optim
@@ -105,7 +106,7 @@ class DenseActionSpacePolicy:
         # Resume from checkpoint if applicable
         if os.path.exists(checkpoint_path) or resume_training or evaluate:
             if resume_training:
-                model_path = os.path.join(os.path.dirname(__file__), f'checkpoint/{job_id_to_resume}/model-{model_name}.pt')
+                model_path = os.path.join(os.path.dirname(__file__), f'checkpoint/{job_id_to_resume}/model-{model_name}61000.pt')
             elif evaluate:
                 model_path = os.path.join(model_dir, f'{model_name}.pt')
             else:
@@ -215,6 +216,9 @@ class BoxDeliverySAM(BasePolicy):
         env = gym.make('box-delivery-v0', cfg=self.cfg)
         env = env.unwrapped
         self.cfg = env.cfg # update cfg with env-specific config
+        
+        for key in self.cfg:
+            print(f"{key}: {self.cfg[key]}")
 
         params = self.cfg['train']
         self.batch_size = params['batch_size']
@@ -245,7 +249,7 @@ class BoxDeliverySAM(BasePolicy):
 
         # policy
         policy = DenseActionSpacePolicy(env.action_space.high, env.num_channels, self.final_exploration,
-                                         train=True, checkpoint_path=checkpoint_path, resume_training=resume_training, random_seed=self.cfg.misc.random_seed, half_action_space=self.cfg.ablation.half_action_space)
+                                         train=True, checkpoint_path=checkpoint_path, resume_training=resume_training, job_id_to_resume=job_id_to_resume, model_name=self.model_name, random_seed=self.cfg.misc.random_seed, half_action_space=self.cfg.ablation.half_action_space)
 
         # optimizer
         optimizer = optim.SGD(policy.policy_net.parameters(), lr=self.learning_rate, momentum=0.9, weight_decay=self.weight_decay)
@@ -349,9 +353,12 @@ class BoxDeliverySAM(BasePolicy):
                 model_path = f'{checkpoint_dir}/model-{self.model_name+str(timestep+1)}.pt'
                 if not os.path.exists(checkpoint_dir):
                     os.makedirs(checkpoint_dir)
-                    # Save the configuration file
-                    config_path = f'{checkpoint_dir}/config.yaml'
-                    DotDict.save_to_file(self.cfg, config_path)
+                
+                # Save the configuration file
+                config_path = f'{checkpoint_dir}/config.yaml'
+                with open(config_path, 'w') as file:
+                    yaml.dump(dict(self.cfg), file, default_flow_style=False)
+                
                 # temp_model_path = f'{checkpoint_dir}/model-temp.pt'
                 model = {
                     'timestep': timestep + 1,

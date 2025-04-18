@@ -14,7 +14,8 @@ def main(cfg, job_id):
 
     if cfg.train.train_mode:
         if cfg.train.resume_training:
-            model_name = cfg.train.job_id_to_resume
+            # model_name = cfg.train.job_id_to_resume
+            model_name = f'{cfg.train.job_name}_{cfg.train.job_id_to_resume}'
         else:
             model_name = f'{cfg.train.job_name}_{job_id}'
 
@@ -105,8 +106,10 @@ if __name__ == '__main__':
                 'train_mode': True,
                 'job_type': 'sam', # 'sam', 'ppo', 'sac'
                 'job_name': 'dp_base_se',
-                'resume_training': False,
-                'job_id_to_resume': None,
+                'resume_training': True,
+                'job_id_to_resume': '15602062',
+                'total_timesteps': 60000*2,
+                # 'exploration_timesteps': 6000*2,
             },
             'evaluate': {
                 'eval_mode': False,
