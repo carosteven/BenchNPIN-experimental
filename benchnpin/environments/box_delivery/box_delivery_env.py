@@ -760,7 +760,7 @@ class BoxDeliveryEnv(gym.Env):
             self.box_distances[box.idx] += abs(dist_moved)
             if self.cfg.train.use_correct_direction_reward and dist_moved > 0:
                 dist_moved *= self.cfg.rewards.correct_direction_reward_scale
-            if not self.cfg.ablation.max_distance_reward:
+            if not self.cfg.ablation.max_distance_reward and not self.cfg.ablation.sparse:
                 robot_reward += self.partial_rewards_scale * dist_moved
 
             # reward for boxes in receptacle
@@ -773,15 +773,22 @@ class BoxDeliveryEnv(gym.Env):
                 self.inactivity_counter = 0
                 robot_boxes += 1
                 if self.cfg.ablation.box_dist_penalty:
-                    robot_reward += np.max(self.goal_reward - self.box_distances[box.idx] * self.cfg.ablation.box_dist_penalty_scale, self.goal_reward/8)
+                    goal_reward = 2 * self.goal_reward
+                    hyp = np.sqrt(self.room_length**2 + self.room_width**2)
+                    dist_pen_scale = (goal_reward * 7/8) / hyp
+                    robot_reward += max(goal_reward - self.box_distances[box.idx] * dist_pen_scale, goal_reward/8)
                 else:
                     robot_reward += self.goal_reward
 
-        if self.cfg.ablation.max_distance_reward:
+        if self.cfg.ablation.max_distance_reward and not self.cfg.ablation.sparse:
             robot_reward += self.partial_rewards_scale * sign_max_dist_moved * max_dist_moved
         for box in to_remove:
             self.space.remove(box.body, box)
             self.boxes.remove(box)
+
+        # step distance penalty
+        if self.cfg.ablation.step_dist_penalty:
+            robot_reward -= (self.partial_rewards_scale / 2) * robot_distance
 
         # terminal reward
         if self.robot_cumulative_boxes == self.num_boxes:
@@ -791,13 +798,13 @@ class BoxDeliveryEnv(gym.Env):
         robot_reward -= self.cfg.ablation.step_penalty
         
         # penalty for hitting obstacles
-        if self.robot_hit_obstacle:
+        if self.robot_hit_obstacle and not self.cfg.ablation.sparse:
             robot_reward -= self.collision_penalty
         
         # penalty for small movements
         robot_heading = self.restrict_heading_range(self.robot.body.angle)
         robot_turn_angle = self.heading_difference(robot_initial_heading, robot_heading)
-        if robot_distance < NONMOVEMENT_DIST_THRESHOLD and abs(robot_turn_angle) < NONMOVEMENT_TURN_THRESHOLD:
+        if robot_distance < NONMOVEMENT_DIST_THRESHOLD and abs(robot_turn_angle) < NONMOVEMENT_TURN_THRESHOLD and not self.cfg.ablation.sparse:
             robot_reward -= self.non_movement_penalty
 
         ############################################################################################################

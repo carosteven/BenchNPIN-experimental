@@ -155,3 +155,5 @@ ablation:
   max_distance_reward: false
   box_dist_penalty: false
   box_dist_penalty_scale: 0.1
+  step_dist_penalty: false
+  sparse: false

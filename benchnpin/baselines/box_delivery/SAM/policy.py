@@ -111,7 +111,7 @@ class DenseActionSpacePolicy:
                 model_path = os.path.join(model_dir, f'{model_name}.pt')
             else:
                 checkpoint_dir = os.path.dirname(checkpoint_path)
-                model_path = f'{checkpoint_dir}/model-{self.model_name}.pt'
+                model_path = f'{checkpoint_dir}/model-{model_name}.pt'
             model_checkpoint = torch.load(model_path, map_location=self.device)
             self.policy_net.load_state_dict(model_checkpoint['state_dict'])
             if self.train:
@@ -160,19 +160,21 @@ class BoxDeliverySAM(BasePolicy):
         else:
             self.model_path = model_path
 
-        self.model_name = model_name
         self.model = None
-
-        self.cfg = cfg
-
         self.job_id = job_id
 
         # Check if preemption occurred and if so, use the config file from current run
-        checkpoint_path = os.path.join(os.path.dirname(__file__), f'checkpoint/{self.job_id}/checkpoint-{self.model_name}.pt')
-        if os.path.exists(checkpoint_path):
-            checkpoint_dir = os.path.dirname(checkpoint_path)
+        checkpoint_dir = os.path.join(os.path.dirname(__file__), f'checkpoint/{self.job_id}')
+        checkpoint_files = [f for f in os.listdir(checkpoint_dir) if f.startswith('checkpoint')]
+        if checkpoint_files: # if there exists a checkpoint file, this indicates a run has been interrupted
             config_path = f'{checkpoint_dir}/config.yaml'
             self.cfg = DotDict.load_from_file(config_path)
+            self.model_name = f'{self.cfg.train.job_name}_{job_id}'
+        else:
+            self.cfg = cfg
+            self.model_name = model_name
+
+
 
 
     def update_policy(self, policy_net, target_net, optimizer, batch, transform_func):
@@ -273,6 +275,7 @@ class BoxDeliverySAM(BasePolicy):
             print(f"=> loaded checkpoint '{checkpoint_path}' (timestep: {start_timestep})")
             logging.info(f"=> loaded checkpoint '{checkpoint_path}' (timestep: {start_timestep})")
         else:
+            print("=> no checkpoint detected, starting from initial state")
             logging.info("=> no checkpoint detected, starting from initial state")
         
         # target net
@@ -281,7 +284,7 @@ class BoxDeliverySAM(BasePolicy):
         target_net.eval()
 
         # logging
-        train_summary_writer = SummaryWriter(log_dir=os.path.join(log_dir, f'{self.job_id}'))
+        train_summary_writer = SummaryWriter(log_dir=os.path.join(log_dir, f'_new_{self.model_name}'))
         meters = Meters()
 
         state, _ = env.reset()
@@ -352,7 +355,11 @@ class BoxDeliverySAM(BasePolicy):
                 checkpoint_dir = os.path.dirname(checkpoint_path)
                 model_path = f'{checkpoint_dir}/model-{self.model_name+str(timestep+1)}.pt'
                 if not os.path.exists(checkpoint_dir):
-                    os.makedirs(checkpoint_dir)
+                    try:
+                        os.makedirs(checkpoint_dir, exist_ok=True)
+                    except FileExistsError:
+                        print(f"Directory {checkpoint_dir} already exists")
+                        logging.info(f"Directory {checkpoint_dir} already exists")
                 
                 # Save the configuration file
                 config_path = f'{checkpoint_dir}/config.yaml'
