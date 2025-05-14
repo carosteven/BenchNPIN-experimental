@@ -132,6 +132,7 @@ train:
   learning_starts: 1000
   n_epochs: 10
   n_steps: 256
+  output_log_dir: 'output_logs/'
   replay_buffer_size: 10000
   resume_training: false
   target_update_freq: 1000
@@ -157,3 +158,6 @@ ablation:
   box_dist_penalty_scale: 0.1
   step_dist_penalty: false
   sparse: false
+  per: false # Prioritized Experience Replay
+  per_alpha: 0.6
+  per_beta: 0.4

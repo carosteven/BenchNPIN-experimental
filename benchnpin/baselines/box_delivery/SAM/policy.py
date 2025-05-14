@@ -84,6 +84,45 @@ class ReplayBuffer:
 
     def __len__(self):
         return len(self.buffer)
+
+
+class PrioritizedReplayBuffer:
+    def __init__(self, capacity, alpha=0.6):
+        self.capacity = capacity
+        self.alpha = alpha
+        self.buffer = []
+        self.priorities = []
+        self.position = 0
+    
+    def push(self, *args):
+        max_priority = max(self.priorities, default=1.0)
+        if len(self.buffer) < self.capacity:
+            self.buffer.append(None)
+            self.priorities.append(None)
+        self.buffer[self.position] = Transition(*args)
+        self.priorities[self.position] = max_priority
+        self.position = (self.position + 1) % self.capacity
+
+    def sample(self, batch_size, beta=0.4):
+        priorities = torch.tensor(self.priorities, dtype=torch.float32)
+        probs = priorities ** self.alpha
+        probs /= probs.sum()
+        indices = random.choices(range(len(self.buffer)), probs, k=batch_size)
+        samples = [self.buffer[i] for i in indices]
+
+        total = len(self.buffer)
+        weights = (total * probs[indices]) ** (-beta)
+        weights /= weights.max()
+        weights = torch.tensor(weights, dtype=torch.float32)
+
+        return Transition(*zip(*samples)), indices, weights
+    
+    def update_priorities(self, indices, priorities):
+        for i, p in zip(indices, priorities):
+            self.priorities[i] = p.item()
+    
+    def __len__(self):
+        return len(self.buffer)
     
 class DenseActionSpacePolicy:
     def __init__(self, action_space, num_input_channels, final_exploration, train=False, checkpoint_path='',
@@ -177,7 +216,7 @@ class BoxDeliverySAM(BasePolicy):
 
 
 
-    def update_policy(self, policy_net, target_net, optimizer, batch, transform_func):
+    def update_policy(self, policy_net, target_net, optimizer, batch, transform_func, indices=None, weights=None, replay_buffer=None):
         state_batch = torch.cat([transform_func(s) for s in batch.state]).to(self.device)
         action_batch = torch.tensor(batch.action, dtype=torch.long).to(self.device)
         reward_batch = torch.tensor(batch.reward, dtype=torch.float32).to(self.device)
@@ -196,13 +235,24 @@ class BoxDeliverySAM(BasePolicy):
 
         expected_state_action_values = (reward_batch + torch.pow(self.gamma, ministeps_batch) * next_state_values)
         td_error = torch.abs(state_action_values - expected_state_action_values).detach()
-        loss = smooth_l1_loss(state_action_values, expected_state_action_values)
+
+        # if PER is being used we want the loss per sample, not averaged, so we can apply the importance weights manually
+        loss_fn = torch.nn.SmoothL1Loss(reduction='none' if weights is not None else 'mean')
+        losses = loss_fn(state_action_values, expected_state_action_values)
+        if weights is not None:
+            loss = (losses * weights.to(self.device)).mean()
+        else:
+            loss = losses.mean()
 
         optimizer.zero_grad()
         loss.backward()
         if self.grad_norm_clipping is not None:
             torch.nn.utils.clip_grad_norm_(policy_net.parameters(), self.grad_norm_clipping)
         optimizer.step()
+
+        if indices is not None and replay_buffer is not None:
+            new_priorities = (torch.abs(state_action_values - expected_state_action_values) + 1e-6).detach()
+            replay_buffer.update_priorities(indices, new_priorities)
 
         train_info = {}
         train_info['q_value_min'] = output.min().item()
@@ -242,7 +292,7 @@ class BoxDeliverySAM(BasePolicy):
 
         checkpoint_path = os.path.join(os.path.dirname(__file__), f'checkpoint/{self.job_id}/checkpoint-{self.model_name}.pt')
 
-        log_dir = os.path.join(os.path.dirname(__file__), 'output_logs/')
+        log_dir = os.path.join(os.path.dirname(__file__), params['log_dir'])
         if not os.path.exists(log_dir):
             os.mkdir(log_dir)
         logging.basicConfig(filename=os.path.join(log_dir, f'{self.model_name}.log'), level=logging.DEBUG)
@@ -257,7 +307,10 @@ class BoxDeliverySAM(BasePolicy):
         optimizer = optim.SGD(policy.policy_net.parameters(), lr=self.learning_rate, momentum=0.9, weight_decay=self.weight_decay)
 
         # replay buffer
-        replay_buffer = ReplayBuffer(self.replay_buffer_size)
+        if self.cfg.ablation.per:
+            replay_buffer = PrioritizedReplayBuffer(self.replay_buffer_size, alpha=self.cfg.ablation.per_alpha)
+        else:
+            replay_buffer = ReplayBuffer(self.replay_buffer_size)
 
         # resume if possible
         start_timestep = 0
@@ -320,8 +373,12 @@ class BoxDeliverySAM(BasePolicy):
             
             # train network
             if timestep >= learning_starts:
-                batch = replay_buffer.sample(self.batch_size)
-                train_info = self.update_policy(policy.policy_net, target_net, optimizer, batch, policy.apply_transform)
+                if self.cfg.ablation.per:
+                    batch, indices, weights = replay_buffer.sample(self.batch_size, beta=self.cfg.ablation.per_beta)
+                    train_info = self.update_policy(policy.policy_net, target_net, optimizer, batch, policy.apply_transform, indices=indices, weights=weights, replay_buffer=replay_buffer)
+                else:
+                    batch = replay_buffer.sample(self.batch_size)
+                    train_info = self.update_policy(policy.policy_net, target_net, optimizer, batch, policy.apply_transform)
             
             # update target network
             if (timestep + 1) % target_update_freq == 0:
