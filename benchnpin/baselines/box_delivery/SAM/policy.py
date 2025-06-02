@@ -473,7 +473,7 @@ class BoxDeliverySAM(BasePolicy):
         eps_distance = []
         eps_avg_box_distance = []
         for eps_idx in range(num_eps):
-            print("Progress: ", eps_idx, " / ", num_eps, " episodes")
+            print("Progress: ", eps_idx, " / ", num_eps, " episodes", end='\r')
             obs, info = env.reset()
             metric.reset(info)
             done = truncated = False

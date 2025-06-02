@@ -102,8 +102,11 @@ if __name__ == '__main__':
             'env': {
                 'obstacle_config': 'small_empty', # options are small_empty, small_columns, large_columns, large_divider
             },
-            'train': {
-                'train_mode': True,
+            'misc': {
+                'random_seed': 42,
+            },
+            'train': { 
+                'train_mode': False,
                 'job_type': 'sam', # 'sam', 'ppo', 'sac'
                 'job_name': 'dp_base_se',
                 'resume_training': True,
