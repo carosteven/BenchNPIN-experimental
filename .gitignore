@@ -7,6 +7,7 @@ benchnpin/baselines/area_clearing/sam/output_logs/
 benchnpin/baselines/area_clearing/sam/checkpoint/
 benchnpin/baselines/box_delivery/SAM/vector_logs/
 benchnpin/baselines/box_delivery/SAM/output_logs/
+benchnpin/baselines/box_delivery/SAM/per_logs/
 benchnpin/baselines/box_delivery/SAM/checkpoint/
 benchnpin/baselines/box_delivery/SAM/models/
 benchnpin/baselines/box_delivery/ppo/checkpoint/

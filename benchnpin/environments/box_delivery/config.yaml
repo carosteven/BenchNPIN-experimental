@@ -150,7 +150,7 @@ evaluate:
   obs_configs: ['small_empty', 'small_empty', 'small_empty']  # list of obstacle configurations to evaluate
 
 ablation:
-  half_action_space: true
+  half_action_space: false
   terminal_reward: 0
   step_penalty: 0
   max_distance_reward: false
@@ -161,3 +161,4 @@ ablation:
   per: false # Prioritized Experience Replay
   per_alpha: 0.6
   per_beta: 0.4
+  curriculum: false

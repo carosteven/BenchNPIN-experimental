@@ -108,9 +108,10 @@ if __name__ == '__main__':
             'train': { 
                 'train_mode': False,
                 'job_type': 'sam', # 'sam', 'ppo', 'sac'
-                'job_name': 'dp_base_se',
+                'job_name': 'per_hsdp_2G_term_se',
+                'log_dir': 'per_logs/',
                 'resume_training': True,
-                'job_id_to_resume': '15602062',
+                'job_id_to_resume': '16398526',
                 'total_timesteps': 60000*2,
                 # 'exploration_timesteps': 6000*2,
             },
@@ -130,9 +131,15 @@ if __name__ == '__main__':
                 'half_action_space': False,
                 'terminal_reward': 10,
                 'step_penalty': 0,
-                'max_distance_reward': False,
-                'box_dist_penalty': True,
+                'max_distance_reward': True,
+                'box_dist_penalty': False,
                 'box_dist_penalty_scale': 0.35,
+                'step_dist_penalty': True,
+                'sparse': False,
+                'per': True,
+                'per_alpha': 0.6,
+                'per_beta': 0.4,
+                'curriculum': False,
             }
         }
         

@@ -19,6 +19,7 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 import logging
+import re
 
 logging.getLogger('pymunk').propagate = False
 
@@ -27,6 +28,28 @@ logging.getLogger('pymunk').propagate = False
 torch.backends.cudnn.benchmark = True
 
 Transition = namedtuple('Transition', ('state', 'action', 'reward', 'ministeps', 'next_state'))
+
+def get_latest_model(model_dir, model_name):
+    # List all files in the directory
+    files = os.listdir(model_dir)
+    
+    # Regex to match the model files with step count
+    pattern = re.compile(rf'model-{model_name}(\d+)\.pt')
+    
+    # Extract step counts and corresponding file names
+    models = []
+    for file in files:
+        match = pattern.match(file)
+        if match:
+            step_count = int(match.group(1))
+            models.append((step_count, file))
+    
+    # Sort by step count and get the latest model
+    if models:
+        latest_model = max(models, key=lambda x: x[0])[1]
+        return os.path.join(model_dir, latest_model)
+    else:
+        return None
 
 class AverageMeter:
     def __init__(self):
@@ -113,7 +136,8 @@ class PrioritizedReplayBuffer:
         total = len(self.buffer)
         weights = (total * probs[indices]) ** (-beta)
         weights /= weights.max()
-        weights = torch.tensor(weights, dtype=torch.float32)
+        # weights = torch.tensor(weights, dtype=torch.float32)
+        weights = weights.clone().detach().float()
 
         return Transition(*zip(*samples)), indices, weights
     
@@ -145,12 +169,15 @@ class DenseActionSpacePolicy:
         # Resume from checkpoint if applicable
         if os.path.exists(checkpoint_path) or resume_training or evaluate:
             if resume_training:
-                model_path = os.path.join(os.path.dirname(__file__), f'checkpoint/{job_id_to_resume}/model-{model_name}61000.pt')
+                # model_path = os.path.join(os.path.dirname(__file__), f'checkpoint/{job_id_to_resume}/model-{model_name}121000.pt')
+                checkpoint_dir = os.path.join(os.path.dirname(__file__), f'checkpoint/{job_id_to_resume}/')
+                model_path = get_latest_model(checkpoint_dir, model_name)
             elif evaluate:
                 model_path = os.path.join(model_dir, f'{model_name}.pt')
             else:
                 checkpoint_dir = os.path.dirname(checkpoint_path)
-                model_path = f'{checkpoint_dir}/model-{model_name}.pt'
+                # model_path = f'{checkpoint_dir}/model-{model_name}.pt'
+                model_path = get_latest_model(checkpoint_dir, model_name)
             model_checkpoint = torch.load(model_path, map_location=self.device)
             self.policy_net.load_state_dict(model_checkpoint['state_dict'])
             if self.train:
@@ -204,6 +231,9 @@ class BoxDeliverySAM(BasePolicy):
 
         # Check if preemption occurred and if so, use the config file from current run
         checkpoint_dir = os.path.join(os.path.dirname(__file__), f'checkpoint/{self.job_id}')
+        # create checkpoint directory if it does not exist
+        if not os.path.exists(checkpoint_dir):
+            os.makedirs(checkpoint_dir, exist_ok=True)
         checkpoint_files = [f for f in os.listdir(checkpoint_dir) if f.startswith('checkpoint')]
         if checkpoint_files: # if there exists a checkpoint file, this indicates a run has been interrupted
             config_path = f'{checkpoint_dir}/config.yaml'
@@ -355,7 +385,13 @@ class BoxDeliverySAM(BasePolicy):
             action, _ = policy.predict(state, exploration_eps=exploration_eps)
 
             # step the simulation
-            next_state, reward, done, truncated, info = env.step(action)
+            if self.cfg.ablation.curriculum:
+                if timestep == 50000:
+                    replay_buffer.buffer = replay_buffer.buffer[7500:]
+                    replay_buffer.priorities = replay_buffer.priorities[7500:]
+                    replay_buffer.position = len(replay_buffer.buffer)
+                    print("Purging replay buffer to remove samples from the first 50k timesteps")
+            next_state, reward, done, truncated, info = env.step(action, curric_starts=(timestep > 50000))
             ministeps = info['ministeps']
 
             # store in buffer

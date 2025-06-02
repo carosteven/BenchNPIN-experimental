@@ -636,7 +636,7 @@ class BoxDeliveryEnv(gym.Env):
         return self.observation, info
     
 
-    def step(self, action):
+    def step(self, action, curric_starts=False):
         """Executes one time step in the environment and returns the result."""
         self.t += 1
         self.dp = None
@@ -786,9 +786,10 @@ class BoxDeliveryEnv(gym.Env):
             self.space.remove(box.body, box)
             self.boxes.remove(box)
 
-        # step distance penalty
-        if self.cfg.ablation.step_dist_penalty:
-            robot_reward -= (self.partial_rewards_scale / 2) * robot_distance
+        if not self.cfg.ablation.curriculum or curric_starts: # curriculum starts at 50000 steps (controlled by policy)
+            # step distance penalty
+            if self.cfg.ablation.step_dist_penalty:
+                robot_reward -= (self.partial_rewards_scale / 4) * robot_distance
 
         # terminal reward
         if self.robot_cumulative_boxes == self.num_boxes:
