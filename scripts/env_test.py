@@ -8,20 +8,23 @@ import numpy as np
 
 
 # env = gym.make('ship-ice-v0')
-# env = gym.make('box-delivery-v0')
+env = gym.make('box-delivery-v0')
 
 # Area clearing. Demo mode is set through a member function.
-env = gym.make('area-clearing-v0')
+# env = gym.make('area-clearing-v0')
 # env = gym.make('maze-NAMO-v0')
 env = env.unwrapped
-env.activate_demo_mode()
+# env.activate_demo_mode()
 
 env.reset()
 
-for i in range(500):
+for i in range(3):
 
-    action = 0
+    action = 96*20 - 1
+    # action = 43
+    # input()
     observation, reward, terminated, truncated, info = env.step(action)
+    input()
 
     env.render()
     

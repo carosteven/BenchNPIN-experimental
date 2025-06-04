@@ -250,7 +250,7 @@ class BoxDeliveryEnv(gym.Env):
         if self.cfg.agent.random_start:
             self.start = self.get_random_robot_start()
         else:
-            self.start = (5, 1.5, np.pi*3/2)
+            self.start = (-1, -2, np.pi/2)
         self.robot_info['start_pos'] = self.start
 
         self.boundary_dicts = self.generate_boundary()
@@ -523,9 +523,12 @@ class BoxDeliveryEnv(gym.Env):
 
         box_count = 0
         while box_count < total_boxes_required:
-            center_x = self.random_state.uniform(min_x, max_x)
-            center_y = self.random_state.uniform(min_y, max_y)
-            heading = self.random_state.uniform(0, 2 * np.pi)
+            # center_x = self.random_state.uniform(min_x, max_x)
+            # center_y = self.random_state.uniform(min_y, max_y)
+            # heading = self.random_state.uniform(0, 2 * np.pi)
+            center_x = -1
+            center_y = -1.5+0.35
+            heading = 0
 
             # loop through previous boxes to check for overlap
             overlapped = False
@@ -896,15 +899,17 @@ class BoxDeliveryEnv(gym.Env):
         self.robot.body.angular_velocity = self.angular_speed * 100
         self.robot.body.velocity = Vec2d(global_velocity[0], global_velocity[1]) * 100
     
-    def controller(self, curr_position, curr_heading):
+    def controller(self, curr_position, curr_heading, path=None):
+        if path is None:
+            path = self.path
         x = curr_position[0]
         y = curr_position[1]
         h = curr_heading
 
         if self.dp == None:
-            cx = self.path.T[0][0:2]
-            cy = self.path.T[1][0:2]
-            ch = self.path.T[2][0:2]
+            cx = path.T[0][0:2]
+            cy = path.T[1][0:2]
+            ch = path.T[2][0:2]
             self.dp = DP(x=x, y=y, yaw=h, cx=cx, cy=cy, ch=ch, **self.cfg.controller)
         
         # call ideal controller to get angular and linear speeds
@@ -919,6 +924,18 @@ class BoxDeliveryEnv(gym.Env):
     def apply_controller(self, omega, v):
         self.robot.body.angular_velocity = omega / 2
         self.robot.body.velocity = (v*5).tolist()
+
+    def get_box_heading(self, box, offset):
+        return (box.body.angle + offset) % (2 * np.pi)
+
+    def get_leashed_robot_pose(self, box_pos, box_heading, offset=0.3):
+        """
+        Returns the desired robot pose offset behind the box.
+        """
+        target_x = box_pos[0] - offset * np.cos(box_heading)
+        target_y = box_pos[1] - offset * np.sin(box_heading)
+        target_heading = box_heading
+        return np.array([target_x, target_y, target_heading])
 
     def execute_robot_path(self, robot_initial_position, robot_initial_heading, robot_move_sign):
         ############################################################################################################
@@ -939,6 +956,34 @@ class BoxDeliveryEnv(gym.Env):
         sim_steps = 0
         done_turning = False
         prev_heading_diff = 0
+
+        box_pos = self.boxes[0].body.position
+        box_heading = np.arctan2(robot_waypoint_position[1] - box_pos[1], robot_waypoint_position[0] - box_pos[0])
+
+        lookahead = 0.2
+        desired_box_pos = np.array([
+            box_pos[0] + lookahead * np.cos(box_heading),
+            box_pos[1] + lookahead * np.sin(box_heading)
+        ])
+
+        robot_target_pose = self.get_leashed_robot_pose(desired_box_pos, box_heading, offset=0.3)#self.robot_radius + 0.1)
+        self.path = np.insert(self.path, robot_waypoint_index, np.array(robot_target_pose), axis=0)
+        self.render()
+        input()
+        self.renderer.update_path(self.path)
+        self.render()
+        input()
+
+        robot_waypoint_positions = [(waypoint[0], waypoint[1]) for waypoint in self.path]
+        robot_waypoint_headings = [waypoint[2] for waypoint in self.path]
+
+        robot_prev_waypoint_position = robot_waypoint_positions[robot_waypoint_index - 1]
+        robot_waypoint_position = robot_waypoint_positions[robot_waypoint_index]
+        robot_waypoint_heading = robot_waypoint_headings[robot_waypoint_index]
+
+        # TODO change this to the first box that intersects with the path
+        box_angle_offset = np.argmin([np.abs((angle - robot_waypoint_heading + np.pi) % (2 * np.pi) - np.pi) for angle in [self.boxes[0].body.angle, self.boxes[0].body.angle + np.pi/2, self.boxes[0].body.angle + np.pi, self.boxes[0].body.angle - np.pi/2]])
+
         while True:
             if not robot_is_moving:
                 break
@@ -968,6 +1013,7 @@ class BoxDeliveryEnv(gym.Env):
                     robot_new_heading = np.arctan2(move_sign * dy, move_sign * dx)
                     robot_new_position[0] += move_sign * MOVE_STEP_SIZE * np.cos(robot_new_heading)
                     robot_new_position[1] += move_sign * MOVE_STEP_SIZE * np.sin(robot_new_heading)
+
             # change robot pose
             omega, v = self.controller(robot_prev_position, robot_prev_heading)
             if not done_turning:
@@ -989,8 +1035,8 @@ class BoxDeliveryEnv(gym.Env):
                     break  # Note: self.robot_distance does not get not updated
             
             # stop if robot reached waypoint
-            if (self.distance(robot_position, robot_waypoint_positions[robot_waypoint_index]) < WAYPOINT_MOVING_THRESHOLD
-                and np.abs(robot_heading - robot_waypoint_headings[robot_waypoint_index]) < WAYPOINT_TURNING_THRESHOLD):
+            if (self.distance(robot_position, robot_waypoint_positions[robot_waypoint_index]) < WAYPOINT_MOVING_THRESHOLD):
+                # and np.abs(robot_heading - robot_waypoint_headings[robot_waypoint_index]) < WAYPOINT_TURNING_THRESHOLD):
                 
                 # update distance moved
                 robot_distance += self.distance(robot_prev_waypoint_position, robot_position)
