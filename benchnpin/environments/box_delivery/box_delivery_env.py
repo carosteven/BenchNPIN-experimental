@@ -250,7 +250,7 @@ class BoxDeliveryEnv(gym.Env):
         if self.cfg.agent.random_start:
             self.start = self.get_random_robot_start()
         else:
-            self.start = (-1, -2, np.pi/2)
+            self.start = (-2.5, -2, np.pi/2)
         self.robot_info['start_pos'] = self.start
 
         self.boundary_dicts = self.generate_boundary()
@@ -523,12 +523,9 @@ class BoxDeliveryEnv(gym.Env):
 
         box_count = 0
         while box_count < total_boxes_required:
-            # center_x = self.random_state.uniform(min_x, max_x)
-            # center_y = self.random_state.uniform(min_y, max_y)
-            # heading = self.random_state.uniform(0, 2 * np.pi)
-            center_x = -1
-            center_y = -1.5+0.35
-            heading = 0
+            center_x = self.random_state.uniform(min_x, max_x)
+            center_y = self.random_state.uniform(min_y, max_y)
+            heading = self.random_state.uniform(0, 2 * np.pi)
 
             # loop through previous boxes to check for overlap
             overlapped = False
@@ -925,6 +922,32 @@ class BoxDeliveryEnv(gym.Env):
         self.robot.body.angular_velocity = omega / 2
         self.robot.body.velocity = (v*5).tolist()
 
+    def check_path_for_box_collision(self, path=None):
+        """
+        Checks the path for collision with any box. Returns the first box that intersects with the path,
+        and the index along the path where the collision occurs.
+        """
+        from shapely.geometry import LineString, Polygon
+        if path is None:
+            path = self.path
+        # Construct LineString from path
+        line_path = LineString([(pt[0], pt[1]) for pt in path])
+        for box in self.boxes:
+            vertices = [box.body.local_to_world(v) for v in box.get_vertices()]
+            polygon = Polygon([[v.x, v.y] for v in vertices]).buffer(self.cfg.boxes.box_size / 2)
+            if line_path.intersects(polygon):
+                intersection_point = line_path.intersection(polygon)
+                if intersection_point.geom_type == 'Point':
+                    collision_point = (intersection_point.x, intersection_point.y)
+                else:
+                    # handle LineString or MultiPoint cases
+                    collision_point = list(intersection_point.coords)[0]
+                # Find closest point on path to collision point
+                dists = [np.linalg.norm(np.array([pt[0], pt[1]]) - np.array(collision_point)) for pt in path]
+                collision_idx = int(np.argmin(dists))
+                return box, collision_idx
+        return None, None
+
     def get_box_heading(self, box, offset):
         return (box.body.angle + offset) % (2 * np.pi)
 
@@ -957,32 +980,33 @@ class BoxDeliveryEnv(gym.Env):
         done_turning = False
         prev_heading_diff = 0
 
-        box_pos = self.boxes[0].body.position
-        box_heading = np.arctan2(robot_waypoint_position[1] - box_pos[1], robot_waypoint_position[0] - box_pos[0])
+        box, _ = self.check_path_for_box_collision()
 
-        lookahead = 0.2
-        desired_box_pos = np.array([
-            box_pos[0] + lookahead * np.cos(box_heading),
-            box_pos[1] + lookahead * np.sin(box_heading)
-        ])
+        if box is not None:
+            box_pos = box.body.position         
+            box_heading = np.arctan2(robot_waypoint_position[1] - box_pos[1], robot_waypoint_position[0] - box_pos[0])
+            
 
-        robot_target_pose = self.get_leashed_robot_pose(desired_box_pos, box_heading, offset=0.3)#self.robot_radius + 0.1)
-        self.path = np.insert(self.path, robot_waypoint_index, np.array(robot_target_pose), axis=0)
-        self.render()
-        input()
-        self.renderer.update_path(self.path)
-        self.render()
-        input()
+            lookahead = 0.2
+            desired_box_pos = np.array([
+                box_pos[0] + lookahead * np.cos(box_heading),
+                box_pos[1] + lookahead * np.sin(box_heading)
+            ])
 
-        robot_waypoint_positions = [(waypoint[0], waypoint[1]) for waypoint in self.path]
-        robot_waypoint_headings = [waypoint[2] for waypoint in self.path]
+            robot_target_pose = self.get_leashed_robot_pose(desired_box_pos, box_heading, offset=0.3)#self.robot_radius + 0.1)
+            self.path = np.insert(self.path, robot_waypoint_index, np.array(robot_target_pose), axis=0)
+            if self.cfg.render.show:
+                self.renderer.update_path(self.path)
 
-        robot_prev_waypoint_position = robot_waypoint_positions[robot_waypoint_index - 1]
-        robot_waypoint_position = robot_waypoint_positions[robot_waypoint_index]
-        robot_waypoint_heading = robot_waypoint_headings[robot_waypoint_index]
+            robot_waypoint_positions = [(waypoint[0], waypoint[1]) for waypoint in self.path]
+            robot_waypoint_headings = [waypoint[2] for waypoint in self.path]
+
+            robot_prev_waypoint_position = robot_waypoint_positions[robot_waypoint_index - 1]
+            robot_waypoint_position = robot_waypoint_positions[robot_waypoint_index]
+            robot_waypoint_heading = robot_waypoint_headings[robot_waypoint_index]
 
         # TODO change this to the first box that intersects with the path
-        box_angle_offset = np.argmin([np.abs((angle - robot_waypoint_heading + np.pi) % (2 * np.pi) - np.pi) for angle in [self.boxes[0].body.angle, self.boxes[0].body.angle + np.pi/2, self.boxes[0].body.angle + np.pi, self.boxes[0].body.angle - np.pi/2]])
+        # box_angle_offset = np.argmin([np.abs((angle - robot_waypoint_heading + np.pi) % (2 * np.pi) - np.pi) for angle in [self.boxes[0].body.angle, self.boxes[0].body.angle + np.pi/2, self.boxes[0].body.angle + np.pi, self.boxes[0].body.angle - np.pi/2]])
 
         while True:
             if not robot_is_moving:

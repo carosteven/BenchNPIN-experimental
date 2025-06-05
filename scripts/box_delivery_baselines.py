@@ -116,13 +116,13 @@ if __name__ == '__main__':
                 # 'exploration_timesteps': 6000*2,
             },
             'evaluate': {
-                'eval_mode': False,
+                'eval_mode': True,
                 'num_eps': 20,
                 'policy_types': ['sam', 'sam', 'sam', 'sam'], # list of policy types to evaluate
                 'action_types': ['position', 'position', 'position', 'position'], # list of action types to evaluate
-                'model_names': ['ha_term2', 'ha_term'], # list of model names to evaluate
+                'model_names': ['sam_small_empty', 'zeros_se', 'zeros_com_se', 'orig_se'], # list of model names to evaluate
                 'model_path': 'models/box_delivery', # path to the models
-                'obs_configs': ['small_columns', 'small_columns', 'small_empty', 'small_empty'], # list of observation configurations
+                'obs_configs': ['small_empty', 'small_empty', 'small_empty', 'small_empty'], # list of observation configurations
             },
             'rewards_sam': {
                 'goal_reward': 2.0,
