@@ -504,7 +504,7 @@ class BoxDeliverySAM(BasePolicy):
         
         metric = TaskDrivenMetric(alg_name="SAM", robot_mass=env.cfg.agent.mass)
 
-        rewards_list = []
+        eps_rewards = []
         eps_steps = []
         eps_distance = []
         eps_avg_box_distance = []
@@ -513,16 +513,18 @@ class BoxDeliverySAM(BasePolicy):
             obs, info = env.reset()
             metric.reset(info)
             done = truncated = False
-            eps_reward = 0.0
             ep_steps = 0
+            ep_reward = 0.0
             while True:
                 ep_steps += 1
                 action, _ = self.model.predict(obs)
                 obs, reward, done, truncated, info = env.step(action)
+                ep_reward += reward
                 metric.update(info=info, reward=reward, eps_complete=(done or truncated))
                 if done or truncated:
                     break
             eps_steps.append(ep_steps)
+            eps_rewards.append(ep_reward)
             eps_distance.append(info['cumulative_distance'])
             eps_avg_box_distance.append(sum(env.box_distances.values()) / len(env.box_distances))
         
@@ -530,13 +532,15 @@ class BoxDeliverySAM(BasePolicy):
         metric.plot_scores(save_fig_dir=env.cfg.output_dir)
         avg_eps_steps = sum(eps_steps) / len(eps_steps)
         std_dev_eps_steps = (sum((x - avg_eps_steps) ** 2 for x in eps_steps) / len(eps_steps)) ** 0.5
-
+        avg_eps_rewards = sum(eps_rewards) / len(eps_rewards)
+        std_dev_eps_rewards = (sum((x - avg_eps_rewards) ** 2 for x in eps_rewards) / len(eps_rewards)) ** 0.5
         avg_eps_distance = sum(eps_distance) / len(eps_distance)
         std_dev_eps_distance = (sum((x - avg_eps_distance) ** 2 for x in eps_distance) / len(eps_distance)) ** 0.5
         avg_eps_avg_box_distance = sum(eps_avg_box_distance) / len(eps_avg_box_distance)
         std_dev_eps_avg_box_distance = (sum((x - avg_eps_avg_box_distance) ** 2 for x in eps_avg_box_distance) / len(eps_avg_box_distance)) ** 0.5
         avg_success_rate = sum(metric.success_rates) / len(metric.success_rates)
         print(f"Average eps_steps: {avg_eps_steps:.2f} \\pm {std_dev_eps_steps:.2f}")
+        print(f"Average eps_rewards: {avg_eps_rewards:.2f} \\pm {std_dev_eps_rewards:.2f}")
         print(f"Average eps_distance: {avg_eps_distance:.2f} \\pm {std_dev_eps_distance:.2f}")
         print(f"Average eps_avg_box_distance: {avg_eps_avg_box_distance:.2f} \\pm {std_dev_eps_avg_box_distance:.2f}")
         print(f"Average success rate: {avg_success_rate}")

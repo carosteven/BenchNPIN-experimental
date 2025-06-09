@@ -116,27 +116,27 @@ if __name__ == '__main__':
                 # 'exploration_timesteps': 6000*2,
             },
             'evaluate': {
-                'eval_mode': False,
-                'num_eps': 20,
+                'eval_mode': True,
+                'num_eps': 1,
                 'policy_types': ['sam', 'sam', 'sam', 'sam'], # list of policy types to evaluate
                 'action_types': ['position', 'position', 'position', 'position'], # list of action types to evaluate
-                'model_names': ['ha_term2', 'ha_term'], # list of model names to evaluate
+                'model_names': ['og_sam_small_empty'], # list of model names to evaluate
                 'model_path': 'models/box_delivery', # path to the models
-                'obs_configs': ['small_columns', 'small_columns', 'small_empty', 'small_empty'], # list of observation configurations
+                'obs_configs': ['small_empty', 'large_divider', 'small_empty', 'small_empty'], # list of observation configurations
             },
             'rewards_sam': {
-                'goal_reward': 2.0,
+                'goal_reward': 1.0,
             },
             'ablation': {
                 'half_action_space': False,
-                'terminal_reward': 10,
+                'terminal_reward': 0,
                 'step_penalty': 0,
-                'max_distance_reward': True,
+                'max_distance_reward': False,
                 'box_dist_penalty': False,
                 'box_dist_penalty_scale': 0.35,
-                'step_dist_penalty': True,
+                'step_dist_penalty': False,
                 'sparse': False,
-                'per': True,
+                'per': False,
                 'per_alpha': 0.6,
                 'per_beta': 0.4,
                 'curriculum': False,
