@@ -117,21 +117,12 @@ if __name__ == '__main__':
             },
             'evaluate': {
                 'eval_mode': True,
-<<<<<<< HEAD
                 'num_eps': 20,
                 'policy_types': ['sam', 'sam', 'sam', 'sam'], # list of policy types to evaluate
                 'action_types': ['position', 'position', 'position', 'position'], # list of action types to evaluate
                 'model_names': ['sam_small_empty', 'zeros_se', 'zeros_com_se', 'orig_se'], # list of model names to evaluate
                 'model_path': 'models/box_delivery', # path to the models
                 'obs_configs': ['small_empty', 'small_empty', 'small_empty', 'small_empty'], # list of observation configurations
-=======
-                'num_eps': 1,
-                'policy_types': ['sam', 'sam', 'sam', 'sam'], # list of policy types to evaluate
-                'action_types': ['position', 'position', 'position', 'position'], # list of action types to evaluate
-                'model_names': ['og_sam_small_empty'], # list of model names to evaluate
-                'model_path': 'models/box_delivery', # path to the models
-                'obs_configs': ['small_empty', 'large_divider', 'small_empty', 'small_empty'], # list of observation configurations
->>>>>>> origin/ha-conv
             },
             'rewards_sam': {
                 'goal_reward': 1.0,
@@ -149,6 +140,7 @@ if __name__ == '__main__':
                 'per_alpha': 0.6,
                 'per_beta': 0.4,
                 'curriculum': False,
+                'better_pushing': False,
             }
         }
         

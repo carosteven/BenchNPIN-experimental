@@ -162,3 +162,4 @@ ablation:
   per_alpha: 0.6
   per_beta: 0.4
   curriculum: false
+  better_pushing: false
