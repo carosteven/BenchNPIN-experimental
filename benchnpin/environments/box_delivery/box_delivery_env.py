@@ -1112,17 +1112,12 @@ class BoxDeliveryEnv(gym.Env):
         done_turning = False
         prev_heading_diff = 0
 
-        # if self.cfg.render.show:
-            # self.render()
-            # input()
-            
         box_in_path, _ = self.check_path_for_box_collision()
 
         if box_in_path is not None and self.cfg.ablation.better_pushing:
-            if self.cfg.render.show:
-                self.renderer.update_path(self.path)
-                self.render()
-                # input()
+            box_pos = box_in_path.body.position         
+            box_heading = np.arctan2(robot_waypoint_position[1] - box_pos[1], robot_waypoint_position[0] - box_pos[0])
+            
 
             box_pos = box_in_path.body.position         
             box_heading = np.arctan2(robot_waypoint_position[1] - box_pos[1], robot_waypoint_position[0] - box_pos[0])
