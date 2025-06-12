@@ -20,7 +20,7 @@ fixed_trial_idx: 1
 render:
   log_obs: false        # whether to log occupancy observation
   show: true            # if true display the environment
-  show_obs: false       # if true show occupancy observation
+  show_obs: false # if true show occupancy observation
   frequency: 20         # frequency of rendering
 sim:
   t_max: 2000  # max number of iterations in simulation loop (originally 5000)
@@ -54,7 +54,7 @@ boxes:
 agent:
   action_type: 'position' # options are velocity, heading, position
   step_size: 1.25 # distance travelled per step in heading control
-  random_start: true 
+  random_start: true
   mass: 1  # mass of the robot
   padding: 0.25  # adds padding to ship footprint
   length: 0.8
@@ -162,4 +162,4 @@ ablation:
   per_alpha: 0.6
   per_beta: 0.4
   curriculum: false
-  better_pushing: false
+  better_pushing: true

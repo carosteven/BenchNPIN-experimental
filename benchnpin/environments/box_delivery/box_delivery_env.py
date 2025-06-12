@@ -251,7 +251,8 @@ class BoxDeliveryEnv(gym.Env):
         if self.cfg.agent.random_start:
             self.start = self.get_random_robot_start()
         else:
-            self.start = (-2.5, -2, np.pi/2)
+            # self.start = (-1.8, -2.7, np.pi*0)
+            self.start = (0, 0, np.pi/2)
         self.robot_info['start_pos'] = self.start
 
         self.boundary_dicts = self.generate_boundary()
@@ -293,7 +294,7 @@ class BoxDeliveryEnv(gym.Env):
         self.position_controller = PositionController(self.cfg, self.robot_radius, self.room_width, self.room_length, 
                                                       self.configuration_space, self.configuration_space_thin, self.closest_cspace_indices,
                                                       self.local_map_pixel_width, self.local_map_width, self.local_map_pixels_per_meter, 
-                                                      TURN_STEP_SIZE, MOVE_STEP_SIZE, WAYPOINT_MOVING_THRESHOLD, WAYPOINT_TURNING_THRESHOLD)
+                                                      TURN_STEP_SIZE, MOVE_STEP_SIZE, WAYPOINT_MOVING_THRESHOLD, WAYPOINT_TURNING_THRESHOLD, closest_cspace_indices_thin=self.closest_cspace_indices_thin)
         
     
     def prevent_boundary_intersection(self, arbiter):
@@ -527,6 +528,9 @@ class BoxDeliveryEnv(gym.Env):
             center_x = self.random_state.uniform(min_x, max_x)
             center_y = self.random_state.uniform(min_y, max_y)
             heading = self.random_state.uniform(0, 2 * np.pi)
+            # center_x = .1
+            # center_y = 1
+            # heading = 0
 
             # loop through previous boxes to check for overlap
             overlapped = False
@@ -981,12 +985,20 @@ class BoxDeliveryEnv(gym.Env):
         done_turning = False
         prev_heading_diff = 0
 
+        # if self.cfg.render.show:
+        #     self.render()
+        #     input()
+            
         box_in_path, _ = self.check_path_for_box_collision()
 
         if box_in_path is not None and self.cfg.ablation.better_pushing:
+            if self.cfg.render.show:
+                self.renderer.update_path(self.path)
+                self.render()
+                input()
+
             box_pos = box_in_path.body.position         
             box_heading = np.arctan2(robot_waypoint_position[1] - box_pos[1], robot_waypoint_position[0] - box_pos[0])
-            
 
             lookahead = 0.2
             desired_box_pos = np.array([
@@ -994,10 +1006,33 @@ class BoxDeliveryEnv(gym.Env):
                 box_pos[1] + lookahead * np.sin(box_heading)
             ])
 
-            robot_target_pose = self.get_leashed_robot_pose(desired_box_pos, box_heading, offset=0.3)#self.robot_radius + 0.1)
-            self.path = np.insert(self.path, robot_waypoint_index, np.array(robot_target_pose), axis=0)
+            robot_target_pose = self.get_leashed_robot_pose(desired_box_pos, box_heading) #, offset=0.3)#self.robot_radius + 0.1)
+
+            x_pose_local, y_pose_local = self.robot.body.world_to_local((robot_target_pose[0], robot_target_pose[1]))
+            x_pose_pixels = int(self.local_map_pixel_width / 2 - x_pose_local * self.local_map_pixels_per_meter)
+            y_pose_pixels = int(self.local_map_pixel_width / 2 - y_pose_local * self.local_map_pixels_per_meter)
+            x_pose_pixels, y_pose_pixels = self.bound_to_map(x_pose_pixels, y_pose_pixels)
+            # try:
+            subpath, _ = self.position_controller.get_waypoints_to_spatial_action(robot_initial_position, robot_initial_heading, np.ravel_multi_index((x_pose_pixels, y_pose_pixels), (self.local_map_pixel_width, self.local_map_pixel_width)), subpath=True)
+
+            # except:
+            #     self.path = np.insert(self.path, robot_waypoint_index, robot_target_pose, axis=0)
+            #     if self.cfg.render.show:
+            #         self.renderer.update_path(self.path)
+            #         self.render()
+            #     print()
+            #     print(robot_target_pose[0], robot_target_pose[1])
+            #     print(x_pose_local, y_pose_local)
+            #     print(x_pose_pixels, y_pose_pixels)
+            #     input("Shit")
+            #     subpath = robot_target_pose
+            for i in range(len(subpath)):
+                self.path = np.insert(self.path, robot_waypoint_index + i, subpath[i], axis=0)
+
             if self.cfg.render.show:
                 self.renderer.update_path(self.path)
+                self.render()
+                input()
 
             robot_waypoint_positions = [(waypoint[0], waypoint[1]) for waypoint in self.path]
             robot_waypoint_headings = [waypoint[2] for waypoint in self.path]
@@ -1265,8 +1300,11 @@ class BoxDeliveryEnv(gym.Env):
         
         selem_thin = disk(np.floor(self.robot_half_width * self.local_map_pixels_per_meter))
         self.configuration_space_thin = 1 - binary_dilation(obstacle_map, selem_thin).astype(np.float32)
+        
+        # self.configuration_space = 1 - binary_dilation(obstacle_map, selem_thin).astype(np.float32)
 
         self.closest_cspace_indices = distance_transform_edt(1 - self.configuration_space, return_distances=False, return_indices=True)
+        self.closest_cspace_indices_thin = distance_transform_edt(1 - self.configuration_space_thin, return_distances=False, return_indices=True)
         self.small_obstacle_map = 1 - small_obstacle_map
 
     def update_global_overhead_map(self):
@@ -1392,7 +1430,30 @@ class BoxDeliveryEnv(gym.Env):
                     ax.set_xticks([])
                     ax.set_yticks([])
                     im = ax.imshow(self.observation[:,:,i], cmap='hot', interpolation='nearest')
-                    # if self.colorbars[i] is not None:
+                    if self.path is not None:
+                        path_np = np.array(self.path)
+
+                        # Robot pose
+                        robot_pos = self.robot.body.position
+                        robot_heading = self.restrict_heading_range(self.robot.body.angle)
+
+                        # Ego transform
+                        dx = path_np[:,0] - robot_pos[0]
+                        dy = path_np[:,1] - robot_pos[1]
+
+                        cos_h = np.cos(robot_heading - np.pi/2)
+                        sin_h = np.sin(robot_heading - np.pi/2)
+
+                        ego_x = cos_h * dx + sin_h * dy
+                        ego_y = -sin_h * dx + cos_h * dy
+
+                        # Convert to pixel space
+                        px = ego_x * self.local_map_pixels_per_meter + self.observation.shape[1] // 2
+                        py = -ego_y * self.local_map_pixels_per_meter + self.observation.shape[0] // 2
+
+                        ax.plot(px, py, color='cyan', linewidth=2)
+
+                        # if self.colorbars[i] is not None:
                     #     self.colorbars[i].update_normal(im)
                     # else:
                     #     self.colorbars[i] = self.state_fig.colorbar(im, ax=ax)
@@ -1425,6 +1486,32 @@ class BoxDeliveryEnv(gym.Env):
         position_x = (pixel_j - image_shape[1] / 2) / self.local_map_pixels_per_meter
         position_y = (image_shape[0] / 2 - pixel_i) / self.local_map_pixels_per_meter
         return position_x, position_y
+
+    def bound_to_map(self, pixel_x, pixel_y):
+        # Compute angle
+        angle = np.arctan2(
+            self.local_map_pixel_width / 2 - pixel_y,
+            pixel_x - self.local_map_pixel_width / 2
+        )
+
+        # Compute distance to center in pixel units
+        dx_pixels = pixel_x - self.local_map_pixel_width / 2
+        dy_pixels = pixel_y - self.local_map_pixel_width / 2
+        radius_pixels = np.sqrt(dx_pixels**2 + dy_pixels**2)
+
+        # Compute max radius (distance to closest edge)
+        max_radius = self.local_map_pixel_width / 2
+
+        # If target is out of bounds → project back onto the edge, preserving angle
+        if radius_pixels > max_radius:
+            scale = max_radius / radius_pixels
+            dx_pixels *= scale
+            dy_pixels *= scale
+
+        # Final clamped pixel coordinates (but angle preserved)
+        pixel_x = int(self.local_map_pixel_width / 2 + dx_pixels)
+        pixel_y = int(self.local_map_pixel_width / 2 + dy_pixels)
+        return pixel_x, pixel_y
     
     def close(self):
         """Optional: close any resources or cleanup if necessary."""

@@ -34,7 +34,7 @@ class PositionController:
     def __init__(self, cfg, robot_radius, map_width, map_height, 
                  configuration_space, configuration_space_thin, closest_cspace_indices,
                  local_map_pixel_width, local_map_width, local_map_pixels_per_meter,
-                 turn_step_size, move_step_size, waypoint_moving_threshold, waypoint_turning_threshold):
+                 turn_step_size, move_step_size, waypoint_moving_threshold, waypoint_turning_threshold, closest_cspace_indices_thin=None):
         self.cfg = cfg
         self.robot_radius = robot_radius
 
@@ -44,6 +44,7 @@ class PositionController:
         self.configuration_space = configuration_space
         self.configuration_space_thin = configuration_space_thin
         self.closest_cspace_indices = closest_cspace_indices
+        self.closest_cspace_indices_thin = closest_cspace_indices_thin if closest_cspace_indices_thin is not None else closest_cspace_indices
 
         self.local_map_pixel_width = local_map_pixel_width
         self.local_map_width = local_map_width
@@ -53,7 +54,7 @@ class PositionController:
         self.waypoint_moving_threshold = waypoint_moving_threshold
         self.waypoint_turning_threshold = waypoint_turning_threshold
 
-    def get_waypoints_to_spatial_action(self, robot_initial_position, robot_initial_heading, spatial_action):
+    def get_waypoints_to_spatial_action(self, robot_initial_position, robot_initial_heading, spatial_action, subpath=False):
         ################################ Position Control ################################
         if self.cfg.ablation.half_action_space:
             center_offset = self.local_map_pixel_width // 2
@@ -89,7 +90,7 @@ class PositionController:
         ratio = min(ratio_x, ratio_y)
         robot_target_front_position = (np.asarray(robot_initial_position) + ratio * diff).tolist()
         # compute waypoint positions
-        robot_waypoint_positions = self.shortest_path(robot_initial_position, robot_target_front_position, check_straight=True)
+        robot_waypoint_positions = self.shortest_path(robot_initial_position, robot_target_front_position, check_straight=True, subpath=subpath)
 
         # compute waypoint headings
         robot_waypoint_headings = [None]
@@ -124,11 +125,13 @@ class PositionController:
         path = []
         for position, heading in zip(robot_waypoint_positions, robot_waypoint_headings):
             path.append([position[0], position[1], heading])
+        if subpath:
+            path.pop(0)
         path = np.array(path)
 
         return path, robot_move_sign
     
-    def shortest_path(self, source_position, target_position, check_straight=False, configuration_space=None):
+    def shortest_path(self, source_position, target_position, check_straight=False, configuration_space=None, subpath=False):
         if configuration_space is None:
             configuration_space = self.configuration_space
 
@@ -182,8 +185,17 @@ class PositionController:
         else:
             path[0] = source_position
             path[-1] = target_position
-        
+            
+        if subpath:
+            target_i, target_j = position_to_pixel_indices(target_position[0], target_position[1], configuration_space.shape, self.local_map_pixels_per_meter)
+            # target_i, target_j = self.closest_valid_cspace_indices_thin(target_i, target_j)
+            target_i, target_j = self.closest_valid_cspace_indices(target_i, target_j)
+            path[-1] = pixel_indices_to_position(target_i, target_j, configuration_space.shape, self.local_map_pixels_per_meter)
+
         return path
     
     def closest_valid_cspace_indices(self, i, j):
         return self.closest_cspace_indices[:, i, j]
+
+    def closest_valid_cspace_indices_thin(self, i, j):
+        return self.closest_cspace_indices_thin[:, i, j]

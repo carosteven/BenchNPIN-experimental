@@ -38,10 +38,13 @@ def main(cfg, job_id):
         benchmark_results = []
         num_eps = cfg.evaluate.num_eps
         model_path = cfg.evaluate.model_path
+        seed = 0
         for policy_type, action_type, model_name, obs_config in zip(cfg.evaluate.policy_types, cfg.evaluate.action_types, cfg.evaluate.model_names, cfg.evaluate.obs_configs):
             cfg.agent.action_type = action_type
             cfg.train.job_type = policy_type
             cfg.env.obstacle_config = obs_config
+            # cfg.misc.random_seed = seed
+            seed += 1
 
             if policy_type == 'sam':
                 # ========================= Spatial Action Map Policy =========================
@@ -89,7 +92,7 @@ if __name__ == '__main__':
         # High level configuration for the box delivery task
         cfg={
             'render': {
-                'show': False,           # if true display the environment
+                'show': True,           # if true display the environment
                 'show_obs': False,       # if true show observation
             },
             'agent': {
@@ -120,7 +123,7 @@ if __name__ == '__main__':
                 'num_eps': 20,
                 'policy_types': ['sam', 'sam', 'sam', 'sam'], # list of policy types to evaluate
                 'action_types': ['position', 'position', 'position', 'position'], # list of action types to evaluate
-                'model_names': ['sam_small_empty', 'zeros_se', 'zeros_com_se', 'orig_se'], # list of model names to evaluate
+                'model_names': ['term_se'], # list of model names to evaluate
                 'model_path': 'models/box_delivery', # path to the models
                 'obs_configs': ['small_empty', 'small_empty', 'small_empty', 'small_empty'], # list of observation configurations
             },
@@ -140,7 +143,7 @@ if __name__ == '__main__':
                 'per_alpha': 0.6,
                 'per_beta': 0.4,
                 'curriculum': False,
-                'better_pushing': False,
+                'better_pushing': True,
             }
         }
         

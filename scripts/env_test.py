@@ -18,10 +18,11 @@ env = env.unwrapped
 
 env.reset()
 
-for i in range(3):
+for i in range(1):
 
-    action = 96*20 - 1
-    # action = 43
+    action = 96*(36 - 1) + 48
+    print(action)
+    # action = 48
     # input()
     observation, reward, terminated, truncated, info = env.step(action)
     input()
