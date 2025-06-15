@@ -20,8 +20,7 @@ env.reset()
 
 for i in range(1):
 
-    action = 96*(36 - 1) + 48
-    print(action)
+    action = 96*(10 - 1) + 32
     # action = 48
     # input()
     observation, reward, terminated, truncated, info = env.step(action)

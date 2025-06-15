@@ -92,7 +92,7 @@ if __name__ == '__main__':
         # High level configuration for the box delivery task
         cfg={
             'render': {
-                'show': True,           # if true display the environment
+                'show': False,           # if true display the environment
                 'show_obs': False,       # if true show observation
             },
             'agent': {
@@ -123,9 +123,9 @@ if __name__ == '__main__':
                 'num_eps': 20,
                 'policy_types': ['sam', 'sam', 'sam', 'sam'], # list of policy types to evaluate
                 'action_types': ['position', 'position', 'position', 'position'], # list of action types to evaluate
-                'model_names': ['term_se'], # list of model names to evaluate
+                'model_names': ['term_sc'], # list of model names to evaluate
                 'model_path': 'models/box_delivery', # path to the models
-                'obs_configs': ['small_empty', 'small_empty', 'small_empty', 'small_empty'], # list of observation configurations
+                'obs_configs': ['small_columns', 'small_empty', 'small_empty', 'small_empty'], # list of observation configurations
             },
             'rewards_sam': {
                 'goal_reward': 1.0,

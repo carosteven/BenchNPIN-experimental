@@ -252,7 +252,7 @@ class BoxDeliveryEnv(gym.Env):
             self.start = self.get_random_robot_start()
         else:
             # self.start = (-1.8, -2.7, np.pi*0)
-            self.start = (0, 0, np.pi/2)
+            self.start = (-1, -1, np.pi*0)
         self.robot_info['start_pos'] = self.start
 
         self.boundary_dicts = self.generate_boundary()
@@ -383,6 +383,8 @@ class BoxDeliveryEnv(gym.Env):
                     y = self.random_state.uniform(-self.room_width / 2 + 2 * buffer_width + column_width / 2,
                                         self.room_width / 2 - 2 * buffer_width - column_width / 2)
                     
+                    # x = 1
+                    # y = 0
                     overlapped = False
                     # check if column overlaps with receptacle
                     (rx, ry), size = self.receptacle_position, self.receptacle_size
@@ -405,6 +407,7 @@ class BoxDeliveryEnv(gym.Env):
                     if not overlapped:
                         new_cols.append([x, y])
                         break
+                # break
 
             for x, y in new_cols:
                 cols_dict.append({'type': 'column',
@@ -736,7 +739,7 @@ class BoxDeliveryEnv(gym.Env):
             if self.cfg.render.show:
                 self.renderer.update_path(self.path)
                 
-            robot_distance, robot_turn_angle = self.execute_robot_path(robot_initial_position, robot_initial_heading, robot_move_sign)
+            robot_distance, robot_turn_angle = self.execute_robot_path(robot_initial_position, robot_initial_heading, robot_move_sign, action=action)
 
 
         # step the simulation until everything is still
@@ -965,7 +968,7 @@ class BoxDeliveryEnv(gym.Env):
         target_heading = box_heading
         return np.array([target_x, target_y, target_heading])
 
-    def execute_robot_path(self, robot_initial_position, robot_initial_heading, robot_move_sign):
+    def execute_robot_path(self, robot_initial_position, robot_initial_heading, robot_move_sign, action=None):
         ############################################################################################################
         # Movement
         robot_position = robot_initial_position.copy()
@@ -987,7 +990,7 @@ class BoxDeliveryEnv(gym.Env):
 
         # if self.cfg.render.show:
         #     self.render()
-        #     input()
+            # input()
             
         box_in_path, _ = self.check_path_for_box_collision()
 
@@ -1000,6 +1003,7 @@ class BoxDeliveryEnv(gym.Env):
             box_pos = box_in_path.body.position         
             box_heading = np.arctan2(robot_waypoint_position[1] - box_pos[1], robot_waypoint_position[0] - box_pos[0])
 
+            # get new robot target position. Point is calculated based on the heading of the path from the box to the original target.
             lookahead = 0.2
             desired_box_pos = np.array([
                 box_pos[0] + lookahead * np.cos(box_heading),
@@ -1008,26 +1012,22 @@ class BoxDeliveryEnv(gym.Env):
 
             robot_target_pose = self.get_leashed_robot_pose(desired_box_pos, box_heading) #, offset=0.3)#self.robot_radius + 0.1)
 
+            # convert target to a spatial action relative to the robot
             x_pose_local, y_pose_local = self.robot.body.world_to_local((robot_target_pose[0], robot_target_pose[1]))
             x_pose_pixels = int(self.local_map_pixel_width / 2 - x_pose_local * self.local_map_pixels_per_meter)
             y_pose_pixels = int(self.local_map_pixel_width / 2 - y_pose_local * self.local_map_pixels_per_meter)
             x_pose_pixels, y_pose_pixels = self.bound_to_map(x_pose_pixels, y_pose_pixels)
-            # try:
-            subpath, _ = self.position_controller.get_waypoints_to_spatial_action(robot_initial_position, robot_initial_heading, np.ravel_multi_index((x_pose_pixels, y_pose_pixels), (self.local_map_pixel_width, self.local_map_pixel_width)), subpath=True)
+            new_action = np.ravel_multi_index((x_pose_pixels, y_pose_pixels), (self.local_map_pixel_width, self.local_map_pixel_width))
 
-            # except:
-            #     self.path = np.insert(self.path, robot_waypoint_index, robot_target_pose, axis=0)
-            #     if self.cfg.render.show:
-            #         self.renderer.update_path(self.path)
-            #         self.render()
-            #     print()
-            #     print(robot_target_pose[0], robot_target_pose[1])
-            #     print(x_pose_local, y_pose_local)
-            #     print(x_pose_pixels, y_pose_pixels)
-            #     input("Shit")
-            #     subpath = robot_target_pose
-            for i in range(len(subpath)):
-                self.path = np.insert(self.path, robot_waypoint_index + i, subpath[i], axis=0)
+            # make a new collision free path from the robot to the box
+            # robot_to_box_path, _ = self.position_controller.get_waypoints_to_spatial_action(robot_initial_position, robot_initial_heading, new_action, subpath=True)
+            robot_to_box_path, _ = self.position_controller.get_waypoints_to_spatial_action(robot_initial_position, robot_initial_heading, 0, subpath=True, target_position=robot_target_pose[:2])
+
+            # make a new collision free path from the box to the target
+            box_to_dest_path, _ = self.position_controller.get_waypoints_to_spatial_action(robot_to_box_path[-1][:2], robot_to_box_path[-1][2], 0, target_position=self.path[-1][:2])
+
+            # concatenate the paths to generate final path
+            self.path = np.concatenate((robot_to_box_path, box_to_dest_path[1:]), axis=0)
 
             if self.cfg.render.show:
                 self.renderer.update_path(self.path)
@@ -1040,9 +1040,6 @@ class BoxDeliveryEnv(gym.Env):
             robot_prev_waypoint_position = robot_waypoint_positions[robot_waypoint_index - 1]
             robot_waypoint_position = robot_waypoint_positions[robot_waypoint_index]
             robot_waypoint_heading = robot_waypoint_headings[robot_waypoint_index]
-
-        # TODO change this to the first box that intersects with the path
-        # box_angle_offset = np.argmin([np.abs((angle - robot_waypoint_heading + np.pi) % (2 * np.pi) - np.pi) for angle in [self.boxes[0].body.angle, self.boxes[0].body.angle + np.pi/2, self.boxes[0].body.angle + np.pi, self.boxes[0].body.angle - np.pi/2]])
 
         while True:
             if not robot_is_moving:

@@ -54,7 +54,7 @@ class PositionController:
         self.waypoint_moving_threshold = waypoint_moving_threshold
         self.waypoint_turning_threshold = waypoint_turning_threshold
 
-    def get_waypoints_to_spatial_action(self, robot_initial_position, robot_initial_heading, spatial_action, subpath=False):
+    def get_waypoints_to_spatial_action(self, robot_initial_position, robot_initial_heading, spatial_action, subpath=False, target_position=None):
         ################################ Position Control ################################
         if self.cfg.ablation.half_action_space:
             center_offset = self.local_map_pixel_width // 2
@@ -63,20 +63,23 @@ class PositionController:
         else:
             robot_action = np.unravel_index(spatial_action, (self.local_map_pixel_width, self.local_map_pixel_width))
 
-        # compute target position for front of robot:
-        # computes distance from front of robot (not center), which is used to find the
-        # robot position and heading needed in order to place front over specified location
-        x_movement = -self.local_map_width / 2 + float(robot_action[1]) / self.local_map_pixels_per_meter
-        y_movement = self.local_map_width / 2 - float(robot_action[0]) / self.local_map_pixels_per_meter
+        if target_position is None:
+            # compute target position for front of robot:
+            # computes distance from front of robot (not center), which is used to find the
+            # robot position and heading needed in order to place front over specified location
+            x_movement = -self.local_map_width / 2 + float(robot_action[1]) / self.local_map_pixels_per_meter
+            y_movement = self.local_map_width / 2 - float(robot_action[0]) / self.local_map_pixels_per_meter
 
-        straight_line_dist = np.sqrt(x_movement**2 + y_movement**2)
-        turn_angle = np.arctan2(-x_movement, y_movement)
-        straight_line_heading = restrict_heading_range(robot_initial_heading + turn_angle)
+            straight_line_dist = np.sqrt(x_movement**2 + y_movement**2)
+            turn_angle = np.arctan2(-x_movement, y_movement)
+            straight_line_heading = restrict_heading_range(robot_initial_heading + turn_angle)
 
-        robot_target_front_position = [
-            robot_initial_position[0] + straight_line_dist * np.cos(straight_line_heading),
-            robot_initial_position[1] + straight_line_dist * np.sin(straight_line_heading)
-        ]
+            robot_target_front_position = [
+                robot_initial_position[0] + straight_line_dist * np.cos(straight_line_heading),
+                robot_initial_position[1] + straight_line_dist * np.sin(straight_line_heading)
+            ]
+        else:
+            robot_target_front_position = target_position
 
         # bound the robot to the room
         diff = np.asarray(robot_target_front_position) - np.asarray(robot_initial_position)
@@ -125,8 +128,8 @@ class PositionController:
         path = []
         for position, heading in zip(robot_waypoint_positions, robot_waypoint_headings):
             path.append([position[0], position[1], heading])
-        if subpath:
-            path.pop(0)
+        # if subpath:
+        #     path.pop(0)
         path = np.array(path)
 
         return path, robot_move_sign
