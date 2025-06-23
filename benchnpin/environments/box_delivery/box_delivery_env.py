@@ -587,8 +587,10 @@ class BoxDeliveryEnv(gym.Env):
                 return True
         return False
 
-    def reset(self, seed=None, options=None):
+    def reset(self, seed=None, options=None, obs_config=None):
         """Resets the environment to the initial state and returns the initial observation."""
+        if obs_config is not None:
+            self.cfg.env.obstacle_config = obs_config
 
         if self.episode_idx is None:
             self.episode_idx = 0
@@ -945,12 +947,32 @@ class BoxDeliveryEnv(gym.Env):
             polygon = Polygon([[v.x, v.y] for v in vertices]).buffer(self.cfg.boxes.box_size / 2)
             if line_path.intersects(polygon):
                 intersection_point = line_path.intersection(polygon)
+                if intersection_point.is_empty:
+                    return None, None
+
                 if intersection_point.geom_type == 'Point':
                     collision_point = (intersection_point.x, intersection_point.y)
-                else:
-                    # handle LineString or MultiPoint cases
+
+                elif intersection_point.geom_type == 'MultiPoint':
+                    first = list(intersection_point.geoms)[0]
+                    collision_point = (first.x, first.y)
+
+                elif intersection_point.geom_type == 'LineString':
                     collision_point = list(intersection_point.coords)[0]
-                # Find closest point on path to collision point
+
+                elif intersection_point.geom_type == 'GeometryCollection':
+                    for geom in intersection_point.geoms:
+                        if geom.geom_type == "Point":
+                            collision_point = (geom.x, geom.y)
+                            break
+                        elif geom.geom_type == "LineString":
+                            collision_point = list(geom.coords)[0]
+                            break
+                    else:
+                        return None, None  # no usable collision point
+
+                else:
+                    return None, None                # Find closest point on path to collision point
                 dists = [np.linalg.norm(np.array([pt[0], pt[1]]) - np.array(collision_point)) for pt in path]
                 collision_idx = int(np.argmin(dists))
                 return box, collision_idx
@@ -1020,8 +1042,8 @@ class BoxDeliveryEnv(gym.Env):
             new_action = np.ravel_multi_index((x_pose_pixels, y_pose_pixels), (self.local_map_pixel_width, self.local_map_pixel_width))
 
             # make a new collision free path from the robot to the box
-            # robot_to_box_path, _ = self.position_controller.get_waypoints_to_spatial_action(robot_initial_position, robot_initial_heading, new_action, subpath=True)
-            robot_to_box_path, _ = self.position_controller.get_waypoints_to_spatial_action(robot_initial_position, robot_initial_heading, 0, subpath=True, target_position=robot_target_pose[:2])
+            robot_to_box_path, _ = self.position_controller.get_waypoints_to_spatial_action(robot_initial_position, robot_initial_heading, new_action, subpath=True)
+            # robot_to_box_path, _ = self.position_controller.get_waypoints_to_spatial_action(robot_initial_position, robot_initial_heading, 0, subpath=True, target_position=robot_target_pose[:2])
 
             # make a new collision free path from the box to the target
             box_to_dest_path, _ = self.position_controller.get_waypoints_to_spatial_action(robot_to_box_path[-1][:2], robot_to_box_path[-1][2], 0, target_position=self.path[-1][:2])
@@ -1092,8 +1114,8 @@ class BoxDeliveryEnv(gym.Env):
                     break  # Note: self.robot_distance does not get not updated
             
             # stop if robot reached waypoint
-            if (self.distance(robot_position, robot_waypoint_positions[robot_waypoint_index]) < WAYPOINT_MOVING_THRESHOLD):
-                # and np.abs(robot_heading - robot_waypoint_headings[robot_waypoint_index]) < WAYPOINT_TURNING_THRESHOLD):
+            if (self.distance(robot_position, robot_waypoint_positions[robot_waypoint_index]) < WAYPOINT_MOVING_THRESHOLD
+                and np.abs(robot_heading - robot_waypoint_headings[robot_waypoint_index]) < WAYPOINT_TURNING_THRESHOLD):
                 
                 # update distance moved
                 robot_distance += self.distance(robot_prev_waypoint_position, robot_position)
@@ -1485,11 +1507,10 @@ class BoxDeliveryEnv(gym.Env):
         return position_x, position_y
 
     def bound_to_map(self, pixel_x, pixel_y):
-        # Compute angle
-        angle = np.arctan2(
-            self.local_map_pixel_width / 2 - pixel_y,
-            pixel_x - self.local_map_pixel_width / 2
-        )
+        """
+        Clamps pixel coordinates to the local map bounds, preserving the angle.
+        If the coordinates are out of bounds, they are projected back onto the edge of the map.
+        """
 
         # Compute distance to center in pixel units
         dx_pixels = pixel_x - self.local_map_pixel_width / 2

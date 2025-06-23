@@ -43,7 +43,7 @@ def main(cfg, job_id):
             cfg.agent.action_type = action_type
             cfg.train.job_type = policy_type
             cfg.env.obstacle_config = obs_config
-            # cfg.misc.random_seed = seed
+            cfg.misc.random_seed = seed
             seed += 1
 
             if policy_type == 'sam':
@@ -144,6 +144,7 @@ if __name__ == '__main__':
                 'per_beta': 0.4,
                 'curriculum': False,
                 'better_pushing': True,
+                'general': True,
             }
         }
         

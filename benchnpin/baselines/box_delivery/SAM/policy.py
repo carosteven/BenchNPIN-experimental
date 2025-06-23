@@ -400,7 +400,10 @@ class BoxDeliverySAM(BasePolicy):
 
             # reset if episode ended
             if done:
-                state, _ = env.reset()
+                obs_config = None
+                if self.cfg.ablation.general:
+                    obs_config = random.choice(['large_columns', 'large_divider'])
+                state, _ = env.reset(obs_config = obs_config)
                 episode += 1
                 if truncated:
                     logging.info(f"Episode {episode} truncated. {info['cumulative_boxes']} in goal. Resetting environment...")
