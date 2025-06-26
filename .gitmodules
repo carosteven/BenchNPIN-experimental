@@ -4,3 +4,6 @@
 [submodule "deps/GLNS.jl"]
 	path = deps/GLNS.jl
 	url = https://github.com/megalphian/GLNS.jl.git
+[submodule "diffusion-policy"]
+	path = diffusion-policy
+	url = https://github.com/lucidrains/diffusion-policy
