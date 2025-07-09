@@ -103,23 +103,23 @@ if __name__ == '__main__':
                 'num_boxes_large': 20,
             },
             'env': {
-                'obstacle_config': 'small_empty', # options are small_empty, small_columns, large_columns, large_divider
+                'obstacle_config': 'large_columns', # options are small_empty, small_columns, large_columns, large_divider
             },
             'misc': {
                 'random_seed': 42,
             },
             'train': { 
-                'train_mode': False,
+                'train_mode': True,
                 'job_type': 'sam', # 'sam', 'ppo', 'sac'
-                'job_name': 'per_hsdp_2G_term_se',
+                'job_name': 'bp_per_qsdp_term_lc',
                 'log_dir': 'per_logs/',
-                'resume_training': True,
-                'job_id_to_resume': '16398526',
-                'total_timesteps': 60000*2,
+                'resume_training': False,
+                'job_id_to_resume': '16854679',
+                'total_timesteps': 90000,
                 # 'exploration_timesteps': 6000*2,
             },
             'evaluate': {
-                'eval_mode': True,
+                'eval_mode': False,
                 'num_eps': 20,
                 'policy_types': ['sam', 'sam', 'sam', 'sam', 'sam'], # list of policy types to evaluate
                 'action_types': ['position', 'position', 'position', 'position'], # list of action types to evaluate
@@ -132,14 +132,14 @@ if __name__ == '__main__':
             },
             'ablation': {
                 'half_action_space': False,
-                'terminal_reward': 0,
+                'terminal_reward': 10,
                 'step_penalty': 0,
-                'max_distance_reward': False,
+                'max_distance_reward': True,
                 'box_dist_penalty': False,
                 'box_dist_penalty_scale': 0.35,
-                'step_dist_penalty': False,
+                'step_dist_penalty': True,
                 'sparse': False,
-                'per': False,
+                'per': True,
                 'per_alpha': 0.6,
                 'per_beta': 0.4,
                 'curriculum': False,

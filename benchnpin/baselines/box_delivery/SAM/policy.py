@@ -402,7 +402,7 @@ class BoxDeliverySAM(BasePolicy):
             if done:
                 obs_config = None
                 if self.cfg.ablation.general:
-                    obs_config = random.choice(['large_columns', 'large_divider'])
+                    obs_config = random.choices(['large_columns', 'large_divider'], weights=[30, 70])[0]
                 state, _ = env.reset(obs_config = obs_config)
                 episode += 1
                 if truncated:

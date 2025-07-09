@@ -1021,7 +1021,7 @@ class BoxDeliveryEnv(gym.Env):
             if self.cfg.render.show:
                 self.renderer.update_path(self.path)
                 self.render()
-                # input()
+                input()
 
             box_pos = box_in_path.body.position         
             box_heading = np.arctan2(robot_waypoint_position[1] - box_pos[1], robot_waypoint_position[0] - box_pos[0])
@@ -1055,7 +1055,7 @@ class BoxDeliveryEnv(gym.Env):
             if self.cfg.render.show:
                 self.renderer.update_path(self.path)
                 self.render()
-                # input()
+                input()
 
             robot_waypoint_positions = [(waypoint[0], waypoint[1]) for waypoint in self.path]
             robot_waypoint_headings = [waypoint[2] for waypoint in self.path]
@@ -1534,7 +1534,7 @@ class BoxDeliveryEnv(gym.Env):
         # Ensure pixel coordinates are within bounds if above clipping is not enough
         pixel_x = np.clip(pixel_x, 0, self.local_map_pixel_width - 1)
         pixel_y = np.clip(pixel_y, 0, self.local_map_pixel_width - 1)
-        
+
         return pixel_x, pixel_y
     
     def close(self):
