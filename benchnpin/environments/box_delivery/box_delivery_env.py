@@ -35,13 +35,14 @@ R = lambda theta: np.asarray([
 ])
 
 FORWARD = 0
-STOP_TURNING = 1
+BACKWARD = 1
 LEFT = 2
 RIGHT = 3
 STOP = 4
-BACKWARD = 5
-SMALL_LEFT = 6
-SMALL_RIGHT = 7
+STOP_LINEAR = 5
+STOP_TURNING = 6
+SMALL_LEFT = 7
+SMALL_RIGHT = 8
 
 OBSTACLE_SEG_INDEX = 0
 FLOOR_SEG_INDEX = 1
@@ -628,6 +629,7 @@ class BoxDeliveryEnv(gym.Env):
             self.show_observation = True
             self.render()
         
+        obs_vert, obs_pos = self.generate_observation_low_dim()
         info = {
             'state': (round(self.robot.body.position.x, 2),
                       round(self.robot.body.position.y, 2),
@@ -637,6 +639,8 @@ class BoxDeliveryEnv(gym.Env):
             'cumulative_reward': self.robot_cumulative_reward,
             'total_work': self.total_work[0],
             'obs': updated_boxes,
+            'obs_vertices': obs_vert,
+            'obs_positions': obs_pos,
             'box_completed_statuses': self.box_clearance_statuses,
             'goal_positions': self.goal_points,
             'ministeps': 0,
@@ -849,6 +853,7 @@ class BoxDeliveryEnv(gym.Env):
         self.observation = self.generate_observation(done=terminated)
         reward = robot_reward
         ministeps = robot_distance / self.ministep_size
+        obs_vert, obs_pos = self.generate_observation_low_dim()
         info = {
             'state': (round(self.robot.body.position.x, 2),
                       round(self.robot.body.position.y, 2),
@@ -858,6 +863,8 @@ class BoxDeliveryEnv(gym.Env):
             'cumulative_reward': self.robot_cumulative_reward,
             'total_work': self.total_work[0],
             'obs': updated_boxes,
+            'obs_vertices': obs_vert,
+            'obs_positions': obs_pos,
             'box_completed_statuses': self.box_clearance_statuses,
             'goal_positions': self.goal_points,
             'ministeps': ministeps,
@@ -870,19 +877,60 @@ class BoxDeliveryEnv(gym.Env):
             self.render()
 
         return self.observation, reward, terminated, truncated, info
+    
+    def get_sorted_box_vertices_and_positions(self):
+        """
+        Returns a list of all box vertices sorted by distance to robot.
+        Boxes that have been pushed into the receptacle are assumed to have their centers in the
+        center of the receptacle
+        Coordinates are relative to robot's frame of reference
+        """
+        box_verts_and_poses = []
+        for box in self.boxes:
+            box_vert = [list(self.robot.body.world_to_local(box.body.local_to_world(v))) for v in box.get_vertices()]
+            box_pos = list(self.robot.body.world_to_local(box.body.position))
+            box_verts_and_poses.append([box_vert, box_pos])
+            
+        # pad with boxes in receptacle
+        box_radius = self.cfg.boxes.box_size / 2
+        box_pos = list(self.robot.body.world_to_local(self.receptacle_position))
+        box_vert = [
+            [(box_pos[0] - box_radius), (box_pos[1] - box_radius)],
+            [(box_pos[0] - box_radius), (box_pos[1] + box_radius)],
+            [(box_pos[0] + box_radius), (box_pos[1] + box_radius)],
+            [(box_pos[0] + box_radius), (box_pos[1] - box_radius)],
+        ]
+        for _ in range(self.num_boxes - len(box_verts_and_poses)):
+            box_verts_and_poses.append([box_vert, box_pos])
+            
+        
+        # sort by distance to robot
+        box_verts_and_poses.sort(key=lambda b: self.distance(self.robot.body.position, (b[1][0], b[1][1])))
+
+        # box_verts = []
+        # box_poses = []
+        # for bvap in box_verts_and_poses:
+        #     box_verts.append(bvap[0])
+        #     box_poses.append(bvap[1]) 
+        #
+        # return box_verts, box_poses
+        return box_verts_and_poses
 
     def demo_control(self, action):
         if action == FORWARD:
             self.linear_speed = 0.01
-        elif action == BACKWARD:
-            self.linear_speed = -0.01
-        elif action == STOP_TURNING:
-            self.angular_speed = 0.0
-
+        # elif action == BACKWARD:
+        #     self.linear_speed = -0.01
+        elif action == STOP_LINEAR:
+            self.linear_speed = 0.0
+        
         elif action == LEFT:
             self.angular_speed = 0.01
         elif action == RIGHT:
             self.angular_speed = -0.01
+        elif action == STOP_TURNING:
+            self.angular_speed = 0.0
+
 
         elif action == SMALL_LEFT:
             self.angular_speed = 0.005
@@ -891,7 +939,7 @@ class BoxDeliveryEnv(gym.Env):
 
         elif action == STOP:
             self.linear_speed = 0.0
-            # self.angular_speed = 0.0
+            self.angular_speed = 0.0
 
         # check speed boundary
         # if self.linear_speed <= 0:
@@ -903,8 +951,8 @@ class BoxDeliveryEnv(gym.Env):
         global_velocity = R(self.robot.body.angle) @ [self.linear_speed, 0]
 
         # apply velocity controller
-        self.robot.body.angular_velocity = self.angular_speed * 100
-        self.robot.body.velocity = Vec2d(global_velocity[0], global_velocity[1]) * 100
+        self.robot.body.angular_velocity = self.angular_speed * 25
+        self.robot.body.velocity = Vec2d(global_velocity[0], global_velocity[1]) * 25
     
     def controller(self, curr_position, curr_heading, path=None):
         if path is None:
@@ -1012,7 +1060,7 @@ class BoxDeliveryEnv(gym.Env):
         prev_heading_diff = 0
 
         # if self.cfg.render.show:
-        #     self.render()
+            # self.render()
             # input()
             
         box_in_path, _ = self.check_path_for_box_collision()
@@ -1180,18 +1228,48 @@ class BoxDeliveryEnv(gym.Env):
             if sim_steps > STEP_LIMIT:
                 break
 
-    def generate_observation_low_dim(self, updated_boxes):
+    # def generate_observation_low_dim(self, updated_boxes):
+    #     """
+    #     The observation is a vector of shape (num_boxes * 2) specifying the 2d position of the boxes
+    #     <obs1_x, obs1_y, obs2_x, obs2_y, ..., obsn_x, obsn_y>
+    #     """
+    #     observation = np.zeros((len(updated_boxes) * 2))
+    #     for i in range(len(updated_boxes)):
+    #         obs = updated_boxes[i]
+    #         center = np.abs(poly_centroid(obs))
+    #         observation[i * 2] = center[0]
+    #         observation[i * 2 + 1] = center[1]
+    #     return observation
+
+    def generate_observation_low_dim(self):
         """
-        The observation is a vector of shape (num_boxes * 2) specifying the 2d position of the boxes
-        <obs1_x, obs1_y, obs2_x, obs2_y, ..., obsn_x, obsn_y>
+        Returns two low-dim observations: boxes & receptacle vertices / boxes & receptacle centers
+        Vertices: a vector of shape (num_boxes * 8) + 8 specifying the 2d coords of the vertices
+        Centers:  a vector of shape (num_boxes * 2) + 2 specifying the 2d position of the centers
+        boxes are sorted by distance from robot, low to high; receptacle is always at the end
+        All coordinates are relative to the robot's frame of reference
         """
-        observation = np.zeros((len(updated_boxes) * 2))
-        for i in range(len(updated_boxes)):
-            obs = updated_boxes[i]
-            center = np.abs(poly_centroid(obs))
-            observation[i * 2] = center[0]
-            observation[i * 2 + 1] = center[1]
-        return observation
+        obs_vert = []
+        obs_pos = []
+        box_verts_and_poses = self.get_sorted_box_vertices_and_positions()
+        for bvap in box_verts_and_poses:
+            obs_vert.extend([vert for verts in bvap[0] for vert in verts])
+            obs_pos.extend(bvap[1])
+        
+        recept_pos, recept_size = self.get_receptacle_position_and_size()
+        recept_pos = self.robot.body.world_to_local(recept_pos)
+        recept_radius = recept_size / 2
+        recept_verts = [
+            [(recept_pos[0] - recept_radius), (recept_pos[1] - recept_radius)],
+            [(recept_pos[0] - recept_radius), (recept_pos[1] + recept_radius)],
+            [(recept_pos[0] + recept_radius), (recept_pos[1] + recept_radius)],
+            [(recept_pos[0] + recept_radius), (recept_pos[1] - recept_radius)],
+        ]
+
+        obs_vert.extend(vert for verts in recept_verts for vert in verts)
+        obs_pos.extend(recept_pos)
+
+        return obs_vert, obs_pos
 
 
     def update_path(self, new_path, scatter=False):

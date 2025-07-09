@@ -1,3 +1,4 @@
+### pip install git+https://github.com/openai/gym.git@9180d12e1b66e7e2a1a622614f787a6ec147ac40
 numpy
 matplotlib==3.7.5
 scikit-image

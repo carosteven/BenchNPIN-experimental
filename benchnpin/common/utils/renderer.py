@@ -158,7 +158,8 @@ class Renderer():
         """
         pygame.draw.circle(
             self.window,
-            (255, 255, 255),  # Circle color (white)
+            # (255, 255, 255),  # Circle color (white)
+            (0, 0, 0),  # Circle color (black)
             self.to_pygame(self.goal_point),  # Circle center
             5,  # Circle radius
             0   # Circle thickness
@@ -177,6 +178,7 @@ class Renderer():
         )
 
     def render(self, save=False, path=None, manual_draw=False):
+        pygame.event.pump() 
         self.window.fill(self.background_color)
         if not manual_draw:
             self.space.debug_draw(self.draw_options)

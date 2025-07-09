@@ -17,6 +17,8 @@ benchnpin/baselines/box_delivery/sac/checkpoint/
 benchnpin/baselines/box_delivery/sac/models/
 benchnpin/baselines/box_delivery/sac/vector_logs/
 
+demo_data/
+
 /plots
 
 /model_checkpoints

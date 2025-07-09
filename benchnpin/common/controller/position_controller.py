@@ -56,28 +56,8 @@ class PositionController:
 
     def get_waypoints_to_spatial_action(self, robot_initial_position, robot_initial_heading, spatial_action, subpath=False, target_position=None):
         ################################ Position Control ################################
-        if self.cfg.ablation.half_action_space:
-            center_offset = self.local_map_pixel_width // 2
-            robot_action = np.unravel_index(spatial_action, (center_offset, center_offset))
-            robot_action = (robot_action[0] + center_offset // 2, robot_action[1] + center_offset // 2)
-        else:
-            robot_action = np.unravel_index(spatial_action, (self.local_map_pixel_width, self.local_map_pixel_width))
-
         if target_position is None:
-            # compute target position for front of robot:
-            # computes distance from front of robot (not center), which is used to find the
-            # robot position and heading needed in order to place front over specified location
-            x_movement = -self.local_map_width / 2 + float(robot_action[1]) / self.local_map_pixels_per_meter
-            y_movement = self.local_map_width / 2 - float(robot_action[0]) / self.local_map_pixels_per_meter
-
-            straight_line_dist = np.sqrt(x_movement**2 + y_movement**2)
-            turn_angle = np.arctan2(-x_movement, y_movement)
-            straight_line_heading = restrict_heading_range(robot_initial_heading + turn_angle)
-
-            robot_target_front_position = [
-                robot_initial_position[0] + straight_line_dist * np.cos(straight_line_heading),
-                robot_initial_position[1] + straight_line_dist * np.sin(straight_line_heading)
-            ]
+            robot_target_front_position = self.get_target_position(robot_initial_position, robot_initial_heading, spatial_action)
         else:
             robot_target_front_position = target_position
 
@@ -149,7 +129,7 @@ class PositionController:
                 return [source_position, target_position]
 
         # run SPFA
-        source_i, source_j = self.closest_valid_cspace_indices(source_i, source_j) # NOTE does not use the cspace passed into this method
+        source_i, source_j = self.closest_valid_cspace_indices(source_i, source_j) # NOTE: does not use the cspace passed into this method
         target_i, target_j = self.closest_valid_cspace_indices(target_i, target_j)
         _, parents = spfa.spfa(configuration_space, (source_i, source_j))
 
@@ -196,6 +176,31 @@ class PositionController:
             path[-1] = pixel_indices_to_position(target_i, target_j, configuration_space.shape, self.local_map_pixels_per_meter)
 
         return path
+
+    def get_target_position(self, robot_initial_position, robot_initial_heading, spatial_action):
+        if self.cfg.ablation.half_action_space:
+            center_offset = self.local_map_pixel_width // 2
+            robot_action = np.unravel_index(spatial_action, (center_offset, center_offset))
+            robot_action = (robot_action[0] + center_offset // 2, robot_action[1] + center_offset // 2)
+        else:
+            robot_action = np.unravel_index(spatial_action, (self.local_map_pixel_width, self.local_map_pixel_width))
+
+        # compute target position for front of robot:
+        # computes distance from front of robot (not center), which is used to find the
+        # robot position and heading needed in order to place front over specified location
+        x_movement = -self.local_map_width / 2 + float(robot_action[1]) / self.local_map_pixels_per_meter
+        y_movement = self.local_map_width / 2 - float(robot_action[0]) / self.local_map_pixels_per_meter
+
+        straight_line_dist = np.sqrt(x_movement**2 + y_movement**2)
+        turn_angle = np.arctan2(-x_movement, y_movement)
+        straight_line_heading = restrict_heading_range(robot_initial_heading + turn_angle)
+
+        robot_target_front_position = [
+            robot_initial_position[0] + straight_line_dist * np.cos(straight_line_heading),
+            robot_initial_position[1] + straight_line_dist * np.sin(straight_line_heading)
+        ] 
+            
+        return robot_target_front_position
     
     def closest_valid_cspace_indices(self, i, j):
         return self.closest_cspace_indices[:, i, j]
