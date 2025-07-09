@@ -121,11 +121,11 @@ if __name__ == '__main__':
             'evaluate': {
                 'eval_mode': True,
                 'num_eps': 20,
-                'policy_types': ['sam', 'sam', 'sam', 'sam'], # list of policy types to evaluate
+                'policy_types': ['sam', 'sam', 'sam', 'sam', 'sam'], # list of policy types to evaluate
                 'action_types': ['position', 'position', 'position', 'position'], # list of action types to evaluate
-                'model_names': ['term_sc'], # list of model names to evaluate
+                'model_names': ['bp_per_hsdp_term_lcld_3070', 'bp_per_hsdp_term_lcld_3070', 'bp_per_hsdp_term_lcld_3070', 'bp_per_hsdp_term_lcld_3070', 'bp_per_qsdp_term_ld'], # list of model names to evaluate
                 'model_path': 'models/box_delivery', # path to the models
-                'obs_configs': ['small_columns', 'small_empty', 'small_empty', 'small_empty'], # list of observation configurations
+                'obs_configs': ['small_empty', 'small_columns', 'large_columns', 'large_divider', 'large_divider'], # list of observation configurations
             },
             'rewards_sam': {
                 'goal_reward': 1.0,
@@ -144,7 +144,7 @@ if __name__ == '__main__':
                 'per_beta': 0.4,
                 'curriculum': False,
                 'better_pushing': True,
-                'general': True,
+                'general': False,
             }
         }
         

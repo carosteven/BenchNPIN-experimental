@@ -972,7 +972,8 @@ class BoxDeliveryEnv(gym.Env):
                         return None, None  # no usable collision point
 
                 else:
-                    return None, None                # Find closest point on path to collision point
+                    return None, None
+                # Find closest point on path to collision point
                 dists = [np.linalg.norm(np.array([pt[0], pt[1]]) - np.array(collision_point)) for pt in path]
                 collision_idx = int(np.argmin(dists))
                 return box, collision_idx
@@ -1020,7 +1021,7 @@ class BoxDeliveryEnv(gym.Env):
             if self.cfg.render.show:
                 self.renderer.update_path(self.path)
                 self.render()
-                input()
+                # input()
 
             box_pos = box_in_path.body.position         
             box_heading = np.arctan2(robot_waypoint_position[1] - box_pos[1], robot_waypoint_position[0] - box_pos[0])
@@ -1054,7 +1055,7 @@ class BoxDeliveryEnv(gym.Env):
             if self.cfg.render.show:
                 self.renderer.update_path(self.path)
                 self.render()
-                input()
+                # input()
 
             robot_waypoint_positions = [(waypoint[0], waypoint[1]) for waypoint in self.path]
             robot_waypoint_headings = [waypoint[2] for waypoint in self.path]
@@ -1529,6 +1530,11 @@ class BoxDeliveryEnv(gym.Env):
         # Final clamped pixel coordinates (but angle preserved)
         pixel_x = int(self.local_map_pixel_width / 2 + dx_pixels)
         pixel_y = int(self.local_map_pixel_width / 2 + dy_pixels)
+
+        # Ensure pixel coordinates are within bounds if above clipping is not enough
+        pixel_x = np.clip(pixel_x, 0, self.local_map_pixel_width - 1)
+        pixel_y = np.clip(pixel_y, 0, self.local_map_pixel_width - 1)
+        
         return pixel_x, pixel_y
     
     def close(self):
