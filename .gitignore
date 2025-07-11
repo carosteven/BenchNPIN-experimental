@@ -9,6 +9,7 @@ benchnpin/baselines/box_delivery/SAM/vector_logs/
 benchnpin/baselines/box_delivery/SAM/output_logs/
 benchnpin/baselines/box_delivery/SAM/per_logs/
 benchnpin/baselines/box_delivery/SAM/checkpoint/
+benchnpin/baselines/box_delivery/SAM/oldcheckpoint/
 benchnpin/baselines/box_delivery/SAM/models/
 benchnpin/baselines/box_delivery/ppo/checkpoint/
 benchnpin/baselines/box_delivery/ppo/models/
@@ -17,6 +18,7 @@ benchnpin/baselines/box_delivery/sac/checkpoint/
 benchnpin/baselines/box_delivery/sac/models/
 benchnpin/baselines/box_delivery/sac/vector_logs/
 
+data/
 demo_data/
 
 /plots

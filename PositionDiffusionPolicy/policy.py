@@ -1,0 +1,92 @@
+from benchnpin.baselines.base_class import BasePolicy
+from benchnpin.common.metrics.task_driven_metric import TaskDrivenMetric
+from diffusion_unet_lowdim_policy import DiffusionUnetLowdimPolicy
+import collections
+import torch
+import numpy as np
+import dill
+
+class PositionDiffusionPolicy(BasePolicy):
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device('mps' if torch.backends.mps.is_available() else self.device)
+        self.policy = self.create_policy()
+        self.obs_buffer = collections.deque(maxlen=8)  # n_obs_steps
+
+        self.load_checkpoint(self.cfg.diffusion.checkpoint_path)
+    
+    def load_checkpoint(self, path):
+        print(f"Loading diffusion checkpoint from {path}")
+        checkpoint = torch.load(path, map_location=self.device)
+
+        self.policy.load_state_dict(checkpoint['state_dicts']['model'])
+        self.policy.eval()  # Set to evaluation mode
+    
+    def create_policy(self):
+        # Model configuration
+        model_config = {
+            'input_dim': self.cfg.diffusion.action_dim,  # Only actions in trajectory for global conditioning
+            'local_cond_dim': None,
+            'global_cond_dim': self.cfg.diffusion.obs_dim * 2,  # n_obs_steps * obs_dim for global conditioning
+            'diffusion_step_embed_dim': 256,
+            'down_dims': [256, 512, 1024],
+            'kernel_size': 5,
+            'n_groups': 8,
+            'cond_predict_scale': True
+        }
+        
+        # Noise scheduler configuration
+        scheduler_config = {
+            'num_train_timesteps': 100,
+            'beta_start': 0.0001,
+            'beta_end': 0.02,
+            'beta_schedule': 'squaredcos_cap_v2',
+            'prediction_type': 'epsilon',
+            'clip_sample': True,
+            'variance_type': 'fixed_small',
+        }
+        
+        # Policy configuration
+        policy = DiffusionUnetLowdimPolicy(
+            model=model_config,
+            noise_scheduler=scheduler_config,
+            horizon=16,
+            obs_dim=self.cfg.diffusion.obs_dim,
+            action_dim=self.cfg.diffusion.action_dim,
+            n_action_steps=8,
+            n_obs_steps=2,
+            num_inference_steps=20,
+            obs_as_global_cond=True,  # Use global conditioning for box delivery
+            box_delivery_mode=True,   # Enable box delivery mode
+        ).to(self.device)
+
+        return policy
+        
+    def act(self, observation, **kwargs):
+        # Add observation to buffer
+        self.obs_buffer.append(observation.reshape(-1))
+        
+        # Create observation dictionary
+        obs_history = np.array(list(self.obs_buffer))
+        if len(obs_history) < 8:  # Pad if not enough history
+            padding = np.tile(obs_history[0], (8 - len(obs_history), 1))
+            obs_history = np.vstack([padding, obs_history])
+        
+        obs_dict = {
+            'obs': torch.from_numpy(obs_history[np.newaxis, ...]).float().to(self.policy.device)
+        }
+        
+        # Get action from policy
+        with torch.no_grad():
+            action_dict = self.policy.predict_action(obs_dict)
+        
+        # Extract first action
+        action_sequence = action_dict['action'].cpu().numpy()
+        # action = action_sequence[0, 0]  # First action from first batch
+        
+        # return action
+        return action_sequence
+    
+    def evaluate(self):
+        raise NotImplementedError("Evaluation not implemented for PositionDiffusionPolicy")

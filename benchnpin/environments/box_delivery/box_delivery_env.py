@@ -196,6 +196,13 @@ class BoxDeliveryEnv(gym.Env):
 
         # ablation
         self.box_distances = {}   
+        
+        if self.cfg.ablation.diffusion:
+            import sys
+            repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+            sys.path.append(repo_root)
+            from PositionDiffusionPolicy.policy import PositionDiffusionPolicy
+            self.diffusion_policy = PositionDiffusionPolicy(self.cfg)
 
     def init_box_delivery_sim(self):
 
@@ -741,6 +748,14 @@ class BoxDeliveryEnv(gym.Env):
                 action = y_pixel * self.local_map_pixel_width + x_pixel
 
             ################################ Position Control ################################
+            if self.cfg.ablation.diffusion:
+                _, state_positions = self.generate_observation_low_dim()
+                box_and_recept = np.float32(state_positions).reshape(1, -1)
+                goal = self.position_controller.get_target_position(robot_initial_position, robot_initial_heading, action)
+                goal = np.float32(self.robot.body.world_to_local((goal[0], goal[1]))).reshape(1, -1)
+                obs = np.concatenate([
+                    box_and_recept, goal], axis=-1)
+                self.path = self.diffusion_policy.act(obs)
             self.path, robot_move_sign = self.position_controller.get_waypoints_to_spatial_action(robot_initial_position, robot_initial_heading, action)
             if self.cfg.render.show:
                 self.renderer.update_path(self.path)

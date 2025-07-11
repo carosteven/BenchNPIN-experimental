@@ -20,6 +20,7 @@ def main(cfg, job_id):
             model_name = f'{cfg.train.job_name}_{job_id}'
 
         if cfg.train.job_type == 'sam':
+            
             # ========================= Spatial Action Map Policy =========================
             sam_policy = BoxDeliverySAM(model_name=model_name, cfg=cfg, job_id=job_id)
             sam_policy.train()
@@ -48,8 +49,8 @@ def main(cfg, job_id):
 
             if policy_type == 'sam':
                 # ========================= Spatial Action Map Policy =========================
-                sam_policy = BoxDeliverySAM(model_name=model_name, model_path=model_path, cfg=cfg)
-                benchmark_results.append(sam_policy.evaluate(num_eps=num_eps))
+                    sam_policy = BoxDeliverySAM(model_name=model_name, model_path=model_path, cfg=cfg)
+                    benchmark_results.append(sam_policy.evaluate(num_eps=num_eps))
 
             elif policy_type == 'ppo':
                 # ================================ PPO Policy =================================    
@@ -99,7 +100,7 @@ if __name__ == '__main__':
                 'action_type': 'position', # 'position', 'heading', 'velocity'
             },
             'boxes': {
-                'num_boxes_small': 10,
+                'num_boxes_small': 5,
                 'num_boxes_large': 20,
             },
             'env': {
@@ -123,7 +124,7 @@ if __name__ == '__main__':
                 'num_eps': 20,
                 'policy_types': ['sam', 'sam', 'sam', 'sam', 'sam'], # list of policy types to evaluate
                 'action_types': ['position', 'position', 'position', 'position'], # list of action types to evaluate
-                'model_names': ['bp_per_hsdp_term_lcld_3070', 'bp_per_hsdp_term_lcld_3070', 'bp_per_hsdp_term_lcld_3070', 'bp_per_hsdp_term_lcld_3070', 'bp_per_qsdp_term_ld'], # list of model names to evaluate
+                'model_names': ['sdp_sparse_2g_term_se', 'bp_per_hsdp_term_lcld_3070', 'bp_per_hsdp_term_lcld_3070', 'bp_per_hsdp_term_lcld_3070', 'bp_per_qsdp_term_ld'], # list of model names to evaluate
                 'model_path': 'models/box_delivery', # path to the models
                 'obs_configs': ['small_empty', 'small_columns', 'large_columns', 'large_divider', 'large_divider'], # list of observation configurations
             },
@@ -143,9 +144,14 @@ if __name__ == '__main__':
                 'per_alpha': 0.6,
                 'per_beta': 0.4,
                 'curriculum': False,
-                'better_pushing': True,
+                'better_pushing': False,
                 'general': False,
+                'diffusion': True
+            },
+            'diffusion': {
+                'checkpoint_path': 'data/outputs/2025.07.09/16.02.16_train_diffusion_unet_lowdim_boxdelivery_lowdim/checkpoints/epoch=0300-val_loss=0.136.ckpt',
             }
+            
         }
         
         cfg = DotDict.to_dot_dict(cfg)
