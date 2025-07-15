@@ -12,13 +12,13 @@ class PositionDiffusionPolicy(BasePolicy):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.device = torch.device('mps' if torch.backends.mps.is_available() else self.device)
         self.policy = self.create_policy()
-        self.obs_buffer = collections.deque(maxlen=8)  # n_obs_steps
+        self.obs_buffer = collections.deque(maxlen=self.cfg.diffusion.n_obs_steps)  # n_obs_steps
 
         self.load_checkpoint(self.cfg.diffusion.checkpoint_path)
     
     def load_checkpoint(self, path):
         print(f"Loading diffusion checkpoint from {path}")
-        checkpoint = torch.load(path, map_location=self.device)
+        checkpoint = torch.load(path, map_location=self.device, weights_only=False)
 
         self.policy.load_state_dict(checkpoint['state_dicts']['model'])
         self.policy.eval()  # Set to evaluation mode
@@ -28,7 +28,7 @@ class PositionDiffusionPolicy(BasePolicy):
         model_config = {
             'input_dim': self.cfg.diffusion.action_dim,  # Only actions in trajectory for global conditioning
             'local_cond_dim': None,
-            'global_cond_dim': self.cfg.diffusion.obs_dim * 2,  # n_obs_steps * obs_dim for global conditioning
+            'global_cond_dim': self.cfg.diffusion.n_obs_steps * self.cfg.diffusion.obs_dim,  # n_obs_steps * obs_dim for global conditioning
             'diffusion_step_embed_dim': 256,
             'down_dims': [256, 512, 1024],
             'kernel_size': 5,
@@ -51,12 +51,12 @@ class PositionDiffusionPolicy(BasePolicy):
         policy = DiffusionUnetLowdimPolicy(
             model=model_config,
             noise_scheduler=scheduler_config,
-            horizon=16,
+            horizon=self.cfg.diffusion.horizon,
             obs_dim=self.cfg.diffusion.obs_dim,
             action_dim=self.cfg.diffusion.action_dim,
-            n_action_steps=8,
-            n_obs_steps=2,
-            num_inference_steps=20,
+            n_action_steps=self.cfg.diffusion.n_action_steps,
+            n_obs_steps=self.cfg.diffusion.n_obs_steps,
+            num_inference_steps=100,
             obs_as_global_cond=True,  # Use global conditioning for box delivery
             box_delivery_mode=True,   # Enable box delivery mode
         ).to(self.device)
@@ -69,8 +69,10 @@ class PositionDiffusionPolicy(BasePolicy):
         
         # Create observation dictionary
         obs_history = np.array(list(self.obs_buffer))
-        if len(obs_history) < 8:  # Pad if not enough history
-            padding = np.tile(obs_history[0], (8 - len(obs_history), 1))
+        n_obs_steps = self.cfg.diffusion.n_obs_steps
+        if len(obs_history) < n_obs_steps:  # Pad if not enough history
+            # padding = np.tile(obs_history[0], (n_obs_steps - len(obs_history), 1))
+            padding = np.zeros((n_obs_steps - len(obs_history), obs_history.shape[1]))
             obs_history = np.vstack([padding, obs_history])
         
         obs_dict = {
