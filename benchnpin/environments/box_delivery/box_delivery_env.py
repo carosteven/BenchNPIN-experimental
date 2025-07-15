@@ -752,14 +752,20 @@ class BoxDeliveryEnv(gym.Env):
                 _, state_positions = self.generate_observation_low_dim()
                 box_and_recept = np.float32(state_positions).reshape(1, -1)
                 goal = self.position_controller.get_target_position(robot_initial_position, robot_initial_heading, action)
-                goal = np.float32(self.robot.body.world_to_local((goal[0], goal[1]))).reshape(1, -1)
+                # goal = np.float32(self.robot.body.world_to_local((goal[0], goal[1]))).reshape(1, -1)
+                goal = np.float32(goal).reshape(1, -1)
                 obs = np.concatenate([
                     box_and_recept, goal], axis=-1)
                 self.path = self.diffusion_policy.act(obs)
-            self.path, robot_move_sign = self.position_controller.get_waypoints_to_spatial_action(robot_initial_position, robot_initial_heading, action)
+                self.path = self.path.reshape(-1, 2)
+                self.path = self.get_path_headings()
+                robot_move_sign = 1
+            else:
+                self.path, robot_move_sign = self.position_controller.get_waypoints_to_spatial_action(robot_initial_position, robot_initial_heading, action)
             if self.cfg.render.show:
                 self.renderer.update_path(self.path)
-                
+                self.render()
+                input()
             robot_distance, robot_turn_angle = self.execute_robot_path(robot_initial_position, robot_initial_heading, robot_move_sign, action=action)
 
 
@@ -893,6 +899,19 @@ class BoxDeliveryEnv(gym.Env):
 
         return self.observation, reward, terminated, truncated, info
     
+    def get_path_headings(self):
+        # compute waypoint headings
+        headings = [None]
+        for i in range(1, len(self.path)):
+            x_diff = self.path[i][0] - self.path[i - 1][0]
+            y_diff = self.path[i][1] - self.path[i - 1][1]
+            waypoint_headings = self.restrict_heading_range(np.arctan2(y_diff, x_diff))
+            headings.append(waypoint_headings)
+
+        headings = np.array(headings).reshape(-1, 1)
+        path = np.concatenate((self.path, headings), axis=1)
+        return path
+
     def get_sorted_box_vertices_and_positions(self):
         """
         Returns a list of all box vertices sorted by distance to robot.
@@ -902,13 +921,16 @@ class BoxDeliveryEnv(gym.Env):
         """
         box_verts_and_poses = []
         for box in self.boxes:
-            box_vert = [list(self.robot.body.world_to_local(box.body.local_to_world(v))) for v in box.get_vertices()]
-            box_pos = list(self.robot.body.world_to_local(box.body.position))
+            # box_vert = [list(self.robot.body.world_to_local(box.body.local_to_world(v))) for v in box.get_vertices()]
+            box_vert = [list(box.body.local_to_world(v)) for v in box.get_vertices()]
+            # box_pos = list(self.robot.body.world_to_local(box.body.position))
+            box_pos = list(box.body.position)
             box_verts_and_poses.append([box_vert, box_pos])
             
         # pad with boxes in receptacle
         box_radius = self.cfg.boxes.box_size / 2
-        box_pos = list(self.robot.body.world_to_local(self.receptacle_position))
+        # box_pos = list(self.robot.body.world_to_local(self.receptacle_position))
+        box_pos = list(self.receptacle_position)
         box_vert = [
             [(box_pos[0] - box_radius), (box_pos[1] - box_radius)],
             [(box_pos[0] - box_radius), (box_pos[1] + box_radius)],
@@ -992,8 +1014,8 @@ class BoxDeliveryEnv(gym.Env):
         return omega, v
     
     def apply_controller(self, omega, v):
-        self.robot.body.angular_velocity = omega / 2
-        self.robot.body.velocity = (v*5).tolist()
+        self.robot.body.angular_velocity = omega
+        self.robot.body.velocity = (v*4).tolist()
 
     def check_path_for_box_collision(self, path=None):
         """
@@ -1272,7 +1294,7 @@ class BoxDeliveryEnv(gym.Env):
             obs_pos.extend(bvap[1])
         
         recept_pos, recept_size = self.get_receptacle_position_and_size()
-        recept_pos = self.robot.body.world_to_local(recept_pos)
+        # recept_pos = self.robot.body.world_to_local(recept_pos)
         recept_radius = recept_size / 2
         recept_verts = [
             [(recept_pos[0] - recept_radius), (recept_pos[1] - recept_radius)],

@@ -221,7 +221,7 @@ def collect_demos():
                             'img': observation[0],
                             'state_vertices': np.float32(info['obs_vertices']),
                             'state_positions': np.float32(info['obs_positions']),
-                            'goal': np.float32(env.robot.body.world_to_local((goal[0], goal[1]))),
+                            'goal': np.float32(goal),
                             'action': np.float32(action)
                         }
                         episode.append(data)
