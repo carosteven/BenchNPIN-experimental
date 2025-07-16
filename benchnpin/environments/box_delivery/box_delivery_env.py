@@ -750,12 +750,11 @@ class BoxDeliveryEnv(gym.Env):
             ################################ Position Control ################################
             if self.cfg.ablation.diffusion:
                 _, state_positions = self.generate_observation_low_dim()
-                box_and_recept = np.float32(state_positions).reshape(1, -1)
+                state = np.float32(state_positions).reshape(1, -1)
                 goal = self.position_controller.get_target_position(robot_initial_position, robot_initial_heading, action)
                 # goal = np.float32(self.robot.body.world_to_local((goal[0], goal[1]))).reshape(1, -1)
                 goal = np.float32(goal).reshape(1, -1)
-                obs = np.concatenate([
-                    box_and_recept, goal], axis=-1)
+                obs = np.concatenate([state, goal], axis=-1)
                 self.path = self.diffusion_policy.act(obs)
                 self.path = self.path.reshape(-1, 2)
                 self.path = self.get_path_headings()
@@ -1284,10 +1283,16 @@ class BoxDeliveryEnv(gym.Env):
         Vertices: a vector of shape (num_boxes * 8) + 8 specifying the 2d coords of the vertices
         Centers:  a vector of shape (num_boxes * 2) + 2 specifying the 2d position of the centers
         boxes are sorted by distance from robot, low to high; receptacle is always at the end
-        All coordinates are relative to the robot's frame of reference
         """
         obs_vert = []
         obs_pos = []
+
+        robot_verts = [list(self.robot.body.local_to_world(v)) for v in self.robot.get_vertices()]
+        robot_position = list(self.robot.body.position)
+
+        obs_vert.extend([vert for verts in robot_verts for vert in verts])
+        obs_pos.extend(robot_position)
+
         box_verts_and_poses = self.get_sorted_box_vertices_and_positions()
         for bvap in box_verts_and_poses:
             obs_vert.extend([vert for verts in bvap[0] for vert in verts])
