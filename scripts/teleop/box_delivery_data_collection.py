@@ -249,7 +249,8 @@ def collect_demos():
 
                 if terminated:
                     # save episode buffer to replay buffer (on disk)
-                    if input("\nSave demonstrations? (y/n) ").lower() == 'y':
+                    response = input("\nSave demonstrations? (y/n) ").strip().lower()[-1]
+                    if response == 'y':
                         for episode in episodes:
                             if len(episode) > 0:
                                 data_dict = dict()

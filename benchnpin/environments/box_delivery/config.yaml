@@ -45,7 +45,7 @@ controller:
   target_speed: 0.3  # m/s
 
 boxes:
-  num_boxes_small: 5
+  num_boxes_small: 2
   num_boxes_large: 20
   box_size: 0.44
   min_box_dist: 0.62       # minimum box distance during random initialization
