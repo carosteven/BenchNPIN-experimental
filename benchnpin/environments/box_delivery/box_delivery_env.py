@@ -196,6 +196,9 @@ class BoxDeliveryEnv(gym.Env):
 
         # ablation
         self.box_distances = {}   
+        self.path_completed = True # used for diffusion
+        self.target_position = None # used for diffusion
+        self.demonstration_episode = None
         
         if self.cfg.ablation.diffusion:
             import sys
@@ -679,13 +682,16 @@ class BoxDeliveryEnv(gym.Env):
             dist = self.shortest_path_distance(box_position, self.receptacle_position)
             initial_box_distances[box.idx] = dist
 
-        if self.cfg.teleop_mode:
-            self.demo_control(action)
-
-            # move simulation forward
-            for _ in range(self.steps):
-                self.space.step(self.dt / self.steps)
+        if self.cfg.demonstration.demonstration_mode:
+            if self.cfg.demonstration.teleop_mode:
+                self.teleop_control(action)
+                # move simulation forward
+                for _ in range(self.steps):
+                    self.space.step(self.dt / self.steps)
                 self.render()
+            else:
+                self.path, robot_move_sign = self.position_controller.get_waypoints_to_spatial_action(robot_initial_position, robot_initial_heading, action)
+                robot_distance, robot_turn_angle, self.demonstration_episode = self.execute_robot_path(robot_initial_position, robot_initial_heading, robot_move_sign, action=action, demo_mode=True)
 
             # get new robot pose
             robot_position, robot_heading = self.robot.body.position, self.restrict_heading_range(self.robot.body.angle)
@@ -715,7 +721,7 @@ class BoxDeliveryEnv(gym.Env):
                 self.robot.body.velocity = Vec2d(global_velocity[0], global_velocity[1])
 
                 self.space.step(self.dt / self.steps)
-                # self.render()
+                self.render()
 
                 if self.robot_hit_obstacle:
                     break
@@ -751,18 +757,30 @@ class BoxDeliveryEnv(gym.Env):
             if self.cfg.ablation.diffusion:
                 _, state_positions = self.generate_observation_low_dim()
                 state = np.float32(state_positions).reshape(1, -1)
-                goal = self.position_controller.get_target_position(robot_initial_position, robot_initial_heading, action)
-                # goal = np.float32(self.robot.body.world_to_local((goal[0], goal[1]))).reshape(1, -1)
-                goal = np.float32(goal).reshape(1, -1)
-                obs = np.concatenate([state, goal], axis=-1)
+                if self.path_completed:
+                    print("Setting new target position")
+                    self.diffusion_policy.reset()
+                    self.target_position = self.position_controller.get_target_position(robot_initial_position, robot_initial_heading, action)
+
+                # target = np.float32(self.robot.body.world_to_local((target[0], target[1]))).reshape(1, -1)
+                target = np.float32(self.target_position).reshape(1, -1)
+                obs = np.concatenate([state, target], axis=-1)
                 self.path = self.diffusion_policy.act(obs)
                 self.path = self.path.reshape(-1, 2)
                 self.path = self.get_path_headings()
                 robot_move_sign = 1
+
+                # Check if the last point on the path is within the waypoint threshold of the action
+                last_point = self.path[-1][:2]
+                if self.distance(last_point, self.target_position) < WAYPOINT_MOVING_THRESHOLD or self.distance(self.robot.body.position, self.target_position) < WAYPOINT_MOVING_THRESHOLD:
+                    self.path_completed = True
+                else:
+                    self.path_completed = False
             else:
                 self.path, robot_move_sign = self.position_controller.get_waypoints_to_spatial_action(robot_initial_position, robot_initial_heading, action)
             if self.cfg.render.show:
                 self.renderer.update_path(self.path)
+                self.renderer.goal_point = self.target_position
                 self.render()
                 input()
             robot_distance, robot_turn_angle = self.execute_robot_path(robot_initial_position, robot_initial_heading, robot_move_sign, action=action)
@@ -885,6 +903,7 @@ class BoxDeliveryEnv(gym.Env):
             'obs': updated_boxes,
             'obs_vertices': obs_vert,
             'obs_positions': obs_pos,
+            'demonstration': self.demonstration_episode,
             'box_completed_statuses': self.box_clearance_statuses,
             'goal_positions': self.goal_points,
             'ministeps': ministeps,
@@ -952,7 +971,7 @@ class BoxDeliveryEnv(gym.Env):
         # return box_verts, box_poses
         return box_verts_and_poses
 
-    def demo_control(self, action):
+    def teleop_control(self, action):
         if action == FORWARD:
             self.linear_speed = 0.01
         # elif action == BACKWARD:
@@ -1013,8 +1032,8 @@ class BoxDeliveryEnv(gym.Env):
         return omega, v
     
     def apply_controller(self, omega, v):
-        self.robot.body.angular_velocity = omega
-        self.robot.body.velocity = (v*4).tolist()
+        self.robot.body.angular_velocity = omega*2
+        self.robot.body.velocity = (v*3).tolist()
 
     def check_path_for_box_collision(self, path=None):
         """
@@ -1075,7 +1094,7 @@ class BoxDeliveryEnv(gym.Env):
         target_heading = box_heading
         return np.array([target_x, target_y, target_heading])
 
-    def execute_robot_path(self, robot_initial_position, robot_initial_heading, robot_move_sign, action=None):
+    def execute_robot_path(self, robot_initial_position, robot_initial_heading, robot_move_sign, action=None, demo_mode=False):
         ############################################################################################################
         # Movement
         robot_position = robot_initial_position.copy()
@@ -1148,6 +1167,13 @@ class BoxDeliveryEnv(gym.Env):
             robot_waypoint_position = robot_waypoint_positions[robot_waypoint_index]
             robot_waypoint_heading = robot_waypoint_headings[robot_waypoint_index]
 
+        # to gather demonstrations
+        episode = []
+        demo_prev_pos = robot_position.copy()
+        goal = self.position_controller.get_target_position(robot_initial_position, robot_initial_heading, action)
+        if demo_mode:
+            obs = self.generate_observation_low_dim()
+
         while True:
             if not robot_is_moving:
                 break
@@ -1195,6 +1221,7 @@ class BoxDeliveryEnv(gym.Env):
             if self.distance(robot_prev_waypoint_position, robot_position) > MOVE_STEP_SIZE:
                 if self.robot_hit_obstacle:
                     # self.robot_hit_obstacle = False
+                    self.path_completed = True
                     robot_is_moving = False
                     break  # Note: self.robot_distance does not get not updated
             
@@ -1225,8 +1252,23 @@ class BoxDeliveryEnv(gym.Env):
             if sim_steps > STEP_LIMIT:
                 break
 
+            if demo_mode:
+                if self.distance(demo_prev_pos, robot_position) >= self.cfg.demonstration.step_size or robot_is_moving is False:
+                    if not robot_is_moving:
+                        robot_position = goal # ok to 'lie' here, since the robot is not moving anymore, info will be reset
+                    episode.append(self.get_demonstration_data(obs, goal, robot_position))
+                    demo_prev_pos = robot_position.copy()
+                    obs = self.generate_observation_low_dim()
+        
+        # get last demonstration
+        # if demo_mode:
+        #     episode.append(self.get_demonstration_data(obs, goal, robot_position))
+
         robot_heading = self.restrict_heading_range(self.robot.body.angle)
         robot_turn_angle = self.heading_difference(robot_initial_heading, robot_heading)
+
+        if demo_mode:
+            return robot_distance, robot_turn_angle, episode
         return robot_distance, robot_turn_angle
 
     def step_simulation_until_still(self):
@@ -1263,6 +1305,20 @@ class BoxDeliveryEnv(gym.Env):
             sim_steps += 1
             if sim_steps > STEP_LIMIT:
                 break
+
+    def get_demonstration_data(self, obs, goal, robot_position):
+        obs_vertices, obs_positions = obs
+        goal = np.array(goal)
+        action = np.array(robot_position)
+        observation = self.generate_observation()
+        data = {
+            'img': observation[:,:,0],
+            'state_vertices': np.float32(obs_vertices),
+            'state_positions': np.float32(obs_positions),
+            'goal': np.float32(goal),
+            'action': np.float32(action)
+        }
+        return data
 
     # def generate_observation_low_dim(self, updated_boxes):
     #     """

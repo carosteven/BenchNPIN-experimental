@@ -100,7 +100,7 @@ if __name__ == '__main__':
                 'action_type': 'position', # 'position', 'heading', 'velocity'
             },
             'boxes': {
-                'num_boxes_small': 5,
+                'num_boxes_small': 2,
                 'num_boxes_large': 20,
             },
             'env': {
@@ -149,7 +149,7 @@ if __name__ == '__main__':
                 'diffusion': True
             },
             'diffusion': {
-                'checkpoint_path': 'data/outputs/2025.07.09/16.02.16_train_diffusion_unet_lowdim_boxdelivery_lowdim/checkpoints/epoch=0300-val_loss=0.136.ckpt',
+                'checkpoint_path': 'data/outputs/expert_new.ckpt',
             }
             
         }

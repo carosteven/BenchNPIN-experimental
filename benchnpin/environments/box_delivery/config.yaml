@@ -8,7 +8,6 @@ plot:
   y_axis_limit: 18  # limits the y-axis of the plot
   show: false       # true will show planner plots
 
-teleop_mode: false     # when using teleoperation mode, control both forward and angular speed
 
 render_scale: 30      # scale renderer window to fit screen size
 
@@ -43,6 +42,11 @@ controller:
   dt: 0.2  # the agent dynamics model was discretized with this dt (originally 0.02)
   # target speed
   target_speed: 0.3  # m/s
+
+demonstration:
+  demonstration_mode: false
+  teleop_mode: false     # when using teleoperation mode, control both forward and angular speed
+  step_size: 0.6        # distance interval to save demonstrations
 
 boxes:
   num_boxes_small: 2

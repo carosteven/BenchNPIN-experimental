@@ -12,7 +12,7 @@ class PositionDiffusionPolicy(BasePolicy):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.device = torch.device('mps' if torch.backends.mps.is_available() else self.device)
         self.policy = self.create_policy()
-        self.obs_buffer = collections.deque(maxlen=self.cfg.diffusion.n_obs_steps)  # n_obs_steps
+        self.obs_buffer = collections.deque(maxlen=self.cfg.diffusion.n_obs_steps)
 
         self.load_checkpoint(self.cfg.diffusion.checkpoint_path)
     
@@ -58,34 +58,39 @@ class PositionDiffusionPolicy(BasePolicy):
             n_obs_steps=self.cfg.diffusion.n_obs_steps,
             num_inference_steps=100,
             obs_as_global_cond=True,  # Use global conditioning for box delivery
-            box_delivery_mode=True,   # Enable box delivery mode
         ).to(self.device)
 
         return policy
+    
+    def reset(self):
+        """Reset the observation buffer"""
+        self.obs_buffer.clear()
         
     def act(self, observation, **kwargs):
+        # Ensure observation has correct shape [obs_dim]
+        if observation.ndim > 1:
+            observation = observation.flatten()
+        
         # Add observation to buffer
-        self.obs_buffer.append(observation.reshape(-1))
+        self.obs_buffer.append(observation)
         
-        # Create observation dictionary
-        obs_history = np.array(list(self.obs_buffer))
         n_obs_steps = self.cfg.diffusion.n_obs_steps
-        if len(obs_history) < n_obs_steps:  # Pad if not enough history
-            # padding = np.tile(obs_history[0], (n_obs_steps - len(obs_history), 1))
-            padding = np.zeros((n_obs_steps - len(obs_history), obs_history.shape[1]))
-            obs_history = np.vstack([padding, obs_history])
         
-        obs_dict = {
-            'obs': torch.from_numpy(obs_history[np.newaxis, ...]).float().to(self.policy.device)
-        }
+        # Handle insufficient history by padding with first observation
+        if len(self.obs_buffer) < n_obs_steps:
+            obs_list = [list(self.obs_buffer)[0]] * (n_obs_steps - len(self.obs_buffer)) + list(self.obs_buffer)
+        else:
+            obs_list = list(self.obs_buffer)
+        
+        # Shape: [1, n_obs_steps, obs_dim]
+        obs_tensor = torch.from_numpy(np.array(obs_list)[np.newaxis, ...]).float().to(self.device)
+        obs_dict = {'obs': obs_tensor}
         
         # Get action from policy
         with torch.no_grad():
             action_dict = self.policy.predict_action(obs_dict)
         
-        # Extract first action
         action_sequence = action_dict['action'].cpu().numpy()
-        # action = action_sequence[0, 0]  # First action from first batch
         
         # return action
         return action_sequence

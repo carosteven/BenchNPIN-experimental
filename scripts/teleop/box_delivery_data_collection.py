@@ -6,7 +6,6 @@ A simple script to run a teleoperation pipeline for demonstration dataset collec
 'X': stop turning (note: this does not stop linear motion)
 'esc': exit teleoperation
 """
-# TODO: record high and low dimenstion states
 import random
 
 import benchnpin.environments
@@ -19,14 +18,6 @@ from os.path import dirname
 from benchnpin.baselines.box_delivery.SAM.policy import BoxDeliverySAM
 from diffusion_policy.common.replay_buffer import ReplayBuffer
 import pygame
-
-
-# observations_low = []
-# observations_high = []
-# actions = []                # this is actually the states (i.e. 3 dof pose)
-# rewards = []
-# terminals = []              # This is true when episodes end due to termination conditions such as falling over.
-# timeouts = []               # This is true when episodes end due to reaching the maximum episode length
 
 WAYPOINT_MOVING_THRESHOLD = 0.6
 
@@ -83,16 +74,6 @@ def on_press(key):
 #         manual_stop = True
 #         return False
 
-
-# def record_transition(observation_low, observation_high, state, reward, terminal, timeout):
-#     observations_low.append(observation_low)
-#     observations_high.append(observation_high)
-#     actions.append(state)
-#     rewards.append(reward)
-#     terminals.append(terminal)
-#     timeouts.append(timeout)
-
-
 '''
 Plan:
     - record high/low dim observations
@@ -110,9 +91,8 @@ Plan:
     need to use 'demo_mode' but also use the threshold logic to terminate step when reach goal
     need to visualize goal --> destination from SAM
 '''
-# TODO: set seed to length of replay buffer
 def collect_demos():
-    path = 'demo_data/box_delivery_demo.zarr'
+    path = 'demo_data/box_delivery_expert_demo.zarr'
     replay_buffer = ReplayBuffer.create_from_path(path, mode='a')
 
     # ensure different environments
@@ -120,18 +100,28 @@ def collect_demos():
     print(f'starting seed {seed}')
 
     cfg = {
-        'teleop_mode': True,
+        'render': {
+                'show': True,
+            },
+        'demonstration': {
+            'demonstration_mode': True,
+            'teleop_mode': False,
+            'step_size': WAYPOINT_MOVING_THRESHOLD/2
+        },
         'misc': {
-            'inactivity_cutoff_sam': 10000,  # set to a large number to avoid inactivity cutoff
+            'inactivity_cutoff_sam': 100,  # set to a large number to avoid inactivity cutoff
             'inactivity_cutoff': 10000,  # set to a large number to avoid inactivity cutoff
             'random_seed': seed,
+        },
+        'ablation': {
+            'better_pushing': True,
         }
     }
     env = gym.make('box-delivery-v0', cfg=cfg)
     env = env.unwrapped
     dummy_observation, _ = env.reset()
 
-    model_name = 'base_se'
+    model_name = 'bp_per_hsdp_term_se'
     model_path = 'models/box_delivery'
     policy = BoxDeliverySAM(cfg=env.cfg, model_name=model_name, model_path=model_path)
     # Initialize the policy
@@ -139,7 +129,8 @@ def collect_demos():
 
     path_length = 0
     # step_size = 0.1
-    step_size = WAYPOINT_MOVING_THRESHOLD
+    # step_size = WAYPOINT_MOVING_THRESHOLD
+    step_size = cfg['demonstration']['step_size']
 
     observation, info = env.reset()
     # record_transition(observation, observation, [info['state'][0], info['state'][1]], 0, False, False)
@@ -154,209 +145,162 @@ def collect_demos():
     episodes = []
     clock = pygame.time.Clock()
     # with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
-    with keyboard.Listener(on_press=on_press) as listener:
-        try:
-            # episode-level while loop (an episode is travelling to the next point)
-            while listener.running:  # While the listener is active
-                episode = list()
-
-                prev_state = [info['state'][0], info['state'][1]]
-                
-                # current robot pose
-                robot_current_position, robot_current_heading = env.robot.body.position, env.restrict_heading_range(env.robot.body.angle)
-                robot_current_position = list(robot_current_position)  
-
+    if not cfg['demonstration']['teleop_mode']:
+        num_demos = 0
+        while num_demos <= 20000:
+            terminated = False
+            truncated = False
+            while not terminated:
+                # get action from policy
                 goal_ravelled = policy.act(observation)
-                if break_nonmovement_action:
-                    # sometimes the goal can be really close to the robot such that it hits without moving
-                    # if so then can break the cycle with an action far behind the robot
-                    goal_ravelled = 95*94 + 45
-                    break_nonmovement_action = False
 
-                goal = env.position_controller.get_target_position(robot_current_position, robot_current_heading, goal_ravelled) 
+                # one step is travelling to the goal
+                observation, reward, terminated, truncated, info = env.step(goal_ravelled)
+                episodes.append(info['demonstration'])
+                num_demos += len(episodes[-1])
 
-                # display goal in environment
-                env.renderer.goal_point = goal
+            for episode in episodes:
+                if len(episode) > 0:
+                    data_dict = dict()
+                    for key in episode[0].keys():
+                        data_dict[key] = np.stack(
+                            [x[key] for x in episode])
+                    replay_buffer.add_episode(data_dict, compressors='disk')
+            episodes = []
+            observation, _ = env.reset()
+            print(num_demos)
 
-                reached_goal = False
-                ignore_curr_demo = False
-                
-                t = 0
-                transition_count = 1        # start from 1 as we recorded the reset step   
-                global command
-                command = STOP
+    else:
+        with keyboard.Listener(on_press=on_press) as listener:
+            try:
+                # episode-level while loop (an episode is travelling to the next point)
+                while listener.running:  # While the listener is active
+                    episode = list()
 
-                # step-level while loop
-                while not terminated or not truncated or not reached_goal:
-                    # global command
-                    if command == DELETE_PREV_DEMO:
-                        print("\nCurrent demonstration ignored")
-                        ignore_curr_demo = True
-                        command = STOP
+                    prev_state = [info['state'][0], info['state'][1]]
                     
-                    elif command == DONE_DEMO:
-                        # break
-                        reached_goal = True
+                    # current robot pose
+                    robot_current_position, robot_current_heading = env.robot.body.position, env.restrict_heading_range(env.robot.body.angle)
+                    robot_current_position = list(robot_current_position)  
 
-                    elif command == BREAK_NONMOVEMENT:
-                        break_nonmovement_action = True
-                        command = STOP
+                    goal_ravelled = policy.act(observation)
+                    if break_nonmovement_action:
+                        # sometimes the goal can be really close to the robot such that it hits without moving
+                        # if so then can break the cycle with an action far behind the robot
+                        goal_ravelled = 95*94 + 45
+                        break_nonmovement_action = False
 
-                    print("command: ", command, "; step: ", t, \
-                        "; num completed: ", info['cumulative_boxes'],  end="\r")
+                    goal = env.position_controller.get_target_position(robot_current_position, robot_current_heading, goal_ravelled) 
 
-                    if env.distance((info['state'][0], info['state'][1]), goal) < WAYPOINT_MOVING_THRESHOLD: # or env.robot_hit_obstacle:
-                        reached_goal = True
+                    # display goal in environment
+                    env.renderer.goal_point = goal
 
-                    # command = OTHER
-                    if t % 5 == 0:
-                        env.render()
-
-                    # only record points based on distance interval
-                    if (((info['state'][0] - prev_state[0])**2 + (info['state'][1] - prev_state[1])**2)**(0.5) >= step_size) or terminated or truncated or reached_goal:
-                        # record_transition(observation, observation, [info['state'][0], info['state'][1]], reward, terminated, truncated)
-                        goal = np.array(goal)
-                        action = np.array(info['state'][:2])
-                        data = {
-                            'img': observation[0],
-                            'state_vertices': np.float32(info['obs_vertices']),
-                            'state_positions': np.float32(info['obs_positions']),
-                            'goal': np.float32(goal),
-                            'action': np.float32(action)
-                        }
-                        episode.append(data)
-
-                        prev_state = [info['state'][0], info['state'][1]]
-                        transition_count += 1
+                    reached_goal = False
+                    ignore_curr_demo = False
                     
-                    observation, reward, terminated, truncated, info = env.step(command)
+                    t = 0
+                    transition_count = 1        # start from 1 as we recorded the reset step   
+                    global command
+                    command = STOP
 
-                    if terminated or truncated or reached_goal:
-                        print("\nterminated: ", terminated, "; truncated: ", truncated, "; reached goal: ", reached_goal)
-                        path_length = transition_count
-                        print()
-                        print(transition_count)
-                        if terminated or truncated:
-                            observation, info = env.reset()
-                        break
+                    terminated = False
+                    truncated = False
 
-                    clock.tick(20)  # Limit the frame rate
-
-                t += 1
-
-                if not ignore_curr_demo:
-                    episodes.append(episode)
-
-                if terminated:
-                    # save episode buffer to replay buffer (on disk)
-                    response = input("\nSave demonstrations? (y/n) ").strip().lower()[-1]
-                    if response == 'y':
-                        for episode in episodes:
-                            if len(episode) > 0:
-                                data_dict = dict()
-                                for key in episode[0].keys():
-                                    data_dict[key] = np.stack(
-                                        [x[key] for x in episode])
-                                replay_buffer.add_episode(data_dict, compressors='disk')
+                    # step-level while loop
+                    while not terminated or not truncated or not reached_goal:
+                        # global command
+                        if command == DELETE_PREV_DEMO:
+                            print("\nCurrent demonstration ignored")
+                            ignore_curr_demo = True
+                            command = STOP
                         
-                        print("Demonstrations saved. Resetting environment...")
-                    else:
-                        print("Demonstrations ignored. Resetting environment...")
+                        elif command == DONE_DEMO:
+                            # break
+                            reached_goal = True
 
-                    episodes = []
-             
-                # don't save the demo if this trial is truncated
-                # if manual_stop:
-                #     print("\nDemo manually stopped. Ignored")
-                #     return
+                        elif command == BREAK_NONMOVEMENT:
+                            break_nonmovement_action = True
+                            command = STOP
+
+                        print("command: ", command, "; step: ", t, \
+                            "; num completed: ", info['cumulative_boxes'],  end="\r")
+
+                        if env.distance((info['state'][0], info['state'][1]), goal) < WAYPOINT_MOVING_THRESHOLD: # or env.robot_hit_obstacle:
+                            reached_goal = True
+
+                        # command = OTHER
+                        if t % 5 == 0:
+                            env.render()
+
+                        # only record points based on distance interval
+                        if (((info['state'][0] - prev_state[0])**2 + (info['state'][1] - prev_state[1])**2)**(0.5) >= step_size) or terminated or truncated or reached_goal:
+                            # goal = np.array(goal)
+                            # action = np.array(info['state'][:2])
+                            # data = {
+                            #     'img': observation[0],
+                            #     'state_vertices': np.float32(info['obs_vertices']),
+                            #     'state_positions': np.float32(info['obs_positions']),
+                            #     'goal': np.float32(goal),
+                            #     'action': np.float32(action)
+                            # }
+                            data = env.get_demonstration_data(goal, info['state'][:2])
+                            episode.append(data)
+
+                            prev_state = [info['state'][0], info['state'][1]]
+                            transition_count += 1
+                        
+                        observation, reward, terminated, truncated, info = env.step(command)
+
+                        if terminated or truncated or reached_goal:
+                            print("\nterminated: ", terminated, "; truncated: ", truncated, "; reached goal: ", reached_goal)
+                            path_length = transition_count
+                            print()
+                            print(transition_count)
+                            if terminated or truncated:
+                                observation, info = env.reset()
+                            break
+
+                        clock.tick(20)  # Limit the frame rate
+
+                    t += 1
+
+                    if not ignore_curr_demo:
+                        episodes.append(episode)
+
+                    if terminated:
+                        # save episode buffer to replay buffer (on disk)
+                        response = input("\nSave demonstrations? (y/n) ").strip().lower()[-1]
+                        if response == 'y':
+                            for episode in episodes:
+                                if len(episode) > 0:
+                                    data_dict = dict()
+                                    for key in episode[0].keys():
+                                        data_dict[key] = np.stack(
+                                            [x[key] for x in episode])
+                                    replay_buffer.add_episode(data_dict, compressors='disk')
+                            
+                            print("Demonstrations saved. Resetting environment...")
+                        else:
+                            print("Demonstrations ignored. Resetting environment...")
+
+                        episodes = []
+                 
+                    # don't save the demo if this trial is truncated
+                    # if manual_stop:
+                    #     print("\nDemo manually stopped. Ignored")
+                    #     return
 
 
-        except KeyboardInterrupt:
-            print("Exiting teleoperation.")
+            except KeyboardInterrupt:
+                print("Exiting teleoperation.")
 
-        finally:
-            env.close()
+            finally:
+                env.close()
     
     # don't save the demo if this trial is truncated
     if truncated:
         print("\n Demo truncated. Ignored")
         return
-
-
-    # store = zarr.DirectoryStore("data.zarr")
-    # root = zarr.group(store=store)
-
-    ''' 
-    global observations, actions, rewards, terminals, timeouts
-    observations = np.array(observations).astype(np.float32)
-    actions = np.array(actions).astype(np.float32)
-    rewards = np.array(rewards).astype(np.float32)
-    terminals = np.array(terminals)
-    timeouts = np.array(timeouts)
-    path_lengths = np.array([path_length])
-
-    print("observation shape: ", observations.shape)
-    print("actions shape: ", actions.shape)
-    print("rewards shape: ", rewards.shape)
-    print("terminals shape: ", terminals.shape)
-    print("timeouts shape: ", timeouts.shape)
-    print("current path length: ", path_length)
-
-
-    try:
-        # load previous demos
-        with open('delivery_demo.pkl', 'rb') as file:
-            pickle_dict = pickle.load(file)
-
-        with open('delivery_demo_info.pkl', 'rb') as f:
-            pickle_dict_info = pickle.load(f)
-        
-        # append current demonstration data
-        pickle_dict['observations'] = np.concatenate((pickle_dict['observations'], observations))
-        pickle_dict['actions'] = np.concatenate((pickle_dict['actions'], actions))
-        pickle_dict['rewards'] = np.concatenate((pickle_dict['rewards'], rewards))
-        pickle_dict['terminals'] = np.concatenate((pickle_dict['terminals'], terminals))
-        pickle_dict['timeouts'] = np.concatenate((pickle_dict['timeouts'], timeouts))
-
-        # append current meta-info data
-        pickle_dict_info['path_lengths'] = np.concatenate((pickle_dict_info['path_lengths'], path_lengths))
-        pickle_dict_info['demo_count'] = pickle_dict_info['demo_count'] + 1
-
-    except:
-        # if delivery_demo file not exist, create one with current demos
-        pickle_dict = {
-            'observations': observations, 
-            'actions': actions, 
-            'rewards': rewards, 
-            'terminals': terminals,
-            'timeouts': timeouts
-        }
-
-        pickle_dict_info = {
-            'path_lengths': path_lengths,
-            'demo_count': 1
-        }
-
-    print("Total Demonstration Data ======== \n")
-    print("observation shape: ", pickle_dict['observations'].shape)
-    print("actions shape: ", pickle_dict['actions'].shape)
-    print("rewards shape: ", pickle_dict['rewards'].shape)
-    print("terminals shape: ", pickle_dict['terminals'].shape)
-    print("timeouts shape: ", pickle_dict['timeouts'].shape)
-
-    print("max path lengths: ", np.max(pickle_dict_info['path_lengths']), "; min path length: ", np.min(pickle_dict_info['path_lengths']), "; average path length: ", np.mean(pickle_dict_info['path_lengths']))
-    print("Total number of demos: ", pickle_dict_info['demo_count'])
-
-    
-    # save demo data
-    with open('delivery_demo.pkl', 'wb') as f:
-        pickle.dump(pickle_dict, f)
-
-    # save demo info data
-    with open('delivery_demo_info.pkl', 'wb') as f:
-        pickle.dump(pickle_dict_info, f)
-    '''
-
 
 if __name__ == "__main__":
     collect_demos()

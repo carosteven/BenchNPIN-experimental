@@ -520,7 +520,10 @@ class BoxDeliverySAM(BasePolicy):
             ep_reward = 0.0
             while True:
                 ep_steps += 1
-                action, _ = self.model.predict(obs)
+                # if path completed (endpoint of path is the action), then use the model to predict the action
+                # useful for diffusion, as it takes multiple steps to create full path
+                if env.path_completed:
+                    action, _ = self.model.predict(obs)
                 obs, reward, done, truncated, info = env.step(action)
                 ep_reward += reward
                 metric.update(info=info, reward=reward, eps_complete=(done or truncated))
