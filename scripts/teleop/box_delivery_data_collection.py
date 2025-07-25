@@ -101,12 +101,15 @@ def collect_demos():
 
     cfg = {
         'render': {
-                'show': True,
+                'show': False,
             },
         'demonstration': {
             'demonstration_mode': True,
             'teleop_mode': False,
             'step_size': WAYPOINT_MOVING_THRESHOLD/2
+        },
+        'evaluate': {
+            'final_exploration': 0.1,
         },
         'misc': {
             'inactivity_cutoff_sam': 100,  # set to a large number to avoid inactivity cutoff
@@ -147,7 +150,7 @@ def collect_demos():
     # with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
     if not cfg['demonstration']['teleop_mode']:
         num_demos = 0
-        while num_demos <= 20000:
+        while num_demos <= 200000:
             terminated = False
             truncated = False
             while not terminated:
@@ -165,7 +168,7 @@ def collect_demos():
                     for key in episode[0].keys():
                         data_dict[key] = np.stack(
                             [x[key] for x in episode])
-                    replay_buffer.add_episode(data_dict, compressors='disk')
+                    replay_buffer.add_episode(data_dict, compressors='default')
             episodes = []
             observation, _ = env.reset()
             print(num_demos)
@@ -277,7 +280,7 @@ def collect_demos():
                                     for key in episode[0].keys():
                                         data_dict[key] = np.stack(
                                             [x[key] for x in episode])
-                                    replay_buffer.add_episode(data_dict, compressors='disk')
+                                    replay_buffer.add_episode(data_dict, compressors='default')
                             
                             print("Demonstrations saved. Resetting environment...")
                         else:

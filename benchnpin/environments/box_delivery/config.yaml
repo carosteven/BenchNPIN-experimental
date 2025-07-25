@@ -147,6 +147,7 @@ train:
 
 evaluate:
   eval_mode: true
+  final_exploration: 0.0
   num_eps: 2
   policy_types: ['ppo', 'sac', 'sam']  # list of policy types to evaluate
   action_types: ['heading', 'heading', 'position']  # list of action types to evaluate
@@ -176,3 +177,8 @@ diffusion:
   n_action_steps: 4
   n_obs_steps: 2
   checkpoint_path: null
+
+demonstration:
+  demonstration_mode: True,
+  teleop_mode: False,
+  step_size: 0.01

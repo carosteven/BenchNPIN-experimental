@@ -561,7 +561,7 @@ class BoxDeliverySAM(BasePolicy):
                 raise ValueError("action_space and num_channels must be provided")
             
             if model_eps == 'latest':
-                self.model = DenseActionSpacePolicy(action_space, num_channels, 0.0,
+                self.model = DenseActionSpacePolicy(action_space, num_channels, self.cfg.evaluate.final_exploration,
                                                     train=False, evaluate=True, model_name=self.model_name, model_dir=self.model_path, half_action_space=self.cfg.ablation.half_action_space)
             else:
                 model_checkpoint = self.model_name + '_' + model_eps + '_steps'

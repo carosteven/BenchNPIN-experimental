@@ -1032,8 +1032,8 @@ class BoxDeliveryEnv(gym.Env):
         return omega, v
     
     def apply_controller(self, omega, v):
-        self.robot.body.angular_velocity = omega*2
-        self.robot.body.velocity = (v*3).tolist()
+        self.robot.body.angular_velocity = omega*3
+        self.robot.body.velocity = (v*2).tolist()
 
     def check_path_for_box_collision(self, path=None):
         """
