@@ -205,7 +205,7 @@ class BoxDeliveryEnv(gym.Env):
             repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
             sys.path.append(repo_root)
             from PositionDiffusionPolicy.policy import PositionDiffusionPolicy
-            self.diffusion_policy = PositionDiffusionPolicy(self.cfg)
+            self.diffusion_policy = PositionDiffusionPolicy(self.cfg, self)
 
     def init_box_delivery_sim(self):
 
@@ -1339,10 +1339,10 @@ class BoxDeliveryEnv(gym.Env):
 
     def generate_observation_low_dim(self):
         """
-        Returns two low-dim observations: boxes & receptacle vertices / boxes & receptacle centers
-        Vertices: a vector of shape (num_boxes * 8) + 8 specifying the 2d coords of the vertices
-        Centers:  a vector of shape (num_boxes * 2) + 2 specifying the 2d position of the centers
-        boxes are sorted by distance from robot, low to high; receptacle is always at the end
+        Returns two low-dim observations: (robot & boxes & receptacle) vertices / centers
+        Vertices: a vector of shape 8 (robot) + (num_boxes * 8) + 8 (receptacle) specifying the 2d coords of the vertices
+        Centers:  a vector of shape 2 (robot) + (num_boxes * 2) + 2 (receptacle) specifying the 2d position of the centers
+        boxes are sorted by distance from robot, low to high; receptacle is appended to the end
         """
         obs_vert = []
         obs_pos = []
@@ -1596,6 +1596,26 @@ class BoxDeliveryEnv(gym.Env):
     def shortest_path_distance(self, source_position, target_position, configuration_space=None):
         path = self.shortest_path(source_position, target_position, configuration_space=configuration_space)
         return sum(self.distance(path[i - 1], path[i]) for i in range(1, len(path)))
+    
+    def ensure_valid_trajectory(self, trajectory):
+        """
+        Only used for diffusion policy.
+        Ensures that each point in path is valid by checking if it is collision-free.
+        If not, it finds the closest valid path in the configuration space.
+        """
+        corrected = trajectory.clone()
+        for i in range(int(len(trajectory)/2)):
+            # extract position
+            pos = [trajectory[i].item(), trajectory[i+1].item()]
+            # convert to pixel indices
+            pixel_i, pixel_j = self.position_to_pixel_indices(pos[0], pos[1], self.configuration_space.shape)
+            # find closest valid indices in configuration space
+            closest_indices = self.closest_valid_cspace_indices(pixel_i, pixel_j)
+            # convert back to position
+            corrected_path = self.pixel_indices_to_position(closest_indices[0], closest_indices[1], self.configuration_space.shape)
+            # update corrected trajectory
+            corrected_path = np.array(corrected_path)
+        return corrected
     
     def closest_valid_cspace_indices(self, i, j):
         return self.closest_cspace_indices[:, i, j]

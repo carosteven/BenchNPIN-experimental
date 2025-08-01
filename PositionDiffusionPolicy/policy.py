@@ -7,10 +7,11 @@ import numpy as np
 import dill
 
 class PositionDiffusionPolicy(BasePolicy):
-    def __init__(self, cfg):
+    def __init__(self, cfg, env):
         self.cfg = cfg
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.device = torch.device('mps' if torch.backends.mps.is_available() else self.device)
+        self.env = env
         self.policy = self.create_policy()
         self.obs_buffer = collections.deque(maxlen=self.cfg.diffusion.n_obs_steps)
 
@@ -58,6 +59,9 @@ class PositionDiffusionPolicy(BasePolicy):
             n_obs_steps=self.cfg.diffusion.n_obs_steps,
             num_inference_steps=100,
             obs_as_global_cond=True,  # Use global conditioning for box delivery
+            pred_action_steps_only=True,  # Predict only action steps
+            condition_trajectory=True, # TODO: make this configurable
+            env=self.env,
         ).to(self.device)
 
         return policy
