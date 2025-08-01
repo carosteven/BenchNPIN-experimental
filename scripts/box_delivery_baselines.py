@@ -107,7 +107,7 @@ if __name__ == '__main__':
                 'obstacle_config': 'small_empty', # options are small_empty, small_columns, large_columns, large_divider
             },
             'misc': {
-                'random_seed': 42,
+                'random_seed': 1,
             },
             'train': { 
                 'train_mode': False,
@@ -124,7 +124,7 @@ if __name__ == '__main__':
                 'num_eps': 20,
                 'policy_types': ['sam', 'sam', 'sam', 'sam', 'sam'], # list of policy types to evaluate
                 'action_types': ['position', 'position', 'position', 'position'], # list of action types to evaluate
-                'model_names': ['base_se', 'bp_per_hsdp_term_lcld_3070', 'bp_per_hsdp_term_lcld_3070', 'bp_per_hsdp_term_lcld_3070', 'bp_per_qsdp_term_ld'], # list of model names to evaluate
+                'model_names': ['bp_per_hsdp_term_se', 'bp_per_hsdp_term_lcld_3070', 'bp_per_hsdp_term_lcld_3070', 'bp_per_hsdp_term_lcld_3070', 'bp_per_qsdp_term_ld'], # list of model names to evaluate
                 'model_path': 'models/box_delivery', # path to the models
                 'obs_configs': ['small_empty', 'small_columns', 'large_columns', 'large_divider', 'large_divider'], # list of observation configurations
             },
@@ -149,7 +149,7 @@ if __name__ == '__main__':
                 'diffusion': True
             },
             'diffusion': {
-                'checkpoint_path': 'data/outputs/expert_new.ckpt',
+                'checkpoint_path': 'data/outputs/expert_20k.ckpt',
             }
             
         }

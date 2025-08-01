@@ -171,7 +171,7 @@ ablation:
   diffusion: false
 
 diffusion:
-  horizon: 8
+  horizon: 32
   action_dim: 2
   obs_dim: 10
   n_action_steps: 4
@@ -179,6 +179,6 @@ diffusion:
   checkpoint_path: null
 
 demonstration:
-  demonstration_mode: True,
-  teleop_mode: False,
+  demonstration_mode: false
+  teleop_mode: false
   step_size: 0.01

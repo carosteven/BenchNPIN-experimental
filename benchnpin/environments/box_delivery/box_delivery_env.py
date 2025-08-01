@@ -918,6 +918,10 @@ class BoxDeliveryEnv(gym.Env):
         return self.observation, reward, terminated, truncated, info
     
     def get_path_headings(self):
+        # TODO: figure out why robot spins the wrong way when turning
+        # TODO: check distance from first point of current path to first point of previous path
+        #       if it is further from the goal, head to goal
+
         # compute waypoint headings
         headings = [None]
         for i in range(1, len(self.path)):

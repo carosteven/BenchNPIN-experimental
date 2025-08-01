@@ -12,6 +12,8 @@ import benchnpin.environments
 import gymnasium as gym
 import numpy as np
 import pickle
+from scipy.interpolate import CubicSpline
+from scipy.interpolate import interp1d
 # import zarr
 from pynput import keyboard
 from os.path import dirname
@@ -67,6 +69,62 @@ def on_press(key):
         elif key == keyboard.Key.space:
             command = BREAK_NONMOVEMENT # Action behind robot to break stuck cycle
 
+def interpolate_trajectory(traj, target_len=32):
+    """
+    Interpolates to target_len points, preserving all original points exactly.
+    Returns interpolated trajectory and valid_obs_mask.
+    """
+    N, D = traj.shape
+    assert target_len >= N, "target_len must be ≥ number of original points"
+
+    # Step 1: original arc lengths
+    deltas = np.diff(traj, axis=0)
+    dist = np.linalg.norm(deltas, axis=1)
+    arc_length = np.concatenate([[0], np.cumsum(dist)])
+    arc_length /= arc_length[-1]
+
+    # Step 2: Extra arc positions (excluding endpoints)
+    num_extra = target_len - N
+    extra_t = np.linspace(0, 1, num_extra + 2)[1:-1]  # avoid 0 and 1
+
+    # Step 3: Interpolate values at extra arc positions
+    extra_points = np.zeros((len(extra_t), D))
+    for d in range(D):
+        interp_fn = interp1d(arc_length, traj[:, d], kind='linear')
+        extra_points[:, d] = interp_fn(extra_t)
+
+    # Step 4: Combine original and extra points
+    all_arc = np.concatenate([arc_length, extra_t])
+    all_points = np.concatenate([traj, extra_points], axis=0)
+
+    # Step 5: Sort by arc length
+    sort_idx = np.argsort(all_arc)
+    all_arc = all_arc[sort_idx]
+    all_points = all_points[sort_idx]
+
+    # Step 6: Choose evenly spaced indices that include all original points
+    total_points = len(all_points)
+    traj_interp = []
+    valid_obs_mask = []
+
+    # First: record arc positions of original points
+    rounded_arc = np.round(arc_length, decimals=6)
+
+    # Step: evenly select indices from sorted all_points
+    selected_indices = np.linspace(0, total_points - 1, target_len).astype(int)
+
+    for idx in selected_indices:
+        point = all_points[idx]
+        traj_interp.append(point)
+
+        # Check if this point matches any original
+        is_original = any(np.allclose(point, orig, atol=1e-8) for orig in traj)
+        valid_obs_mask.append(is_original)
+
+    traj_interp = np.array(traj_interp)
+    valid_obs_mask = np.array(valid_obs_mask, dtype=bool)
+
+    return traj_interp, valid_obs_mask
 
 # def on_release(key):
 #     global action, manual_stop
@@ -126,14 +184,16 @@ def collect_demos():
 
     model_name = 'bp_per_hsdp_term_se'
     model_path = 'models/box_delivery'
-    policy = BoxDeliverySAM(cfg=env.cfg, model_name=model_name, model_path=model_path)
+
     # Initialize the policy
+    policy = BoxDeliverySAM(cfg=env.cfg, model_name=model_name, model_path=model_path)
     policy.act(dummy_observation, env.action_space.high, env.num_channels)
 
     path_length = 0
     # step_size = 0.1
     # step_size = WAYPOINT_MOVING_THRESHOLD
     step_size = cfg['demonstration']['step_size']
+    horizon = env.cfg.diffusion.horizon
 
     observation, info = env.reset()
     # record_transition(observation, observation, [info['state'][0], info['state'][1]], 0, False, False)
@@ -150,7 +210,7 @@ def collect_demos():
     # with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
     if not cfg['demonstration']['teleop_mode']:
         num_demos = 0
-        while num_demos <= 200000:
+        while num_demos <= 20000:
             terminated = False
             truncated = False
             while not terminated:
@@ -160,14 +220,40 @@ def collect_demos():
                 # one step is travelling to the goal
                 observation, reward, terminated, truncated, info = env.step(goal_ravelled)
                 episodes.append(info['demonstration'])
-                num_demos += len(episodes[-1])
+                # num_demos += len(episodes[-1])
+                num_demos += 1
 
             for episode in episodes:
-                if len(episode) > 0:
+                if len(episode) > 2:
+                    robot_positions = np.array([step['action'] for step in episode]) # (N, 2)
+
+                    # interpolate the path to make length of horizon
+                    robot_positions_interp, valid_mask = interpolate_trajectory(robot_positions, target_len=horizon) # (horizon, 2)
+
+                    # build a list of horizon steps
+                    last_step = episode[-1].copy()
+                    padded_episode = [last_step.copy() for _ in range(horizon)]
+
+                    # copy original episode steps into valid positions
+                    orig_idx = 0
+                    for i in range(horizon):
+                        if valid_mask[i]:
+                            padded_episode[i] = episode[orig_idx].copy()
+                            print(i, episode[orig_idx]['state_positions'])
+                            orig_idx += 1
+                            
+                    # fill in interpolated actions into the episode
+                    for i in range(horizon):
+                        padded_episode[i]['action'] = robot_positions_interp[i]
+
+                    # replace episode with padded one
+                    episode = padded_episode
+
                     data_dict = dict()
                     for key in episode[0].keys():
                         data_dict[key] = np.stack(
                             [x[key] for x in episode])
+                    data_dict['valid_obs_mask'] = valid_mask
                     replay_buffer.add_episode(data_dict, compressors='default')
             episodes = []
             observation, _ = env.reset()
