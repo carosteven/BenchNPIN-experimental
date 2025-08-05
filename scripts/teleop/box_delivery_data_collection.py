@@ -121,6 +121,7 @@ def interpolate_trajectory(traj, target_len=32):
         point = all_points[idx]
         traj_interp.append(point)
         
+        # Check if this index corresponds to an original point
         valid_obs_mask.append(sorted_flags[idx])
 
     traj_interp = np.array(traj_interp)
@@ -152,7 +153,7 @@ Plan:
     need to visualize goal --> destination from SAM
 '''
 def collect_demos():
-    path = 'demo_data/box_delivery_expert_demo.zarr'
+    path = 'demo_data/box_delivery_expert_demo_10b.zarr'
     replay_buffer = ReplayBuffer.create_from_path(path, mode='a')
 
     # ensure different environments
@@ -244,7 +245,6 @@ def collect_demos():
                     for i in range(horizon):
                         if valid_mask[i]:
                             padded_episode[i] = episode[orig_idx].copy()
-                            # print(i, episode[orig_idx]['state_positions'])
                             orig_idx += 1
                             
                     # fill in interpolated actions into the episode

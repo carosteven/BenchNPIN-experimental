@@ -17,6 +17,9 @@ benchnpin/baselines/box_delivery/ppo/vector_logs/
 benchnpin/baselines/box_delivery/sac/checkpoint/
 benchnpin/baselines/box_delivery/sac/models/
 benchnpin/baselines/box_delivery/sac/vector_logs/
+PositionDiffusionPolicy/vector_logs/
+PositionDiffusionPolicy/output_logs/
+PositionDiffusionPolicy/checkpoint/
 
 data/
 demo_data/
