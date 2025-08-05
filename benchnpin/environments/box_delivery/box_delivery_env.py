@@ -29,6 +29,8 @@ from skimage.measure import approximate_polygon
 from skimage.morphology import disk, binary_dilation
 import spfa
 
+import torch
+
 R = lambda theta: np.asarray([
     [np.cos(theta), -np.sin(theta)],
     [np.sin(theta), np.cos(theta)]
@@ -60,7 +62,7 @@ NOT_MOVING_THRESHOLD = 0.005
 NOT_TURNING_THRESHOLD = np.radians(0.05)
 NONMOVEMENT_DIST_THRESHOLD = 0.05
 NONMOVEMENT_TURN_THRESHOLD = np.radians(0.05)
-STEP_LIMIT = 5000
+STEP_LIMIT = 10000
 
 class BoxDeliveryEnv(gym.Env):
     """Custom Environment that follows gym interface"""
@@ -758,11 +760,10 @@ class BoxDeliveryEnv(gym.Env):
                 _, state_positions = self.generate_observation_low_dim()
                 state = np.float32(state_positions).reshape(1, -1)
                 if self.path_completed:
-                    print("Setting new target position")
+                    # print("Setting new target position")
                     self.diffusion_policy.reset()
                     self.target_position = self.position_controller.get_target_position(robot_initial_position, robot_initial_heading, action)
 
-                # target = np.float32(self.robot.body.world_to_local((target[0], target[1]))).reshape(1, -1)
                 target = np.float32(self.target_position).reshape(1, -1)
                 obs = np.concatenate([state, target], axis=-1)
                 self.path = self.diffusion_policy.act(obs)
@@ -966,14 +967,7 @@ class BoxDeliveryEnv(gym.Env):
         # sort by distance to robot
         box_verts_and_poses.sort(key=lambda b: self.distance(self.robot.body.position, (b[1][0], b[1][1])))
 
-        # box_verts = []
-        # box_poses = []
-        # for bvap in box_verts_and_poses:
-        #     box_verts.append(bvap[0])
-        #     box_poses.append(bvap[1]) 
-        #
-        # return box_verts, box_poses
-        return box_verts_and_poses
+        return box_verts_and_poses[:2]
 
     def teleop_control(self, action):
         if action == FORWARD:
@@ -1597,6 +1591,24 @@ class BoxDeliveryEnv(gym.Env):
         path = self.shortest_path(source_position, target_position, configuration_space=configuration_space)
         return sum(self.distance(path[i - 1], path[i]) for i in range(1, len(path)))
     
+    def prune_by_distance(self, path, min_dist=WAYPOINT_MOVING_THRESHOLD/8):
+        """
+        Only used for diffusion policy.
+        Remove waypoints that are too close together
+        """
+        pruned = [path[:,0]]
+        prev_point = path[:,0]
+        final_point = path[:,-1]
+        for i in range(1, path.shape[1] - 1):
+            dist_from_prev = torch.norm(path[:,i] - prev_point)
+            dist_from_final = torch.norm(path[:,i] - final_point)
+            if dist_from_prev >= min_dist and dist_from_final >= min_dist:
+                pruned.append(path[:,i])
+                prev_point = path[:,i]
+
+        pruned.append(path[:,-1]) # goal is always included
+        return torch.stack(pruned, dim=1)
+
     def ensure_valid_trajectory(self, trajectory):
         """
         Only used for diffusion policy.
@@ -1614,7 +1626,8 @@ class BoxDeliveryEnv(gym.Env):
             # convert back to position
             corrected_path = self.pixel_indices_to_position(closest_indices[0], closest_indices[1], self.configuration_space.shape)
             # update corrected trajectory
-            corrected_path = np.array(corrected_path)
+            corrected[i] = torch.tensor(corrected_path[0])
+            corrected[i+1] = torch.tensor(corrected_path[1])
         return corrected
     
     def closest_valid_cspace_indices(self, i, j):

@@ -7,7 +7,7 @@ import numpy as np
 import dill
 
 class PositionDiffusionPolicy(BasePolicy):
-    def __init__(self, cfg, env):
+    def __init__(self, cfg, env=None):
         self.cfg = cfg
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.device = torch.device('mps' if torch.backends.mps.is_available() else self.device)

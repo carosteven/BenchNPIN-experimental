@@ -113,13 +113,15 @@ def interpolate_trajectory(traj, target_len=32):
     # Step: evenly select indices from sorted all_points
     selected_indices = np.linspace(0, total_points - 1, target_len).astype(int)
 
+    # Compute index of original points in sorted list
+    original_flags = np.array([True]*len(traj) + [False]*len(extra_points))
+    sorted_flags = original_flags[sort_idx]
+
     for idx in selected_indices:
         point = all_points[idx]
         traj_interp.append(point)
-
-        # Check if this point matches any original
-        is_original = any(np.allclose(point, orig, atol=1e-8) for orig in traj)
-        valid_obs_mask.append(is_original)
+        
+        valid_obs_mask.append(sorted_flags[idx])
 
     traj_interp = np.array(traj_interp)
     valid_obs_mask = np.array(valid_obs_mask, dtype=bool)
@@ -161,6 +163,9 @@ def collect_demos():
         'render': {
                 'show': False,
             },
+        'boxes': {
+            'num_boxes_small': 10,
+        },
         'demonstration': {
             'demonstration_mode': True,
             'teleop_mode': False,
@@ -239,7 +244,7 @@ def collect_demos():
                     for i in range(horizon):
                         if valid_mask[i]:
                             padded_episode[i] = episode[orig_idx].copy()
-                            print(i, episode[orig_idx]['state_positions'])
+                            # print(i, episode[orig_idx]['state_positions'])
                             orig_idx += 1
                             
                     # fill in interpolated actions into the episode

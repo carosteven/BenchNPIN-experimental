@@ -100,7 +100,7 @@ if __name__ == '__main__':
                 'action_type': 'position', # 'position', 'heading', 'velocity'
             },
             'boxes': {
-                'num_boxes_small': 2,
+                'num_boxes_small': 10,
                 'num_boxes_large': 20,
             },
             'env': {
@@ -149,7 +149,7 @@ if __name__ == '__main__':
                 'diffusion': True
             },
             'diffusion': {
-                'checkpoint_path': 'data/outputs/expert_20k.ckpt',
+                'checkpoint_path': 'data/outputs/expert_fullpath.ckpt',
             }
             
         }
