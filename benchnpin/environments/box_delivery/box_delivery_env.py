@@ -842,7 +842,7 @@ class BoxDeliveryEnv(gym.Env):
         if not self.cfg.ablation.curriculum or curric_starts: # curriculum starts at 50000 steps (controlled by policy)
             # step distance penalty
             if self.cfg.ablation.step_dist_penalty:
-                robot_reward -= (self.partial_rewards_scale / 4) * robot_distance
+                robot_reward -= (self.partial_rewards_scale / 2) * robot_distance
 
         # terminal reward
         if self.robot_cumulative_boxes == self.num_boxes:

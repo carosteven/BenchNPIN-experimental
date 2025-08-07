@@ -208,15 +208,18 @@ def resnet18_SAM(**kwargs):
     return model
 
 class DenseActionSpaceDQN(nn.Module):
-    def __init__(self, num_input_channels=3, num_output_channels=1, half_action_space=False):
+    def __init__(self, num_input_channels=3, num_output_channels=1, half_action_space=False, average_filter=False):
         super().__init__()
         self.half_action_space = half_action_space
+        self.average_filter = average_filter
         self.resnet18 = resnet18_SAM(num_input_channels=num_input_channels)
         self.conv1 = nn.Conv2d(512, 128, kernel_size=1, stride=1)
         self.conv2 = nn.Conv2d(128, 32, kernel_size=1, stride=1)
         self.conv3 = nn.Conv2d(32, num_output_channels, kernel_size=1, stride=1)
         if self.half_action_space:
             self.conv4 = nn.Conv2d(num_output_channels, num_output_channels, kernel_size=3, stride=2, padding=1)
+        if self.average_filter:
+            self.avg_filter = nn.AvgPool2d(kernel_size=3, stride=1, padding=1)
     
     def forward(self, x):
         x = self.resnet18.features(x)
@@ -227,4 +230,6 @@ class DenseActionSpaceDQN(nn.Module):
         x = self.conv3(x)
         if self.half_action_space:
             x = self.conv4(x)
+        if self.average_filter:
+            x = self.avg_filter(x)
         return x

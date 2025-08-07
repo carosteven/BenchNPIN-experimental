@@ -151,12 +151,13 @@ class PrioritizedReplayBuffer:
 class DenseActionSpacePolicy:
     def __init__(self, action_space, num_input_channels, final_exploration, train=False, checkpoint_path='',
                 resume_training=False, evaluate=False, job_id_to_resume=None, random_seed=None,
-                model_name='sam_model', model_dir=None, half_action_space=False):
+                model_name='sam_model', model_dir=None, half_action_space=False, average_filter=False):
         self.action_space = action_space
         self.num_input_channels = num_input_channels
         self.final_exploration = final_exploration
         self.train = train
         self.half_action_space = half_action_space
+        self.average_filter = average_filter
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.device = torch.device('mps' if torch.backends.mps.is_available() else self.device)
@@ -192,7 +193,7 @@ class DenseActionSpacePolicy:
 
     def build_network(self):
         return torch.nn.DataParallel(
-            DenseActionSpaceDQN(num_input_channels=self.num_input_channels, half_action_space=self.half_action_space)
+            DenseActionSpaceDQN(num_input_channels=self.num_input_channels, half_action_space=self.half_action_space, average_filter=self.average_filter)
         ).to(self.device)
 
     def apply_transform(self, s):
@@ -331,7 +332,8 @@ class BoxDeliverySAM(BasePolicy):
 
         # policy
         policy = DenseActionSpacePolicy(env.action_space.high, env.num_channels, self.final_exploration,
-                                         train=True, checkpoint_path=checkpoint_path, resume_training=resume_training, job_id_to_resume=job_id_to_resume, model_name=self.model_name, random_seed=self.cfg.misc.random_seed, half_action_space=self.cfg.ablation.half_action_space)
+                                         train=True, checkpoint_path=checkpoint_path, resume_training=resume_training,
+                                         job_id_to_resume=job_id_to_resume, model_name=self.model_name, random_seed=self.cfg.misc.random_seed, half_action_space=self.cfg.ablation.half_action_space, average_filter=self.cfg.ablation.average_filter)
 
         # optimizer
         optimizer = optim.SGD(policy.policy_net.parameters(), lr=self.learning_rate, momentum=0.9, weight_decay=self.weight_decay)
@@ -499,11 +501,11 @@ class BoxDeliverySAM(BasePolicy):
 
         if model_eps == 'latest':
             self.model = DenseActionSpacePolicy(env.action_space.high, env.num_channels, 0.0,
-                                                train=False, evaluate=True, model_name=self.model_name, model_dir=self.model_path, half_action_space=self.cfg.ablation.half_action_space)
+                                                train=False, evaluate=True, model_name=self.model_name, model_dir=self.model_path, half_action_space=self.cfg.ablation.half_action_space, average_filter=self.cfg.ablation.average_filter)
         else:
             model_checkpoint = self.model_name + '_' + model_eps + '_steps'
             self.model = DenseActionSpacePolicy(env.action_space.high, env.num_channels, 0.0,
-                                                train=False, evaluate=True, model_name=model_checkpoint, model_dir=self.model_path, half_action_space=self.cfg.ablation.half_action_space)
+                                                train=False, evaluate=True, model_name=model_checkpoint, model_dir=self.model_path, half_action_space=self.cfg.ablation.half_action_space, average_filter=self.cfg.ablation.average_filter)
         
         metric = TaskDrivenMetric(alg_name="SAM", robot_mass=env.cfg.agent.mass)
 

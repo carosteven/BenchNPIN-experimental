@@ -93,7 +93,7 @@ if __name__ == '__main__':
         # High level configuration for the box delivery task
         cfg={
             'render': {
-                'show': True,           # if true display the environment
+                'show': False,           # if true display the environment
                 'show_obs': False,       # if true show observation
             },
             'agent': {
@@ -110,21 +110,21 @@ if __name__ == '__main__':
                 'random_seed': 1,
             },
             'train': { 
-                'train_mode': False,
+                'train_mode': True,
                 'job_type': 'sam', # 'sam', 'ppo', 'sac'
-                'job_name': 'per_hsdp_2G_term_se',
+                'job_name': 'avg_base_se',
                 'log_dir': 'per_logs/',
-                'resume_training': True,
+                'resume_training': False,
                 'job_id_to_resume': '16398526',
                 'total_timesteps': 60000*2,
                 # 'exploration_timesteps': 6000*2,
             },
             'evaluate': {
-                'eval_mode': True,
+                'eval_mode': False,
                 'num_eps': 20,
                 'policy_types': ['sam', 'sam', 'sam', 'sam', 'sam'], # list of policy types to evaluate
                 'action_types': ['position', 'position', 'position', 'position'], # list of action types to evaluate
-                'model_names': ['bp_per_hsdp_term_se', 'bp_per_hsdp_term_lcld_3070', 'bp_per_hsdp_term_lcld_3070', 'bp_per_hsdp_term_lcld_3070', 'bp_per_qsdp_term_ld'], # list of model names to evaluate
+                'model_names': ['bp_per_hsdp_term_se', 'base_se', 'bp_per_hsdp_term_lcld_3070', 'bp_per_hsdp_term_lcld_3070', 'bp_per_qsdp_term_ld'], # list of model names to evaluate
                 'model_path': 'models/box_delivery', # path to the models
                 'obs_configs': ['small_empty', 'small_columns', 'large_columns', 'large_divider', 'large_divider'], # list of observation configurations
             },
@@ -146,7 +146,8 @@ if __name__ == '__main__':
                 'curriculum': False,
                 'better_pushing': False,
                 'general': False,
-                'diffusion': True
+                'diffusion': False,
+                'average_filter': True,
             },
             'diffusion': {
                 'checkpoint_path': 'data/outputs/expert_fullpath.ckpt',
