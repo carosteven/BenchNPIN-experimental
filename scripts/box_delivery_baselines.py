@@ -150,7 +150,8 @@ if __name__ == '__main__':
                 'average_filter': True,
             },
             'diffusion': {
-                'checkpoint_path': 'data/outputs/expert_fullpath.ckpt',
+                'checkpoint_path': 'data/outputs/pure_teleop2k.ckpt',
+                'obs_type': 'vertices', # 'positions' or 'vertices'
             }
             
         }

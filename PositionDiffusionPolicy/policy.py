@@ -57,7 +57,7 @@ class PositionDiffusionPolicy(BasePolicy):
             action_dim=self.cfg.diffusion.action_dim,
             n_action_steps=self.cfg.diffusion.n_action_steps,
             n_obs_steps=self.cfg.diffusion.n_obs_steps,
-            num_inference_steps=100,
+            num_inference_steps=15,
             obs_as_global_cond=True,  # Use global conditioning for box delivery
             pred_action_steps_only=True,  # Predict only action steps
             condition_trajectory=True, # TODO: make this configurable

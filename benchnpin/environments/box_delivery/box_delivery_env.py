@@ -767,8 +767,11 @@ class BoxDeliveryEnv(gym.Env):
 
             ################################ Position Control ################################
             if self.cfg.ablation.diffusion:
-                _, state_positions = self.generate_observation_low_dim()
-                state = np.float32(state_positions).reshape(1, -1)
+                state_vertices, state_positions = self.generate_observation_low_dim()
+                if self.cfg.diffusion.obs_type == 'positions':
+                    state = np.float32(state_positions).reshape(1, -1)
+                else:
+                    state = np.float32(state_vertices).reshape(1, -1)
                 if self.path_completed:
                     # print("Setting new target position")
                     self.diffusion_policy.reset()
@@ -793,7 +796,7 @@ class BoxDeliveryEnv(gym.Env):
                 self.renderer.update_path(self.path)
                 self.renderer.goal_point = self.target_position
                 self.render()
-                input()
+                # input()
             robot_distance, robot_turn_angle = self.execute_robot_path(robot_initial_position, robot_initial_heading, robot_move_sign, action=action)
 
 
@@ -894,7 +897,7 @@ class BoxDeliveryEnv(gym.Env):
             terminated = True
         
         truncated = False
-        if self.inactivity_counter >= self.inactivity_cutoff:
+        if self.inactivity_counter >= self.inactivity_cutoff and not self.cfg.demonstration.teleop_mode:
             terminated = True
             truncated = True
         
@@ -923,7 +926,7 @@ class BoxDeliveryEnv(gym.Env):
         
         # render environment
         if self.cfg.render.show:
-            self.show_observation = True
+            # self.show_observation = True
             self.render()
 
         return self.observation, reward, terminated, truncated, info
@@ -947,10 +950,10 @@ class BoxDeliveryEnv(gym.Env):
 
     def get_sorted_box_vertices_and_positions(self):
         """
-        Returns a list of all box vertices sorted by distance to robot.
+        Returns a list of all box vertices (not true, closest two) sorted by distance to robot.
         Boxes that have been pushed into the receptacle are assumed to have their centers in the
         center of the receptacle
-        Coordinates are relative to robot's frame of reference
+        Coordinates are relative to robot's frame of reference (not true, world frame)
         """
         box_verts_and_poses = []
         for box in self.boxes:
@@ -1221,8 +1224,10 @@ class BoxDeliveryEnv(gym.Env):
             prev_heading_diff = heading_diff
 
             # stop moving if robot collided with obstacle
-            if self.distance(robot_prev_waypoint_position, robot_position) > MOVE_STEP_SIZE:
+            # if self.distance(robot_prev_waypoint_position, robot_position) > MOVE_STEP_SIZE:
+            if self.distance(robot_prev_position, robot_position) < MOVE_STEP_SIZE / 50 and done_turning:
                 if self.robot_hit_obstacle:
+                    # print('Robot hit obstacle, stopping simulation')
                     # self.robot_hit_obstacle = False
                     self.path_completed = True
                     robot_is_moving = False
@@ -1388,7 +1393,7 @@ class BoxDeliveryEnv(gym.Env):
         # Overhead map
         channels = []
         channels.append(self.get_local_map(self.global_overhead_map, self.robot.body.position, self.robot.body.angle))
-        if self.action_map is None:
+        if self.action_map is None or True:
             channels.append(self.robot_state_channel)
         else:
             channels.append(self.action_map[0, 0])

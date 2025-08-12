@@ -153,7 +153,7 @@ Plan:
     need to visualize goal --> destination from SAM
 '''
 def collect_demos():
-    path = 'demo_data/box_delivery_expert_demo_10b.zarr'
+    path = 'demo_data/box_delivery_teleop_demo.zarr'
     replay_buffer = ReplayBuffer.create_from_path(path, mode='a')
 
     # ensure different environments
@@ -162,14 +162,14 @@ def collect_demos():
 
     cfg = {
         'render': {
-                'show': False,
+                'show': True,
             },
         'boxes': {
             'num_boxes_small': 10,
         },
         'demonstration': {
             'demonstration_mode': True,
-            'teleop_mode': False,
+            'teleop_mode': True,
             'step_size': WAYPOINT_MOVING_THRESHOLD/2
         },
         'evaluate': {
@@ -337,7 +337,7 @@ def collect_demos():
                             #     'goal': np.float32(goal),
                             #     'action': np.float32(action)
                             # }
-                            data = env.get_demonstration_data(goal, info['state'][:2])
+                            data = env.get_demonstration_data([info['obs_vertices'], info['obs_positions']], goal, info['state'][:2])
                             episode.append(data)
 
                             prev_state = [info['state'][0], info['state'][1]]
@@ -366,11 +366,35 @@ def collect_demos():
                         response = input("\nSave demonstrations? (y/n) ").strip().lower()[-1]
                         if response == 'y':
                             for episode in episodes:
-                                if len(episode) > 0:
+                                if len(episode) > 2:
+                                    robot_positions = np.array([step['action'] for step in episode]) # (N, 2)
+
+                                    # interpolate the path to make length of horizon
+                                    robot_positions_interp, valid_mask = interpolate_trajectory(robot_positions, target_len=horizon) # (horizon, 2)
+
+                                    # build a list of horizon steps
+                                    last_step = episode[-1].copy()
+                                    padded_episode = [last_step.copy() for _ in range(horizon)]
+
+                                    # copy original episode steps into valid positions
+                                    orig_idx = 0
+                                    for i in range(horizon):
+                                        if valid_mask[i]:
+                                            padded_episode[i] = episode[orig_idx].copy()
+                                            orig_idx += 1
+                                            
+                                    # fill in interpolated actions into the episode
+                                    for i in range(horizon):
+                                        padded_episode[i]['action'] = robot_positions_interp[i]
+
+                                    # replace episode with padded one
+                                    episode = padded_episode
+
                                     data_dict = dict()
                                     for key in episode[0].keys():
                                         data_dict[key] = np.stack(
                                             [x[key] for x in episode])
+                                    data_dict['valid_obs_mask'] = valid_mask
                                     replay_buffer.add_episode(data_dict, compressors='default')
                             
                             print("Demonstrations saved. Resetting environment...")
