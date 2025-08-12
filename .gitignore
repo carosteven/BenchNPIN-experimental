@@ -20,6 +20,7 @@ benchnpin/baselines/box_delivery/sac/vector_logs/
 PositionDiffusionPolicy/vector_logs/
 PositionDiffusionPolicy/output_logs/
 PositionDiffusionPolicy/checkpoint/
+scratch/
 
 data/
 demo_data/
