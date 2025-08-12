@@ -117,6 +117,9 @@ class BoxDeliveryEnv(gym.Env):
         self.robot_cumulative_distance = None
         self.robot_cumulative_boxes = None
         self.robot_cumulative_reward = None
+
+
+        self.action_map = None
         
         # robot
         self.robot_hit_obstacle = False
@@ -662,7 +665,7 @@ class BoxDeliveryEnv(gym.Env):
         return self.observation, info
     
 
-    def step(self, action, curric_starts=False):
+    def step(self, action, curric_starts=False, action_info=None):
         """Executes one time step in the environment and returns the result."""
         self.t += 1
         self.dp = None
@@ -671,6 +674,13 @@ class BoxDeliveryEnv(gym.Env):
         robot_boxes = 0
         robot_reward = 0
 
+        if action_info is not None:
+            self.action_map = action_info['output']
+            self.action_from_map = action_info['action']
+            self.generate_observation()
+            self.show_observation = True
+            self.render()
+            input('input 1')
         # get initial state
 
         # initial pose
@@ -1378,7 +1388,10 @@ class BoxDeliveryEnv(gym.Env):
         # Overhead map
         channels = []
         channels.append(self.get_local_map(self.global_overhead_map, self.robot.body.position, self.robot.body.angle))
-        channels.append(self.robot_state_channel)
+        if self.action_map is None:
+            channels.append(self.robot_state_channel)
+        else:
+            channels.append(self.action_map[0, 0])
         channels.append(self.get_local_distance_map(self.create_global_shortest_path_to_receptacle_map(), self.robot.body.position, self.robot.body.angle))
         channels.append(self.get_local_distance_map(self.create_global_shortest_path_map(self.robot.body.position), self.robot.body.position, self.robot.body.angle))
         observation = np.stack(channels, axis=2)
@@ -1658,6 +1671,11 @@ class BoxDeliveryEnv(gym.Env):
                     ax.set_xticks([])
                     ax.set_yticks([])
                     im = ax.imshow(self.observation[:,:,i], cmap='hot', interpolation='nearest')
+
+                    if self.action_map is not None and i == 1:
+                        im = ax.imshow(self.action_map[0,0], cmap='hot', interpolation='nearest')
+                        action_coords = np.unravel_index(self.action_from_map, [self.local_map_pixel_width, self.local_map_pixel_width])
+                        ax.plot(action_coords[1], action_coords[0], 'x', color='green', markersize=12, markeredgewidth=3)
                     if self.path is not None:
                         path_np = np.array(self.path)
 
@@ -1681,7 +1699,7 @@ class BoxDeliveryEnv(gym.Env):
 
                         ax.plot(px, py, color='cyan', linewidth=2)
 
-                        # if self.colorbars[i] is not None:
+                    # if self.colorbars[i] is not None:
                     #     self.colorbars[i].update_normal(im)
                     # else:
                     #     self.colorbars[i] = self.state_fig.colorbar(im, ax=ax)

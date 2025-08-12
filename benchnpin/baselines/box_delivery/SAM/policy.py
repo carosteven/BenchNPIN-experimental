@@ -204,14 +204,17 @@ class DenseActionSpacePolicy:
             exploration_eps = self.final_exploration
         state = self.apply_transform(state).to(self.device)
         with torch.no_grad():
-            output = self.policy_net(state).squeeze(0)
+            raw_output = self.policy_net(state)
+            output = raw_output.squeeze(0)
         if random.random() < exploration_eps:
             action = random.randrange(self.action_space)
         else:
             action = output.view(1, -1).max(1)[1].item()
-        info = {}
+        info = None
         if debug:
-            info['output'] = output.squeeze(0)
+            info = {}
+            info['output'] = raw_output.cpu().numpy()
+            info['action'] = action
         return action, info
 
 class BoxDeliverySAM(BasePolicy):
@@ -525,8 +528,8 @@ class BoxDeliverySAM(BasePolicy):
                 # if path completed (endpoint of path is the action), then use the model to predict the action
                 # useful for diffusion, as it takes multiple steps to create full path
                 if env.path_completed:
-                    action, _ = self.model.predict(obs)
-                obs, reward, done, truncated, info = env.step(action)
+                    action, info_state = self.model.predict(obs, debug=False)
+                obs, reward, done, truncated, info = env.step(action, action_info=info_state)
                 ep_reward += reward
                 metric.update(info=info, reward=reward, eps_complete=(done or truncated))
                 if done or truncated:
