@@ -926,7 +926,7 @@ class BoxDeliveryEnv(gym.Env):
         
         # render environment
         if self.cfg.render.show:
-            # self.show_observation = True
+            self.show_observation = True
             self.render()
 
         return self.observation, reward, terminated, truncated, info
@@ -1125,12 +1125,17 @@ class BoxDeliveryEnv(gym.Env):
         done_turning = False
         prev_heading_diff = 0
 
+        # if self.cfg.render.show:
+            # self.render()
+            # input()
+            
         box_in_path, _ = self.check_path_for_box_collision()
 
         if box_in_path is not None and self.cfg.ablation.better_pushing:
-            box_pos = box_in_path.body.position         
-            box_heading = np.arctan2(robot_waypoint_position[1] - box_pos[1], robot_waypoint_position[0] - box_pos[0])
-            
+            if self.cfg.render.show:
+                self.renderer.update_path(self.path)
+                self.render()
+                # input()
 
             box_pos = box_in_path.body.position         
             box_heading = np.arctan2(robot_waypoint_position[1] - box_pos[1], robot_waypoint_position[0] - box_pos[0])
@@ -1517,7 +1522,7 @@ class BoxDeliveryEnv(gym.Env):
     def update_global_overhead_map(self):
         small_overhead_map = self.small_obstacle_map.copy()
 
-        for poly in self.boundaries + self.boxes + [self.robot]:
+        for poly in self.boundaries + self.boxes:
             if poly.label in ['wall', 'divider', 'column', 'corner']:
                 continue # precomputed in update_configuration_space
 
@@ -1537,8 +1542,15 @@ class BoxDeliveryEnv(gym.Env):
                 fillPoly(small_overhead_map, [vertices_px], color=RECEPTACLE_SEG_INDEX/MAX_SEG_INDEX)
             elif poly.label == 'box':
                 fillPoly(small_overhead_map, [vertices_px], color=BOX_SEG_INDEX/MAX_SEG_INDEX)
-            elif poly.label == 'robot':
-                fillPoly(small_overhead_map, [vertices_px], color=ROBOT_SEG_INDEX/MAX_SEG_INDEX)
+        
+        # robot
+        robot_vertices = [self.robot.body.local_to_world(v) for v in self.robot_info['footprint_vertices']]
+        robot_vertices_np = np.array([[v.x, v.y] for v in robot_vertices])
+        robot_vertices_px = (robot_vertices_np * self.local_map_pixels_per_meter).astype(np.int32)
+        robot_vertices_px[:, 0] += int(self.local_map_width * self.local_map_pixels_per_meter / 2) + 10
+        robot_vertices_px[:, 1] += int(self.local_map_width * self.local_map_pixels_per_meter / 2) + 10
+        robot_vertices_px[:, 1] = small_overhead_map.shape[0] - robot_vertices_px[:, 1]
+        fillPoly(small_overhead_map, [robot_vertices_px], color=ROBOT_SEG_INDEX/MAX_SEG_INDEX)
 
         start_i, start_j = int(self.global_overhead_map.shape[0] / 2 - small_overhead_map.shape[0] / 2), int(self.global_overhead_map.shape[1] / 2 - small_overhead_map.shape[1] / 2)
         self.global_overhead_map[start_i:start_i + small_overhead_map.shape[0], start_j:start_j + small_overhead_map.shape[1]] = small_overhead_map

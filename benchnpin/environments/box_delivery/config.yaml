@@ -63,27 +63,56 @@ agent:
   padding: 0.25  # adds padding to ship footprint
   length: 0.8
   width: 0.7
-  vertices: [
-              [0.4, -0.35],
-              [0.4, 0.35],
-              [-0.4, 0.25],
-              [-0.4, -0.25]
+  footprint_vertices: [ # Used for the observation classes
+              [0.30, -0.53],
+              [-0.30, -0.39],
+
+              [-0.30, 0.39],
+              [0.30, 0.53],
+  ]
+  vertices: [[0.26, -0.35],
+              [-0.31, -0.35],
+
+              [-0.31, 0.35],
+              [0.26, 0.35],
+          ]
+  front_bumper_vertices: [
+              [0.31, -0.53],
+              [0.20, -0.39],
+              [0.20, 0.39],
+              [0.31, 0.53],     
               ]
   wheel_vertices: [
-    # left
+    # left front
     [
-        [-0.4, 0.2],
-        [-0.4, 0.3],
-        [-0.15, 0.3], 
-        [-0.15, 0.2]
+        [0.09, 0.35],
+        [0.09, 0.39],
+        [0.24, 0.39], 
+        [0.24, 0.35]
     ],
 
-    # right
+    # right front
     [
-        [-0.4, -0.2],
-        [-0.4, -0.3],
-        [-0.15, -0.3], 
-        [-0.15, -0.2]
+        [0.09, -0.39],
+        [0.09, -0.35],
+        [0.24, -0.35], 
+        [0.24, -0.39]
+    ],
+
+    # left rear
+    [
+        [-0.09, 0.35],
+        [-0.09, 0.39],
+        [-0.24, 0.39], 
+        [-0.24, 0.35]
+    ],
+
+    # right rear
+    [
+        [-0.09, -0.35],
+        [-0.09, -0.39],
+        [-0.24, -0.39], 
+        [-0.24, -0.35]
     ],
   ]
 
@@ -173,7 +202,9 @@ ablation:
 diffusion:
   horizon: 32
   action_dim: 2
-  obs_dim: 10
+  # obs_dim: 10 # for positions
+  obs_dim: 34 # for vertices
+  obs_type: vertices # positions or vertices
   n_action_steps: 32
   n_obs_steps: 1
   checkpoint_path: null
