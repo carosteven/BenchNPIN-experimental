@@ -1,8 +1,9 @@
 #!/bin/sh
 # Node resource configurations
 
+#SBATCH -A aip-sl2smith
 #SBATCH --mem=20G
-#SBATCH --gres=gpu:rtx6000:1
+#SBATCH --gres=gpu:l40s:1
 #SBATCH -c 4
 #SBATCH --qos=normal
 #SBATCH --time=12:00:00
@@ -13,7 +14,7 @@
 # Append is important because otherwise preemption resets the file
 #SBATCH --open-mode=append
 
-job_name=${j:-main}
+job_name=${SLURM_JOB_NAME:-${j:-main}}
 # Set the job name manually
 scontrol update JobName=$job_name JobId=$SLURM_JOB_ID
 
