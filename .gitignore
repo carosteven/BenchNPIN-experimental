@@ -17,6 +17,10 @@ benchnpin/baselines/box_delivery/ppo/vector_logs/
 benchnpin/baselines/box_delivery/sac/checkpoint/
 benchnpin/baselines/box_delivery/sac/models/
 benchnpin/baselines/box_delivery/sac/vector_logs/
+scratch/
+data/
+demo_data/
+PositionDiffusionPolicy/checkpoint/
 
 /plots
 
@@ -25,6 +29,7 @@ benchnpin/baselines/box_delivery/sac/vector_logs/
 __pycache__/
 
 venv/
+diff_venv/
 
 configs/
 
