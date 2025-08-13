@@ -153,7 +153,7 @@ Plan:
     need to visualize goal --> destination from SAM
 '''
 def collect_demos():
-    path = 'demo_data/box_delivery_teleop_demo.zarr'
+    path = 'demo_data/box_delivery_teleop_demo_sc.zarr'
     replay_buffer = ReplayBuffer.create_from_path(path, mode='a')
 
     # ensure different environments
@@ -164,6 +164,9 @@ def collect_demos():
         'render': {
                 'show': True,
             },
+        'env': {
+            'obstacle_config': 'small_columns', # options are small_empty, small_columns, large_columns, large_divider
+        },
         'boxes': {
             'num_boxes_small': 10,
         },
@@ -189,7 +192,7 @@ def collect_demos():
     dummy_observation, _ = env.reset()
 
     model_name = 'bp_per_hsdp_term_se'
-    model_path = 'models/box_delivery'
+    model_path = 'models/box_delivery/new_robot'
 
     # Initialize the policy
     policy = BoxDeliverySAM(cfg=env.cfg, model_name=model_name, model_path=model_path)
@@ -354,7 +357,7 @@ def collect_demos():
                                 observation, info = env.reset()
                             break
 
-                        clock.tick(20)  # Limit the frame rate
+                        clock.tick(15)  # Limit the frame rate
 
                     t += 1
 

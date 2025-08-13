@@ -276,7 +276,7 @@ class BoxDeliveryEnv(gym.Env):
 
         # initialize sim objects
         self.robot = generate_sim_agent(self.space, self.robot_info, label='robot',
-                                        body_type=pymunk.Body.KINEMATIC, wheel_vertices_list=self.robot_info['wheel_vertices'])
+                                        body_type=pymunk.Body.KINEMATIC, wheel_vertices_list=self.robot_info['wheel_vertices'], front_bumper_vertices=self.robot_info['front_bumper_vertices'])
         self.boxes = generate_sim_boxes(self.space, self.boxes_dicts, self.cfg.boxes.box_density)
         self.boundaries = generate_sim_bounds(self.space, self.boundary_dicts)
         self.robot.collision_type = 1
@@ -1366,6 +1366,29 @@ class BoxDeliveryEnv(gym.Env):
         for bvap in box_verts_and_poses:
             obs_vert.extend([vert for verts in bvap[0] for vert in verts])
             obs_pos.extend(bvap[1])
+        
+        if 'columns' in self.cfg.env.obstacle_config:
+            if 'small' in self.cfg.env.obstacle_config:
+                max_columns = 2
+            else:
+                max_columns = 8
+
+            # add columns to observation
+            num_columns = 0
+            for obstacle in self.boundary_dicts:
+                if obstacle['type'] == 'column':
+                    num_columns += 1
+                    column_verts = [list(verts) for verts in obstacle['vertices']]
+                    column_position = list(obstacle['position'])
+                    obs_vert.extend([vert for verts in column_verts for vert in verts])
+                    obs_pos.extend(column_position)
+            if num_columns < max_columns:
+                # pad with extra columns
+                column_verts = [[0, 0], [0, 0], [0, 0], [0, 0]]
+                column_position = [0, 0]
+                for _ in range(max_columns - num_columns):
+                    obs_vert.extend([vert for verts in column_verts for vert in verts])
+                    obs_pos.extend(column_position)
         
         recept_pos, recept_size = self.get_receptacle_position_and_size()
         # recept_pos = self.robot.body.world_to_local(recept_pos)
