@@ -153,7 +153,7 @@ Plan:
     need to visualize goal --> destination from SAM
 '''
 def collect_demos():
-    path = 'demo_data/box_delivery_teleop_demo_sc.zarr'
+    path = 'demo_data/box_delivery_teleop_demo_se.zarr'
     replay_buffer = ReplayBuffer.create_from_path(path, mode='a')
 
     # ensure different environments
@@ -165,7 +165,7 @@ def collect_demos():
                 'show': True,
             },
         'env': {
-            'obstacle_config': 'small_columns', # options are small_empty, small_columns, large_columns, large_divider
+            'obstacle_config': 'small_empty', # options are small_empty, small_columns, large_columns, large_divider
         },
         'boxes': {
             'num_boxes_small': 10,
@@ -340,7 +340,7 @@ def collect_demos():
                             #     'goal': np.float32(goal),
                             #     'action': np.float32(action)
                             # }
-                            data = env.get_demonstration_data([info['obs_vertices'], info['obs_positions']], goal, info['state'][:2])
+                            data = env.get_demonstration_data([info['obs_vertices'], info['obs_positions'], info['obs_combo']], goal, info['state'][:2])
                             episode.append(data)
 
                             prev_state = [info['state'][0], info['state'][1]]

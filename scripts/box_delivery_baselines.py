@@ -40,11 +40,12 @@ def main(cfg, job_id):
         num_eps = cfg.evaluate.num_eps
         model_path = cfg.evaluate.model_path
         seed = 0
-        for policy_type, action_type, model_name, obs_config in zip(cfg.evaluate.policy_types, cfg.evaluate.action_types, cfg.evaluate.model_names, cfg.evaluate.obs_configs):
+        for policy_type, action_type, model_name, obs_config, push_config in zip(cfg.evaluate.policy_types, cfg.evaluate.action_types, cfg.evaluate.model_names, cfg.evaluate.obs_configs, cfg.evaluate.push_configs):
             cfg.agent.action_type = action_type
             cfg.train.job_type = policy_type
             cfg.env.obstacle_config = obs_config
             cfg.misc.random_seed = seed
+            cfg.ablation.better_pushing = push_config
             seed += 1
 
             if policy_type == 'sam':
@@ -110,7 +111,7 @@ if __name__ == '__main__':
                 'random_seed': 1,
             },
             'train': { 
-                'train_mode': True,
+                'train_mode': False,
                 'job_type': 'sam', # 'sam', 'ppo', 'sac'
                 'job_name': 'avg_base_se',
                 'log_dir': 'per_logs/',
@@ -120,13 +121,14 @@ if __name__ == '__main__':
                 # 'exploration_timesteps': 6000*2,
             },
             'evaluate': {
-                'eval_mode': False,
+                'eval_mode': True,
                 'num_eps': 20,
                 'policy_types': ['sam', 'sam', 'sam', 'sam', 'sam'], # list of policy types to evaluate
                 'action_types': ['position', 'position', 'position', 'position'], # list of action types to evaluate
-                'model_names': ['bp_per_hsdp_term_se', 'base_se', 'bp_per_hsdp_term_lcld_3070', 'bp_per_hsdp_term_lcld_3070', 'bp_per_qsdp_term_ld'], # list of model names to evaluate
-                'model_path': 'models/box_delivery', # path to the models
-                'obs_configs': ['small_empty', 'small_columns', 'large_columns', 'large_divider', 'large_divider'], # list of observation configurations
+                'model_names': ['bp_per_hsdp_term_se', 'bp_per_hsdp_ld', 'bp_per_hsdp_term_se', 'bp_per_hsdp_term_sc'], # list of model names to evaluate
+                'model_path': 'models/box_delivery/new_robot', # path to the models
+                'obs_configs': ['small_empty', 'large_divider', 'small_empty', 'small_columns', 'large_divider'], # list of observation configurations
+                'push_configs': [False, True],
             },
             'rewards_sam': {
                 'goal_reward': 1.0,
@@ -146,12 +148,12 @@ if __name__ == '__main__':
                 'curriculum': False,
                 'better_pushing': False,
                 'general': False,
-                'diffusion': False,
-                'average_filter': True,
+                'diffusion': True,
+                'average_filter': False,
             },
             'diffusion': {
-                'checkpoint_path': 'data/outputs/pure_teleop2k.ckpt',
-                'obs_type': 'vertices', # 'positions' or 'vertices'
+                'checkpoint_path': 'data/outputs/pt_se.ckpt',
+                'obs_type': 'combo', # 'positions' or 'vertices'
             }
             
         }

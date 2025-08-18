@@ -644,7 +644,7 @@ class BoxDeliveryEnv(gym.Env):
             self.show_observation = True
             self.render()
         
-        obs_vert, obs_pos = self.generate_observation_low_dim()
+        obs_vert, obs_pos, obs_combo = self.generate_observation_low_dim()
         info = {
             'state': (round(self.robot.body.position.x, 2),
                       round(self.robot.body.position.y, 2),
@@ -656,6 +656,7 @@ class BoxDeliveryEnv(gym.Env):
             'obs': updated_boxes,
             'obs_vertices': obs_vert,
             'obs_positions': obs_pos,
+            'obs_combo': obs_combo,
             'box_completed_statuses': self.box_clearance_statuses,
             'goal_positions': self.goal_points,
             'ministeps': 0,
@@ -767,11 +768,13 @@ class BoxDeliveryEnv(gym.Env):
 
             ################################ Position Control ################################
             if self.cfg.ablation.diffusion:
-                state_vertices, state_positions = self.generate_observation_low_dim()
+                state_vertices, state_positions, state_combo = self.generate_observation_low_dim()
                 if self.cfg.diffusion.obs_type == 'positions':
                     state = np.float32(state_positions).reshape(1, -1)
-                else:
+                elif self.cfg.diffusion.obs_type == 'vertices':
                     state = np.float32(state_vertices).reshape(1, -1)
+                elif self.cfg.diffusion.obs_type == 'combo':
+                    state = np.float32(state_combo).reshape(1, -1)
                 if self.path_completed:
                     # print("Setting new target position")
                     self.diffusion_policy.reset()
@@ -905,7 +908,7 @@ class BoxDeliveryEnv(gym.Env):
         self.observation = self.generate_observation(done=terminated)
         reward = robot_reward
         ministeps = robot_distance / self.ministep_size
-        obs_vert, obs_pos = self.generate_observation_low_dim()
+        obs_vert, obs_pos, obs_combo = self.generate_observation_low_dim()
         info = {
             'state': (round(self.robot.body.position.x, 2),
                       round(self.robot.body.position.y, 2),
@@ -917,6 +920,7 @@ class BoxDeliveryEnv(gym.Env):
             'obs': updated_boxes,
             'obs_vertices': obs_vert,
             'obs_positions': obs_pos,
+            'obs_combo': obs_combo,
             'demonstration': self.demonstration_episode,
             'box_completed_statuses': self.box_clearance_statuses,
             'goal_positions': self.goal_points,
@@ -980,7 +984,7 @@ class BoxDeliveryEnv(gym.Env):
         # sort by distance to robot
         box_verts_and_poses.sort(key=lambda b: self.distance(self.robot.body.position, (b[1][0], b[1][1])))
 
-        return box_verts_and_poses[:2]
+        return box_verts_and_poses[:4]
 
     def teleop_control(self, action):
         if action == FORWARD:
@@ -1320,7 +1324,7 @@ class BoxDeliveryEnv(gym.Env):
                 break
 
     def get_demonstration_data(self, obs, goal, robot_position):
-        obs_vertices, obs_positions = obs
+        obs_vertices, obs_positions, obs_combo = obs
         goal = np.array(goal)
         action = np.array(robot_position)
         observation = self.generate_observation()
@@ -1328,6 +1332,7 @@ class BoxDeliveryEnv(gym.Env):
             'img': observation[:,:,0],
             'state_vertices': np.float32(obs_vertices),
             'state_positions': np.float32(obs_positions),
+            'state_combo': np.float32(obs_combo),
             'goal': np.float32(goal),
             'action': np.float32(action)
         }
@@ -1355,17 +1360,20 @@ class BoxDeliveryEnv(gym.Env):
         """
         obs_vert = []
         obs_pos = []
+        obs_combo = []
 
         robot_verts = [list(self.robot.body.local_to_world(v)) for v in self.robot.get_vertices()]
         robot_position = list(self.robot.body.position)
 
         obs_vert.extend([vert for verts in robot_verts for vert in verts])
+        obs_combo.extend([vert for verts in robot_verts for vert in verts])
         obs_pos.extend(robot_position)
 
         box_verts_and_poses = self.get_sorted_box_vertices_and_positions()
         for bvap in box_verts_and_poses:
             obs_vert.extend([vert for verts in bvap[0] for vert in verts])
             obs_pos.extend(bvap[1])
+            obs_combo.extend(bvap[1])
         
         if 'columns' in self.cfg.env.obstacle_config:
             if 'small' in self.cfg.env.obstacle_config:
@@ -1381,6 +1389,7 @@ class BoxDeliveryEnv(gym.Env):
                     column_verts = [list(verts) for verts in obstacle['vertices']]
                     column_position = list(obstacle['position'])
                     obs_vert.extend([vert for verts in column_verts for vert in verts])
+                    obs_combo.extend([vert for verts in column_verts for vert in verts])
                     obs_pos.extend(column_position)
             if num_columns < max_columns:
                 # pad with extra columns
@@ -1388,6 +1397,7 @@ class BoxDeliveryEnv(gym.Env):
                 column_position = [0, 0]
                 for _ in range(max_columns - num_columns):
                     obs_vert.extend([vert for verts in column_verts for vert in verts])
+                    obs_combo.extend([vert for verts in column_verts for vert in verts])
                     obs_pos.extend(column_position)
         
         recept_pos, recept_size = self.get_receptacle_position_and_size()
@@ -1401,9 +1411,10 @@ class BoxDeliveryEnv(gym.Env):
         ]
 
         obs_vert.extend(vert for verts in recept_verts for vert in verts)
+        obs_combo.extend(vert for verts in recept_verts for vert in verts)
         obs_pos.extend(recept_pos)
 
-        return obs_vert, obs_pos
+        return obs_vert, obs_pos, obs_combo
 
 
     def update_path(self, new_path, scatter=False):
@@ -1713,6 +1724,9 @@ class BoxDeliveryEnv(gym.Env):
                     im = ax.imshow(self.observation[:,:,i], cmap='hot', interpolation='nearest')
 
                     if self.action_map is not None and i == 1:
+                        if self.action_map is not None:
+                            print("Highest value in self.action_map[0,0]:", np.max(self.action_map[0, 0]))
+                            print("Lowest value in self.action_map[0,0]:", np.min(self.action_map[0, 0]))
                         im = ax.imshow(self.action_map[0,0], cmap='hot', interpolation='nearest')
                         action_coords = np.unravel_index(self.action_from_map, [self.local_map_pixel_width, self.local_map_pixel_width])
                         ax.plot(action_coords[1], action_coords[0], 'x', color='green', markersize=12, markeredgewidth=3)
