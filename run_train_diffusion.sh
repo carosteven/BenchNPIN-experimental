@@ -14,8 +14,8 @@
 # We also recommend users to create a symlink of the checkpoint dir so your
 # training code stays the same with regards to different job IDs and it would
 # be easier to navigate the checkpoint directory
-mkdir -p $PWD/scratch/checkpoint/${SLURM_JOB_ID}
-ln -sfn $PWD/scratch/checkpoint/${SLURM_JOB_ID} $PWD/PositionDiffusionPolicy/checkpoint/${SLURM_JOB_ID}
+mkdir -p $SCRATCH/checkpoint/${SLURM_JOB_ID}
+ln -sfn $SCRATCH/checkpoint/${SLURM_JOB_ID} $PWD/PositionDiffusionPolicy/checkpoint/${SLURM_JOB_ID}
 
 # In the future, the checkpoint directory will be removed immediately after the
 # job has finished. If you would like the file to stay longer, and create an
