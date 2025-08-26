@@ -15,8 +15,8 @@
 # training code stays the same with regards to different job IDs and it would
 # be easier to navigate the checkpoint directory
 # ln -sfn /checkpoint/${USER}/${SLURM_JOB_ID} $PWD/benchnpin/baselines/box_delivery/SAM/checkpoint/${SLURM_JOB_ID}
-mkdir -p $PWD/scratch/checkpoint/${SLURM_JOB_ID}
-ln -sfn $PWD/scratch/checkpoint/${SLURM_JOB_ID} $PWD/benchnpin/baselines/box_delivery/SAM/checkpoint/${SLURM_JOB_ID}
+mkdir -p $SCRATCH/checkpoint/${SLURM_JOB_ID}
+ln -sfn $SCRATCH/checkpoint/${SLURM_JOB_ID} $PWD/benchnpin/baselines/box_delivery/SAM/checkpoint/${SLURM_JOB_ID}
 
 
 # In the future, the checkpoint directory will be removed immediately after the
