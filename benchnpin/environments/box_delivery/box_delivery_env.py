@@ -111,6 +111,7 @@ class BoxDeliveryEnv(gym.Env):
         self.configuration_space = None
         self.configuration_space_thin = None
         self.closest_cspace_indices = None
+        self.closest_cspace_thin_indices = None
 
         # stats
         self.inactivity_counter = None
@@ -310,7 +311,7 @@ class BoxDeliveryEnv(gym.Env):
         self.position_controller = PositionController(self.cfg, self.robot_radius, self.room_width, self.room_length, 
                                                       self.configuration_space, self.configuration_space_thin, self.closest_cspace_indices,
                                                       self.local_map_pixel_width, self.local_map_width, self.local_map_pixels_per_meter, 
-                                                      TURN_STEP_SIZE, MOVE_STEP_SIZE, WAYPOINT_MOVING_THRESHOLD, WAYPOINT_TURNING_THRESHOLD, closest_cspace_indices_thin=self.closest_cspace_indices_thin)
+                                                      TURN_STEP_SIZE, MOVE_STEP_SIZE, WAYPOINT_MOVING_THRESHOLD, WAYPOINT_TURNING_THRESHOLD, closest_cspace_thin_indices=self.closest_cspace_thin_indices)
         
     
     def prevent_boundary_intersection(self, arbiter):
@@ -486,7 +487,7 @@ class BoxDeliveryEnv(gym.Env):
                     
         
         # generate obstacles
-        if self.cfg.env.obstacle_config == 'small_empty':
+        if self.cfg.env.obstacle_config == 'small_empty' or self.cfg.env.obstacle_config == 'large_empty':
             pass
         elif self.cfg.env.obstacle_config == 'small_columns':
             boundary_dicts.extend(add_random_columns(boundary_dicts, 3))
@@ -784,6 +785,7 @@ class BoxDeliveryEnv(gym.Env):
                 obs = np.concatenate([state, target], axis=-1)
                 self.path = self.diffusion_policy.act(obs)
                 self.path = self.path.reshape(-1, 2)
+                # input()
                 self.path = self.get_path_headings()
                 robot_move_sign = 1
 
@@ -1145,6 +1147,7 @@ class BoxDeliveryEnv(gym.Env):
             box_heading = np.arctan2(robot_waypoint_position[1] - box_pos[1], robot_waypoint_position[0] - box_pos[0])
 
             # get new robot target position. Point is calculated based on the heading of the path from the box to the original target.
+            # NOTE: desired_box_pos is not really used
             lookahead = 0.2
             desired_box_pos = np.array([
                 box_pos[0] + lookahead * np.cos(box_heading),
@@ -1375,30 +1378,30 @@ class BoxDeliveryEnv(gym.Env):
             obs_pos.extend(bvap[1])
             obs_combo.extend(bvap[1])
         
-        if 'columns' in self.cfg.env.obstacle_config:
-            if 'small' in self.cfg.env.obstacle_config:
-                max_columns = 2
-            else:
-                max_columns = 8
+        # if 'columns' in self.cfg.env.obstacle_config:
+        #     if 'small' in self.cfg.env.obstacle_config:
+        #         max_columns = 2
+        #     else:
+        #         max_columns = 8
 
-            # add columns to observation
-            num_columns = 0
-            for obstacle in self.boundary_dicts:
-                if obstacle['type'] == 'column':
-                    num_columns += 1
-                    column_verts = [list(verts) for verts in obstacle['vertices']]
-                    column_position = list(obstacle['position'])
-                    obs_vert.extend([vert for verts in column_verts for vert in verts])
-                    obs_combo.extend([vert for verts in column_verts for vert in verts])
-                    obs_pos.extend(column_position)
-            if num_columns < max_columns:
-                # pad with extra columns
-                column_verts = [[0, 0], [0, 0], [0, 0], [0, 0]]
-                column_position = [0, 0]
-                for _ in range(max_columns - num_columns):
-                    obs_vert.extend([vert for verts in column_verts for vert in verts])
-                    obs_combo.extend([vert for verts in column_verts for vert in verts])
-                    obs_pos.extend(column_position)
+        #     # add columns to observation
+        #     num_columns = 0
+        #     for obstacle in self.boundary_dicts:
+        #         if obstacle['type'] == 'column':
+        #             num_columns += 1
+        #             column_verts = [list(verts) for verts in obstacle['vertices']]
+        #             column_position = list(obstacle['position'])
+        #             obs_vert.extend([vert for verts in column_verts for vert in verts])
+        #             obs_combo.extend([vert for verts in column_verts for vert in verts])
+        #             obs_pos.extend(column_position)
+        #     if num_columns < max_columns:
+        #         # pad with extra columns
+        #         column_verts = [[0, 0], [0, 0], [0, 0], [0, 0]]
+        #         column_position = [0, 0]
+        #         for _ in range(max_columns - num_columns):
+        #             obs_vert.extend([vert for verts in column_verts for vert in verts])
+        #             obs_combo.extend([vert for verts in column_verts for vert in verts])
+        #             obs_pos.extend(column_position)
         
         recept_pos, recept_size = self.get_receptacle_position_and_size()
         # recept_pos = self.robot.body.world_to_local(recept_pos)
@@ -1550,7 +1553,7 @@ class BoxDeliveryEnv(gym.Env):
         # self.configuration_space = 1 - binary_dilation(obstacle_map, selem_thin).astype(np.float32)
 
         self.closest_cspace_indices = distance_transform_edt(1 - self.configuration_space, return_distances=False, return_indices=True)
-        self.closest_cspace_indices_thin = distance_transform_edt(1 - self.configuration_space_thin, return_distances=False, return_indices=True)
+        self.closest_cspace_thin_indices = distance_transform_edt(1 - self.configuration_space_thin, return_distances=False, return_indices=True)
         self.small_obstacle_map = 1 - small_obstacle_map
 
     def update_global_overhead_map(self):
@@ -1650,14 +1653,16 @@ class BoxDeliveryEnv(gym.Env):
         path = self.shortest_path(source_position, target_position, configuration_space=configuration_space)
         return sum(self.distance(path[i - 1], path[i]) for i in range(1, len(path)))
     
-    def prune_by_distance(self, path, min_dist=WAYPOINT_MOVING_THRESHOLD/8):
+    def prune_by_distance(self, path, min_dist=WAYPOINT_MOVING_THRESHOLD/2):
         """
         Only used for diffusion policy.
         Remove waypoints that are too close together
         """
+        # Always include start and end points
         pruned = [path[:,0]]
         prev_point = path[:,0]
         final_point = path[:,-1]
+    
         for i in range(1, path.shape[1] - 1):
             dist_from_prev = torch.norm(path[:,i] - prev_point)
             dist_from_final = torch.norm(path[:,i] - final_point)
@@ -1668,29 +1673,94 @@ class BoxDeliveryEnv(gym.Env):
         pruned.append(path[:,-1]) # goal is always included
         return torch.stack(pruned, dim=1)
 
-    def ensure_valid_trajectory(self, trajectory):
+    def ensure_valid_trajectory(self, trajectory, path_feasibility=False):
+        """Could be renamed ensure_waypoint_feasibility"""
+        trajectory = trajectory.squeeze(0)
+        device = trajectory.device
+        # always include first point
+        new_trajectory = [trajectory[0]]
+        for t in range(1, trajectory.shape[0]):
+            p1 = new_trajectory[-1]
+            p2 = trajectory[t]
+
+            p1_pos = (p1[0].item(), p1[1].item())
+            p2_pos = (p2[0].item(), p2[1].item())
+
+            # always include last point
+            if t == trajectory.shape[0] - 1:
+                new_trajectory.append(p2)
+                continue
+
+            # check if the segment between p1 and p2 is valid
+            source_i, source_j = self.position_to_pixel_indices(p1_pos[0], p1_pos[1], self.configuration_space.shape)
+            target_i, target_j = self.position_to_pixel_indices(p2_pos[0], p2_pos[1], self.configuration_space.shape)
+            rr, cc = line(source_i, source_j, target_i, target_j)
+            if (1 - self.configuration_space_thin[rr, cc]).sum() == 0:
+                # no obstacle in the way, continue
+                new_trajectory.append(p2)
+                continue
+            else:
+                closest_indices = self.closest_valid_cspace_indices(target_i, target_j)
+                # convert back to position
+                p2_pos = self.pixel_indices_to_position(closest_indices[0], closest_indices[1], self.configuration_space.shape) 
+
+            if path_feasibility:
+                shortest_path = self.shortest_path(p1_pos, p2_pos)
+                # convert to tensor before adding
+                shortest_path = [torch.tensor([pos[0], pos[1]], dtype=torch.float32, device=device) for pos in shortest_path]
+                # avoid adding p1 again
+                new_trajectory.extend(shortest_path[1:])
+        
+        new_trajectory = torch.stack(new_trajectory, dim=0).unsqueeze(0)
+        return new_trajectory
+
+
+
+    def ensure_valid_trajectory_old(self, trajectory):
         """
         Only used for diffusion policy.
-        Ensures that each point in path is valid by checking if it is collision-free.
+        Ensures that each point in path is valid by checking if it is collision-free (does not affect the first or last point).
         If not, it finds the closest valid path in the configuration space.
         """
+        # n = trajectory.shape[0]
+        trajectory = trajectory.squeeze(0)
         corrected = trajectory.clone()
-        for i in range(int(len(trajectory)/2)):
+        for t in range(trajectory.shape[0]):
+
+            if t == 0 or t == trajectory.shape[0] - 1:
+                continue
+
             # extract position
-            pos = [trajectory[i].item(), trajectory[i+1].item()]
+            last_pos = corrected[t - 1]
+            pos = trajectory[t]
+
             # convert to pixel indices
-            pixel_i, pixel_j = self.position_to_pixel_indices(pos[0], pos[1], self.configuration_space.shape)
+            source_i, source_j = self.position_to_pixel_indices(last_pos[0].item(), last_pos[1].item(), self.configuration_space.shape)
+            target_i, target_j = self.position_to_pixel_indices(pos[0].item(), pos[1].item(), self.configuration_space.shape)
+
+            # check if there is a collision-free straight line path
+            rr, cc = line(source_i, source_j, target_i, target_j)
+            if (1 - self.configuration_space_thin[rr, cc]).sum() == 0:
+                # straight line path is valid, continue
+                continue
+
             # find closest valid indices in configuration space
-            closest_indices = self.closest_valid_cspace_indices(pixel_i, pixel_j)
+            # closest_indices = self.closest_valid_cspace_thin_indices(target_i, target_j)
+            closest_indices = self.closest_valid_cspace_indices(target_i, target_j)
+            
             # convert back to position
             corrected_path = self.pixel_indices_to_position(closest_indices[0], closest_indices[1], self.configuration_space.shape)
+
             # update corrected trajectory
-            corrected[i] = torch.tensor(corrected_path[0])
-            corrected[i+1] = torch.tensor(corrected_path[1])
-        return corrected
-    
+            corrected[t, 0] = corrected_path[0]
+            corrected[t, 1] = corrected_path[1]
+        return corrected.unsqueeze(0)
+
     def closest_valid_cspace_indices(self, i, j):
         return self.closest_cspace_indices[:, i, j]
+    
+    def closest_valid_cspace_thin_indices(self, i, j):
+        return self.closest_cspace_thin_indices[:, i, j]
 
     def render(self, mode='human', close=False):
         """Renders the environment."""

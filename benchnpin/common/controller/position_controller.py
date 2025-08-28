@@ -34,7 +34,7 @@ class PositionController:
     def __init__(self, cfg, robot_radius, map_width, map_height, 
                  configuration_space, configuration_space_thin, closest_cspace_indices,
                  local_map_pixel_width, local_map_width, local_map_pixels_per_meter,
-                 turn_step_size, move_step_size, waypoint_moving_threshold, waypoint_turning_threshold, closest_cspace_indices_thin=None):
+                 turn_step_size, move_step_size, waypoint_moving_threshold, waypoint_turning_threshold, closest_cspace_thin_indices=None):
         self.cfg = cfg
         self.robot_radius = robot_radius
 
@@ -44,7 +44,7 @@ class PositionController:
         self.configuration_space = configuration_space
         self.configuration_space_thin = configuration_space_thin
         self.closest_cspace_indices = closest_cspace_indices
-        self.closest_cspace_indices_thin = closest_cspace_indices_thin if closest_cspace_indices_thin is not None else closest_cspace_indices
+        self.closest_cspace_thin_indices = closest_cspace_thin_indices if closest_cspace_thin_indices is not None else closest_cspace_indices
 
         self.local_map_pixel_width = local_map_pixel_width
         self.local_map_width = local_map_width
@@ -205,5 +205,5 @@ class PositionController:
     def closest_valid_cspace_indices(self, i, j):
         return self.closest_cspace_indices[:, i, j]
 
-    def closest_valid_cspace_indices_thin(self, i, j):
-        return self.closest_cspace_indices_thin[:, i, j]
+    def closest_valid_cspace_thin_indices(self, i, j):
+        return self.closest_cspace_thin_indices[:, i, j]

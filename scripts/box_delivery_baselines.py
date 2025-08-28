@@ -153,6 +153,9 @@ if __name__ == '__main__':
             },
             'diffusion': {
                 'checkpoint_path': 'data/outputs/pt_se.ckpt',
+                # 'checkpoint_path': 'data/outputs/pt_le.ckpt',
+                'obs_dim': 26, # for combo, se
+                # 'obs_dim': 42, # for combo, sc
                 'obs_type': 'combo', # 'positions' or 'vertices'
             }
             

@@ -205,7 +205,7 @@ diffusion:
   # obs_dim: 10 # for positions
   # obs_dim: 34 # for vertices
   # obs_dim: 50 # for vertices
-  obs_dim: 26 # for vertices
+  obs_dim: 26 # for combo
   obs_type: combo # positions or vertices
   n_action_steps: 32
   n_obs_steps: 1
