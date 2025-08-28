@@ -470,7 +470,7 @@ class BoxDeliveryEnv(gym.Env):
                     
         
         # generate obstacles
-        if self.cfg.env.obstacle_config == 'small_empty':
+        if self.cfg.env.obstacle_config == 'small_empty' or self.cfg.env.obstacle_config == 'large_empty':
             pass
         elif self.cfg.env.obstacle_config == 'small_columns':
             boundary_dicts.extend(add_random_columns(boundary_dicts, 3))

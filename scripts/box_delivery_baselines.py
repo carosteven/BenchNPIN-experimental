@@ -103,7 +103,7 @@ if __name__ == '__main__':
                 'num_boxes_large': 20,
             },
             'env': {
-                'obstacle_config': 'large_columns', # options are small_empty, small_columns, large_columns, large_divider
+                'obstacle_config': 'large_divider', # options are small_empty, small_columns, large_columns, large_divider
             },
             'misc': {
                 'random_seed': 42,
@@ -111,11 +111,11 @@ if __name__ == '__main__':
             'train': { 
                 'train_mode': True,
                 'job_type': 'sam', # 'sam', 'ppo', 'sac'
-                'job_name': 'bp_per_qsdp_term_lc',
+                'job_name': 'bp_per_qsdp_nomax_term_ld',
                 'log_dir': 'per_logs/',
                 'resume_training': False,
                 'job_id_to_resume': '16854679',
-                'total_timesteps': 90000,
+                'total_timesteps': 60000,
                 # 'exploration_timesteps': 6000*2,
             },
             'evaluate': {
@@ -134,7 +134,7 @@ if __name__ == '__main__':
                 'half_action_space': False,
                 'terminal_reward': 10,
                 'step_penalty': 0,
-                'max_distance_reward': True,
+                'max_distance_reward': False,
                 'box_dist_penalty': False,
                 'box_dist_penalty_scale': 0.35,
                 'step_dist_penalty': True,
