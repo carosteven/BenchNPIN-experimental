@@ -36,4 +36,4 @@ module load gcc opencv/4.10.0
 # demonstrates how to perform checkpointing in pytorch, please navigate to the
 # file for more information.
 source venv/bin/activate
-python scripts/box_delivery_baselines.py --job_id ${SLURM_JOB_ID}
+python -m scripts.box_delivery_baselines --job_id ${SLURM_JOB_ID}

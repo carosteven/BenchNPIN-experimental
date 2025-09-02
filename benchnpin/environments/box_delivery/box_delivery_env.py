@@ -860,7 +860,7 @@ class BoxDeliveryEnv(gym.Env):
         if not self.cfg.ablation.curriculum or curric_starts: # curriculum starts at 50000 steps (controlled by policy)
             # step distance penalty
             if self.cfg.ablation.step_dist_penalty:
-                robot_reward -= (self.partial_rewards_scale / 2) * robot_distance
+                robot_reward -= (self.partial_rewards_scale / 4) * robot_distance
 
         # terminal reward
         if self.robot_cumulative_boxes == self.num_boxes:
@@ -1236,8 +1236,8 @@ class BoxDeliveryEnv(gym.Env):
             prev_heading_diff = heading_diff
 
             # stop moving if robot collided with obstacle
-            # if self.distance(robot_prev_waypoint_position, robot_position) > MOVE_STEP_SIZE:
-            if self.distance(robot_prev_position, robot_position) < MOVE_STEP_SIZE / 50 and done_turning:
+            if self.distance(robot_prev_waypoint_position, robot_position) > MOVE_STEP_SIZE:
+            # if self.distance(robot_prev_position, robot_position) < MOVE_STEP_SIZE / 50 and done_turning:
                 if self.robot_hit_obstacle:
                     # print('Robot hit obstacle, stopping simulation')
                     # self.robot_hit_obstacle = False
