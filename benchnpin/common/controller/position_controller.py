@@ -61,17 +61,17 @@ class PositionController:
         else:
             robot_target_front_position = target_position
 
-        # bound the robot to the room
-        diff = np.asarray(robot_target_front_position) - np.asarray(robot_initial_position)
-        ratio_x, ratio_y = (1, 1)
-        bound_x = np.sign(robot_target_front_position[0]) * self.map_height / 2
-        bound_y = np.sign(robot_target_front_position[1]) * self.map_width / 2
-        if abs(robot_target_front_position[0]) > abs(bound_x):
-            ratio_x = (bound_x - robot_initial_position[0]) / (robot_target_front_position[0] - robot_initial_position[0])
-        if abs(robot_target_front_position[1]) > abs(bound_y):
-            ratio_y = (bound_y - robot_initial_position[1]) / (robot_target_front_position[1] - robot_initial_position[1])
-        ratio = min(ratio_x, ratio_y)
-        robot_target_front_position = (np.asarray(robot_initial_position) + ratio * diff).tolist()
+            # bound the robot to the room
+            diff = np.asarray(robot_target_front_position) - np.asarray(robot_initial_position)
+            ratio_x, ratio_y = (1, 1)
+            bound_x = np.sign(robot_target_front_position[0]) * self.map_height / 2
+            bound_y = np.sign(robot_target_front_position[1]) * self.map_width / 2
+            if abs(robot_target_front_position[0]) > abs(bound_x):
+                ratio_x = (bound_x - robot_initial_position[0]) / (robot_target_front_position[0] - robot_initial_position[0])
+            if abs(robot_target_front_position[1]) > abs(bound_y):
+                ratio_y = (bound_y - robot_initial_position[1]) / (robot_target_front_position[1] - robot_initial_position[1])
+            ratio = min(ratio_x, ratio_y)
+            robot_target_front_position = (np.asarray(robot_initial_position) + ratio * diff).tolist()
         # compute waypoint positions
         robot_waypoint_positions = self.shortest_path(robot_initial_position, robot_target_front_position, check_straight=True, subpath=subpath)
 
@@ -199,7 +199,18 @@ class PositionController:
             robot_initial_position[0] + straight_line_dist * np.cos(straight_line_heading),
             robot_initial_position[1] + straight_line_dist * np.sin(straight_line_heading)
         ] 
-            
+        # bound the robot to the room
+        diff = np.asarray(robot_target_front_position) - np.asarray(robot_initial_position)
+        ratio_x, ratio_y = (1, 1)
+        bound_x = np.sign(robot_target_front_position[0]) * self.map_height / 2
+        bound_y = np.sign(robot_target_front_position[1]) * self.map_width / 2
+        if abs(robot_target_front_position[0]) > abs(bound_x):
+            ratio_x = (bound_x - robot_initial_position[0]) / (robot_target_front_position[0] - robot_initial_position[0])
+        if abs(robot_target_front_position[1]) > abs(bound_y):
+            ratio_y = (bound_y - robot_initial_position[1]) / (robot_target_front_position[1] - robot_initial_position[1])
+        ratio = min(ratio_x, ratio_y)
+        robot_target_front_position = (np.asarray(robot_initial_position) + ratio * diff).tolist()
+        
         return robot_target_front_position
     
     def closest_valid_cspace_indices(self, i, j):

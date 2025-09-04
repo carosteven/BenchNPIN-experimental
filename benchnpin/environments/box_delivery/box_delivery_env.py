@@ -269,7 +269,8 @@ class BoxDeliveryEnv(gym.Env):
             self.start = self.get_random_robot_start()
         else:
             # self.start = (-1.8, -2.7, np.pi*0)
-            self.start = (-1, -1, np.pi*0)
+            print("Using fixed start position")
+            self.start = (0, 2, np.pi*3/2)
         self.robot_info['start_pos'] = self.start
 
         self.boundary_dicts = self.generate_boundary()
@@ -667,7 +668,7 @@ class BoxDeliveryEnv(gym.Env):
         return self.observation, info
     
 
-    def step(self, action, curric_starts=False, action_info=None):
+    def step(self, action, curric_starts=False, action_info=None, reached_goal=True, goal=None):
         """Executes one time step in the environment and returns the result."""
         self.t += 1
         self.dp = None
@@ -675,6 +676,9 @@ class BoxDeliveryEnv(gym.Env):
         self.robot_hit_obstacle = False
         robot_boxes = 0
         robot_reward = 0
+
+        terminated = False
+        truncated = False
 
         if action_info is not None:
             self.action_map = action_info['output']
@@ -696,25 +700,25 @@ class BoxDeliveryEnv(gym.Env):
             dist = self.shortest_path_distance(box_position, self.receptacle_position)
             initial_box_distances[box.idx] = dist
 
-        if self.cfg.demonstration.demonstration_mode:
-            if self.cfg.demonstration.teleop_mode:
-                self.teleop_control(action)
-                # move simulation forward
-                for _ in range(self.steps):
-                    self.space.step(self.dt / self.steps)
-                self.render()
-            else:
-                self.path, robot_move_sign = self.position_controller.get_waypoints_to_spatial_action(robot_initial_position, robot_initial_heading, action)
-                robot_distance, robot_turn_angle, self.demonstration_episode = self.execute_robot_path(robot_initial_position, robot_initial_heading, robot_move_sign, action=action, demo_mode=True)
+        # if self.cfg.demonstration.demonstration_mode:
+        #     if self.cfg.demonstration.teleop_mode:
+        #         self.teleop_control(action)
+        #         # move simulation forward
+        #         for _ in range(self.steps):
+        #             self.space.step(self.dt / self.steps)
+        #         self.render()
+        #     else:
+        #         self.path, robot_move_sign = self.position_controller.get_waypoints_to_spatial_action(robot_initial_position, robot_initial_heading, action)
+        #         robot_distance, robot_turn_angle, self.demonstration_episode = self.execute_robot_path(robot_initial_position, robot_initial_heading, robot_move_sign, action=action, demo_mode=True)
 
-            # get new robot pose
-            robot_position, robot_heading = self.robot.body.position, self.restrict_heading_range(self.robot.body.angle)
-            robot_position = list(robot_position)
+        #     # get new robot pose
+        #     robot_position, robot_heading = self.robot.body.position, self.restrict_heading_range(self.robot.body.angle)
+        #     robot_position = list(robot_position)
             
-            # update distance moved
-            robot_distance = self.distance(robot_initial_position, robot_position)
+        #     # update distance moved
+        #     robot_distance = self.distance(robot_initial_position, robot_position)
         
-        elif self.cfg.agent.action_type == 'velocity':
+        if self.cfg.agent.action_type == 'velocity':
             ################################ Velocity Control ################################
             linear_speed = action[0]
             angular_speed = action[1]
@@ -768,41 +772,123 @@ class BoxDeliveryEnv(gym.Env):
                 action = y_pixel * self.local_map_pixel_width + x_pixel
 
             ################################ Position Control ################################
-            if self.cfg.ablation.diffusion:
-                state_vertices, state_positions, state_combo = self.generate_observation_low_dim()
-                if self.cfg.diffusion.obs_type == 'positions':
-                    state = np.float32(state_positions).reshape(1, -1)
-                elif self.cfg.diffusion.obs_type == 'vertices':
-                    state = np.float32(state_vertices).reshape(1, -1)
-                elif self.cfg.diffusion.obs_type == 'combo':
-                    state = np.float32(state_combo).reshape(1, -1)
-                if self.path_completed:
-                    # print("Setting new target position")
-                    self.diffusion_policy.reset()
-                    self.target_position = self.position_controller.get_target_position(robot_initial_position, robot_initial_heading, action)
-
-                target = np.float32(self.target_position).reshape(1, -1)
-                obs = np.concatenate([state, target], axis=-1)
-                self.path = self.diffusion_policy.act(obs)
-                self.path = self.path.reshape(-1, 2)
-                # input()
-                self.path = self.get_path_headings()
-                robot_move_sign = 1
-
-                # Check if the last point on the path is within the waypoint threshold of the action
-                last_point = self.path[-1][:2]
-                if self.distance(last_point, self.target_position) < WAYPOINT_MOVING_THRESHOLD or self.distance(self.robot.body.position, self.target_position) < WAYPOINT_MOVING_THRESHOLD:
-                    self.path_completed = True
-                else:
-                    self.path_completed = False
+            self.path, robot_move_sign = self.position_controller.get_waypoints_to_spatial_action(robot_initial_position, robot_initial_heading, action if goal is None else goal)
+            # if self.cfg.render.show:
+            #     self.renderer.update_path(self.path)
+            #     self.render()
+            #     input()
+            if reached_goal:
+                box_in_path, _ = self.check_path_for_box_collision()
             else:
-                self.path, robot_move_sign = self.position_controller.get_waypoints_to_spatial_action(robot_initial_position, robot_initial_heading, action)
-            if self.cfg.render.show:
-                self.renderer.update_path(self.path)
-                self.renderer.goal_point = self.target_position
-                self.render()
-                # input()
-            robot_distance, robot_turn_angle = self.execute_robot_path(robot_initial_position, robot_initial_heading, robot_move_sign, action=action)
+                box_in_path = None
+
+            if box_in_path is not None and self.cfg.ablation.better_pushing:
+                # if self.cfg.render.show:
+                #     self.renderer.update_path(self.path)
+                #     self.render()
+                #     # input()
+                
+                box_pos = box_in_path.body.position         
+                box_heading = np.arctan2(self.path[0][1] - box_pos[1], self.path[0][0] - box_pos[0])
+
+                # get new robot target position. Point is calculated based on the heading of the path from the box to the original target.
+                # NOTE: desired_box_pos is not really used
+                lookahead = 0.2
+                desired_box_pos = np.array([
+                    box_pos[0] + lookahead * np.cos(box_heading),
+                    box_pos[1] + lookahead * np.sin(box_heading)
+                ])
+
+                robot_target_pose = self.get_leashed_robot_pose(desired_box_pos, box_heading) #, offset=0.3)#self.robot_radius + 0.1)
+
+                # convert target to a spatial action relative to the robot
+                x_pose_local, y_pose_local = self.robot.body.world_to_local((robot_target_pose[0], robot_target_pose[1]))
+                x_pose_pixels = int(self.local_map_pixel_width / 2 - x_pose_local * self.local_map_pixels_per_meter)
+                y_pose_pixels = int(self.local_map_pixel_width / 2 - y_pose_local * self.local_map_pixels_per_meter)
+                x_pose_pixels, y_pose_pixels = self.bound_to_map(x_pose_pixels, y_pose_pixels)
+                new_action = np.ravel_multi_index((x_pose_pixels, y_pose_pixels), (self.local_map_pixel_width, self.local_map_pixel_width))
+
+                # make a new collision free path from the robot to the box
+                robot_to_box_path, _ = self.position_controller.get_waypoints_to_spatial_action(robot_initial_position, robot_initial_heading, new_action, subpath=True)
+                # robot_to_box_path, _ = self.position_controller.get_waypoints_to_spatial_action(robot_initial_position, robot_initial_heading, 0, subpath=True, target_position=robot_target_pose[:2])
+
+                # make a new collision free path from the box to the target
+                box_to_dest_path, _ = self.position_controller.get_waypoints_to_spatial_action(robot_to_box_path[-1][:2], robot_to_box_path[-1][2], 0, target_position=self.path[-1][:2])
+
+                # concatenate the paths to generate final path
+                self.path = np.concatenate((robot_to_box_path, box_to_dest_path[1:]), axis=0)
+
+                # if self.cfg.render.show:
+                #     self.renderer.update_path(self.path)
+                #     self.render()
+                #     # input()
+            
+            if box_in_path is None:
+                if self.cfg.demonstration.demonstration_mode:
+                    if self.cfg.demonstration.teleop_mode:
+                        self.teleop_control(action)
+                        # move simulation forward
+                        for _ in range(self.steps):
+                            self.space.step(self.dt / self.steps)
+                        self.render()
+
+                    # get new robot pose
+                    robot_position, robot_heading = self.robot.body.position, self.restrict_heading_range(self.robot.body.angle)
+                    robot_position = list(robot_position)
+                    
+                    # update distance moved
+                    robot_distance = self.distance(robot_initial_position, robot_position)
+
+                if self.cfg.ablation.diffusion:
+                    state_vertices, state_positions, state_combo = self.generate_observation_low_dim()
+                    if self.cfg.diffusion.obs_type == 'positions':
+                        state = np.float32(state_positions).reshape(1, -1)
+                    elif self.cfg.diffusion.obs_type == 'vertices':
+                        state = np.float32(state_vertices).reshape(1, -1)
+                    elif self.cfg.diffusion.obs_type == 'combo':
+                        state = np.float32(state_combo).reshape(1, -1)
+                    if self.path_completed:
+                        # print("Setting new target position")
+                        self.diffusion_policy.reset()
+                        self.target_position = self.position_controller.get_target_position(robot_initial_position, robot_initial_heading, action)
+                        # bound the robot to the room
+                        diff = np.asarray(self.target_position) - np.asarray(robot_initial_position)
+                        ratio_x, ratio_y = (1, 1)
+                        bound_x = np.sign(self.target_position[0]) * self.room_length / 2
+                        bound_y = np.sign(self.target_position[1]) * self.room_width / 2
+                        if abs(self.target_position[0]) > abs(bound_x):
+                            ratio_x = (bound_x - robot_initial_position[0]) / (self.target_position[0] - robot_initial_position[0])
+                        if abs(self.target_position[1]) > abs(bound_y):
+                            ratio_y = (bound_y - robot_initial_position[1]) / (self.target_position[1] - robot_initial_position[1])
+                        ratio = min(ratio_x, ratio_y)
+                        self.target_position = (np.asarray(robot_initial_position) + ratio * diff).tolist()
+
+                    target = np.float32(self.target_position).reshape(1, -1)
+                    obs = np.concatenate([state, target], axis=-1)
+                    self.path = self.diffusion_policy.act(obs)
+                    self.path = self.path.reshape(-1, 2)
+                    self.path = self.get_path_headings()
+                    robot_move_sign = 1
+
+                    # Check if the last point on the path is within the waypoint threshold of the action
+                    last_point = self.path[-1][:2]
+                    if self.distance(last_point, self.target_position) < WAYPOINT_MOVING_THRESHOLD or self.distance(self.robot.body.position, self.target_position) < WAYPOINT_MOVING_THRESHOLD:
+                        self.path_completed = True
+                    else:
+                        self.path_completed = False
+                
+                    if self.cfg.render.show:
+                        self.renderer.update_path(self.path)
+                        self.renderer.goal_point = self.target_position
+                        self.render()
+                        # input()
+            if not self.cfg.demonstration.demonstration_mode or box_in_path is not None:
+                # if self.cfg.render.show:
+                #         self.renderer.update_path(self.path)
+                #         self.render()
+                robot_distance, robot_turn_angle = self.execute_robot_path(robot_initial_position, robot_initial_heading, robot_move_sign, action=action)
+                if self.cfg.demonstration.demonstration_mode:
+                    truncated=True
 
 
         # step the simulation until everything is still
@@ -897,11 +983,9 @@ class BoxDeliveryEnv(gym.Env):
             self.inactivity_counter += 1
         
         # check if episode is done
-        terminated = False
         if self.robot_cumulative_boxes == self.num_boxes:
             terminated = True
         
-        truncated = False
         if self.inactivity_counter >= self.inactivity_cutoff and not self.cfg.demonstration.teleop_mode:
             terminated = True
             truncated = True
@@ -931,7 +1015,7 @@ class BoxDeliveryEnv(gym.Env):
         }
         
         # render environment
-        if self.cfg.render.show:
+        if self.cfg.render.show and not self.cfg.demonstration.demonstration_mode:
             self.show_observation = True
             self.render()
 
@@ -954,7 +1038,7 @@ class BoxDeliveryEnv(gym.Env):
         path = np.concatenate((self.path, headings), axis=1)
         return path
 
-    def get_sorted_box_vertices_and_positions(self):
+    def get_sorted_box_vertices_and_positions(self, k=4):
         """
         Returns a list of all box vertices (not true, closest two) sorted by distance to robot.
         Boxes that have been pushed into the receptacle are assumed to have their centers in the
@@ -963,15 +1047,16 @@ class BoxDeliveryEnv(gym.Env):
         """
         box_verts_and_poses = []
         for box in self.boxes:
-            # box_vert = [list(self.robot.body.world_to_local(box.body.local_to_world(v))) for v in box.get_vertices()]
             box_vert = [list(box.body.local_to_world(v)) for v in box.get_vertices()]
-            # box_pos = list(self.robot.body.world_to_local(box.body.position))
             box_pos = list(box.body.position)
             box_verts_and_poses.append([box_vert, box_pos])
-            
-        # pad with boxes in receptacle
+
+        # sort by distance to robot
+        box_verts_and_poses.sort(key=lambda b: self.distance(self.robot.body.position, (b[1][0], b[1][1])))
+        closest_boxes = box_verts_and_poses[:k]
+ 
+        # pad with boxes in receptacle if less than k boxes active
         box_radius = self.cfg.boxes.box_size / 2
-        # box_pos = list(self.robot.body.world_to_local(self.receptacle_position))
         box_pos = list(self.receptacle_position)
         box_vert = [
             [(box_pos[0] - box_radius), (box_pos[1] - box_radius)],
@@ -979,14 +1064,10 @@ class BoxDeliveryEnv(gym.Env):
             [(box_pos[0] + box_radius), (box_pos[1] + box_radius)],
             [(box_pos[0] + box_radius), (box_pos[1] - box_radius)],
         ]
-        for _ in range(self.num_boxes - len(box_verts_and_poses)):
-            box_verts_and_poses.append([box_vert, box_pos])
-            
+        while len(closest_boxes) < k:
+            closest_boxes.append([box_vert, box_pos])
         
-        # sort by distance to robot
-        box_verts_and_poses.sort(key=lambda b: self.distance(self.robot.body.position, (b[1][0], b[1][1])))
-
-        return box_verts_and_poses[:4]
+        return closest_boxes
 
     def teleop_control(self, action):
         if action == FORWARD:
@@ -1135,62 +1216,16 @@ class BoxDeliveryEnv(gym.Env):
             # self.render()
             # input()
             
-        box_in_path, _ = self.check_path_for_box_collision()
+       
 
-        if box_in_path is not None and self.cfg.ablation.better_pushing:
-            if self.cfg.render.show:
-                self.renderer.update_path(self.path)
-                self.render()
-                # input()
-
-            box_pos = box_in_path.body.position         
-            box_heading = np.arctan2(robot_waypoint_position[1] - box_pos[1], robot_waypoint_position[0] - box_pos[0])
-
-            # get new robot target position. Point is calculated based on the heading of the path from the box to the original target.
-            # NOTE: desired_box_pos is not really used
-            lookahead = 0.2
-            desired_box_pos = np.array([
-                box_pos[0] + lookahead * np.cos(box_heading),
-                box_pos[1] + lookahead * np.sin(box_heading)
-            ])
-
-            robot_target_pose = self.get_leashed_robot_pose(desired_box_pos, box_heading) #, offset=0.3)#self.robot_radius + 0.1)
-
-            # convert target to a spatial action relative to the robot
-            x_pose_local, y_pose_local = self.robot.body.world_to_local((robot_target_pose[0], robot_target_pose[1]))
-            x_pose_pixels = int(self.local_map_pixel_width / 2 - x_pose_local * self.local_map_pixels_per_meter)
-            y_pose_pixels = int(self.local_map_pixel_width / 2 - y_pose_local * self.local_map_pixels_per_meter)
-            x_pose_pixels, y_pose_pixels = self.bound_to_map(x_pose_pixels, y_pose_pixels)
-            new_action = np.ravel_multi_index((x_pose_pixels, y_pose_pixels), (self.local_map_pixel_width, self.local_map_pixel_width))
-
-            # make a new collision free path from the robot to the box
-            robot_to_box_path, _ = self.position_controller.get_waypoints_to_spatial_action(robot_initial_position, robot_initial_heading, new_action, subpath=True)
-            # robot_to_box_path, _ = self.position_controller.get_waypoints_to_spatial_action(robot_initial_position, robot_initial_heading, 0, subpath=True, target_position=robot_target_pose[:2])
-
-            # make a new collision free path from the box to the target
-            box_to_dest_path, _ = self.position_controller.get_waypoints_to_spatial_action(robot_to_box_path[-1][:2], robot_to_box_path[-1][2], 0, target_position=self.path[-1][:2])
-
-            # concatenate the paths to generate final path
-            self.path = np.concatenate((robot_to_box_path, box_to_dest_path[1:]), axis=0)
-
-            if self.cfg.render.show:
-                self.renderer.update_path(self.path)
-                self.render()
-                # input()
-
-            robot_waypoint_positions = [(waypoint[0], waypoint[1]) for waypoint in self.path]
-            robot_waypoint_headings = [waypoint[2] for waypoint in self.path]
-
-            robot_prev_waypoint_position = robot_waypoint_positions[robot_waypoint_index - 1]
-            robot_waypoint_position = robot_waypoint_positions[robot_waypoint_index]
-            robot_waypoint_heading = robot_waypoint_headings[robot_waypoint_index]
-
+        ##############################################################################################################
         # to gather demonstrations
         episode = []
         demo_prev_pos = robot_position.copy()
         goal = self.position_controller.get_target_position(robot_initial_position, robot_initial_heading, action)
         if demo_mode:
             obs = self.generate_observation_low_dim()
+        ##############################################################################################################
 
         while True:
             if not robot_is_moving:
@@ -1243,6 +1278,7 @@ class BoxDeliveryEnv(gym.Env):
                     # self.robot_hit_obstacle = False
                     self.path_completed = True
                     robot_is_moving = False
+                    # robot_distance += self.distance(robot_prev_waypoint_position, robot_position) 
                     break  # Note: self.robot_distance does not get not updated
             
             # stop if robot reached waypoint
@@ -1265,7 +1301,7 @@ class BoxDeliveryEnv(gym.Env):
                     self.path = self.path[1:]
 
             sim_steps += 1
-            if sim_steps % 5 == 0 and self.cfg.render.show:
+            if sim_steps % 5 == 0 and self.cfg.render.show and not self.cfg.demonstration.demonstration_mode:
                 self.render()
 
             # break if robot is stuck
@@ -1658,6 +1694,10 @@ class BoxDeliveryEnv(gym.Env):
         Only used for diffusion policy.
         Remove waypoints that are too close together
         """
+        # Visualize pruning if needed
+        # self.renderer.update_path(path.squeeze(0).cpu().numpy())
+        # self.render()
+        # input()
         # Always include start and end points
         pruned = [path[:,0]]
         prev_point = path[:,0]
@@ -1675,11 +1715,21 @@ class BoxDeliveryEnv(gym.Env):
 
     def ensure_valid_trajectory(self, trajectory, path_feasibility=False):
         """Could be renamed ensure_waypoint_feasibility"""
+        # Visualize trajectory if needed
+        # self.renderer.update_path(trajectory.squeeze(0).cpu().numpy())
+        # self.render()
+        # input()
+
         trajectory = trajectory.squeeze(0)
         device = trajectory.device
         # always include first point
         new_trajectory = [trajectory[0]]
+        is_last_point = False
         for t in range(1, trajectory.shape[0]):
+            # TODO: visualize progress if needed
+            # self.renderer.update_path([p.cpu().numpy() for p in new_trajectory] + [trajectory[t].cpu().numpy()])
+            # self.render()
+            
             p1 = new_trajectory[-1]
             p2 = trajectory[t]
 
@@ -1688,8 +1738,7 @@ class BoxDeliveryEnv(gym.Env):
 
             # always include last point
             if t == trajectory.shape[0] - 1:
-                new_trajectory.append(p2)
-                continue
+                is_last_point = True
 
             # check if the segment between p1 and p2 is valid
             source_i, source_j = self.position_to_pixel_indices(p1_pos[0], p1_pos[1], self.configuration_space.shape)
@@ -1699,10 +1748,13 @@ class BoxDeliveryEnv(gym.Env):
                 # no obstacle in the way, continue
                 new_trajectory.append(p2)
                 continue
-            else:
+            elif not is_last_point and not path_feasibility: # we don't want to modify the last point
+                # find closest valid indices in configuration space
                 closest_indices = self.closest_valid_cspace_indices(target_i, target_j)
                 # convert back to position
                 p2_pos = self.pixel_indices_to_position(closest_indices[0], closest_indices[1], self.configuration_space.shape) 
+                p2_feas = torch.tensor([p2_pos[0], p2_pos[1]], dtype=torch.float32, device=device)
+                new_trajectory.append(p2_feas)
 
             if path_feasibility:
                 shortest_path = self.shortest_path(p1_pos, p2_pos)
@@ -1710,13 +1762,16 @@ class BoxDeliveryEnv(gym.Env):
                 shortest_path = [torch.tensor([pos[0], pos[1]], dtype=torch.float32, device=device) for pos in shortest_path]
                 # avoid adding p1 again
                 new_trajectory.extend(shortest_path[1:])
+            
+            elif is_last_point:
+                new_trajectory.append(p2)
         
         new_trajectory = torch.stack(new_trajectory, dim=0).unsqueeze(0)
         return new_trajectory
 
 
 
-    def ensure_valid_trajectory_old(self, trajectory):
+    def ensure_valid_trajectory_old(self, trajectory, path_feasibility=False):
         """
         Only used for diffusion policy.
         Ensures that each point in path is valid by checking if it is collision-free (does not affect the first or last point).

@@ -40,12 +40,13 @@ def main(cfg, job_id):
         num_eps = cfg.evaluate.num_eps
         model_path = cfg.evaluate.model_path
         seed = 0
-        for policy_type, action_type, model_name, obs_config, push_config in zip(cfg.evaluate.policy_types, cfg.evaluate.action_types, cfg.evaluate.model_names, cfg.evaluate.obs_configs, cfg.evaluate.push_configs):
+        for policy_type, action_type, model_name, obs_config, push_config, diffusion_config in zip(cfg.evaluate.policy_types, cfg.evaluate.action_types, cfg.evaluate.model_names, cfg.evaluate.obs_configs, cfg.evaluate.push_configs, cfg.evaluate.diffusion_configs):
             cfg.agent.action_type = action_type
             cfg.train.job_type = policy_type
             cfg.env.obstacle_config = obs_config
             cfg.misc.random_seed = seed
             cfg.ablation.better_pushing = push_config
+            cfg.ablation.diffusion = diffusion_config
             seed += 1
 
             if policy_type == 'sam':

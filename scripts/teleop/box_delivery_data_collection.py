@@ -75,7 +75,7 @@ def interpolate_trajectory(traj, target_len=32):
     Returns interpolated trajectory and valid_obs_mask.
     """
     N, D = traj.shape
-    assert target_len >= N, "target_len must be ≥ number of original points"
+    assert target_len >= N, f"target_len must be ≥ number of original points ({N})"
 
     # Step 1: original arc lengths
     deltas = np.diff(traj, axis=0)
@@ -153,7 +153,8 @@ Plan:
     need to visualize goal --> destination from SAM
 '''
 def collect_demos():
-    path = 'demo_data/box_delivery_teleop_demo_se.zarr'
+    # path = 'demo_data/box_delivery_teleop_demo_le.zarr'
+    path = 'demo_data/box_delivery_teleop_demo_nopush_le.zarr'
     replay_buffer = ReplayBuffer.create_from_path(path, mode='a')
 
     # ensure different environments
@@ -165,7 +166,7 @@ def collect_demos():
                 'show': True,
             },
         'env': {
-            'obstacle_config': 'small_empty', # options are small_empty, small_columns, large_columns, large_divider
+            'obstacle_config': 'large_empty', # options are small_empty, small_columns, large_columns, large_divider
         },
         'boxes': {
             'num_boxes_small': 10,
@@ -191,7 +192,8 @@ def collect_demos():
     env = env.unwrapped
     dummy_observation, _ = env.reset()
 
-    model_name = 'bp_per_hsdp_term_se'
+    # model_name = 'bp_per_qsdp_term_le'
+    model_name = 'bp_qsdp_se'
     model_path = 'models/box_delivery/new_robot'
 
     # Initialize the policy
@@ -233,7 +235,7 @@ def collect_demos():
                 num_demos += 1
 
             for episode in episodes:
-                if len(episode) > 2:
+                if len(episode) > 2 and len(episode) <= horizon:
                     robot_positions = np.array([step['action'] for step in episode]) # (N, 2)
 
                     # interpolate the path to make length of horizon
@@ -293,6 +295,7 @@ def collect_demos():
                     env.renderer.goal_point = goal
 
                     reached_goal = False
+                    test = True
                     ignore_curr_demo = False
                     
                     t = 0
@@ -326,8 +329,8 @@ def collect_demos():
                             reached_goal = True
 
                         # command = OTHER
-                        if t % 5 == 0:
-                            env.render()
+                        # if t % 5 == 0:
+                        #     env.render()
 
                         # only record points based on distance interval
                         if (((info['state'][0] - prev_state[0])**2 + (info['state'][1] - prev_state[1])**2)**(0.5) >= step_size) or terminated or truncated or reached_goal:
@@ -346,14 +349,15 @@ def collect_demos():
                             prev_state = [info['state'][0], info['state'][1]]
                             transition_count += 1
                         
-                        observation, reward, terminated, truncated, info = env.step(command)
+                        observation, reward, terminated, truncated, info = env.step(command, reached_goal=test, goal=goal_ravelled)
+                        test=False
 
                         if terminated or truncated or reached_goal:
                             print("\nterminated: ", terminated, "; truncated: ", truncated, "; reached goal: ", reached_goal)
                             path_length = transition_count
                             print()
                             print(transition_count)
-                            if terminated or truncated:
+                            if terminated:
                                 observation, info = env.reset()
                             break
 
@@ -369,7 +373,7 @@ def collect_demos():
                         response = input("\nSave demonstrations? (y/n) ").strip().lower()[-1]
                         if response == 'y':
                             for episode in episodes:
-                                if len(episode) > 2:
+                                if len(episode) > 2 and len(episode) <= horizon:
                                     robot_positions = np.array([step['action'] for step in episode]) # (N, 2)
 
                                     # interpolate the path to make length of horizon
